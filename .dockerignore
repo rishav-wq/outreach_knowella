@@ -1,0 +1,16 @@
+# Keep the build context small and avoid leaking local env/deps into the image
+.git
+**/node_modules
+web/dist
+.env
+web/.env
+web/.env.local
+data
+out
+*.csv
+*.jsonl
+__pycache__
+*.pyc
+.venv
+venv
+.claude

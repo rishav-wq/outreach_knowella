@@ -5,7 +5,9 @@
 // backend leaves the API open — so local dev is unchanged.
 import { getAuthToken } from './auth'
 
-const BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8010'
+// VITE_API_BASE is set per env: localhost in web/.env (dev), empty in
+// web/.env.production (same-origin, since FastAPI serves this app in prod).
+const BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8010'
 const u = (p) => `${BASE}${p}`
 const json = (r) => {
   if (!r.ok) return r.text().then((t) => { throw new Error(t || r.statusText) })

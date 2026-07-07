@@ -1,3 +1,13 @@
+---
+title: Knowella Outreach
+emoji: 📧
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # outreach-agent
 
 A reusable cold-outreach **personalization engine**. The intelligent layer of the

@@ -14,6 +14,8 @@ import threading
 import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import auth, config, pipeline
@@ -511,3 +513,23 @@ def run(req: RunReq):
 @app.get("/api/run/status")
 def run_status(campaign: str):
     return _runs.get(campaign, {"running": False, "error": None, "summary": {}})
+
+
+# --- serve the built frontend (single-container deploy) ----------------------
+# When web/dist exists (Docker build), this same server hosts the React app, so
+# there's one origin (no CORS) and one URL. Registered last so /api routes win.
+_WEB_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
+if os.path.isdir(_WEB_DIST):
+    _assets = os.path.join(_WEB_DIST, "assets")
+    if os.path.isdir(_assets):
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa(full_path: str):
+        """Serve a static file if it exists, else index.html (SPA + /sign-in fallback)."""
+        if full_path.startswith("api/"):
+            raise HTTPException(404, "not found")
+        candidate = os.path.join(_WEB_DIST, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(os.path.join(_WEB_DIST, "index.html"))

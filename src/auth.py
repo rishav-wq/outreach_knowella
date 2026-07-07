@@ -18,8 +18,8 @@ from fastapi import HTTPException, Request
 
 _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 
-# Routes that must stay open even when auth is on (health check + CORS preflight).
-_OPEN_PATHS = {"/api/health", "/", "/docs", "/openapi.json"}
+# The health check stays open even when auth is on (for platform probes).
+_OPEN_API_PATHS = {"/api/health"}
 
 
 def _issuer() -> str | None:
@@ -120,7 +120,10 @@ async def require_auth(request: Request):
     """FastAPI dependency applied to every route. No-op unless Clerk is configured."""
     if not enabled():
         return None
-    if request.method == "OPTIONS" or request.url.path in _OPEN_PATHS:
+    path = request.url.path
+    # Protect only the API; the static frontend + SPA routes (/, /sign-in, /assets…)
+    # stay public — the app gates itself via Clerk, and every /api call carries a token.
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in _OPEN_API_PATHS:
         return None
     authz = request.headers.get("authorization") or ""
     if not authz.lower().startswith("bearer "):
