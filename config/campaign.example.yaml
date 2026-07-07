@@ -1,0 +1,78 @@
+# A "campaign" is the ONLY thing that changes between marketing efforts.
+# The engine code never changes — you copy this file and edit the four inputs.
+
+name: knowella-app-builder-q3
+
+# 1. WHO — ideal customer profile. Drives lead pull/filter from Apollo.
+icp:
+  titles: ["Head of EHS", "Safety Manager", "Operations Director"]
+  industries: ["Manufacturing", "Construction", "Logistics"]
+  company_size: "50-500"
+  geographies: ["United States"]
+
+# Optional Apollo people-search tuning for "Pull from Apollo" (reproduces an
+# Apollo saved search). Omit to just use the icp above.
+apollo:
+  keywords: ["logistics", "trucking", "freight"]     # q_organization_keyword_tags; defaults to icp.industries
+  exclude_keywords: ["computer software", "information technology & services"]
+  employee_ranges: ["4,20000"]                       # else derived from icp.company_size (e.g. "50-500")
+
+# 2. WHAT — what you're selling.
+offer:
+  product: "Knowella App Builder"
+  one_liner: "Build safety & compliance workflows without code."
+  value_props:
+    - "Replace paper checklists with mobile inspections"
+    - "Real-time compliance dashboards"
+  call_to_action: "a 15-minute demo"
+  link: "https://knowella.com"
+
+# 3. WHAT'S TRUE — grounding facts the model may rely on. Anti-hallucination.
+knowledge:
+  - "Knowella serves EHS teams in manufacturing and construction."
+  - "App Builder and AI Ergo are both live products."
+
+# 4. VOICE — tone & framing for the personalized angle.
+voice:
+  tone: "direct, peer-to-peer, no fake warmth"
+  max_words: 90
+  rules:
+    - "Open with a researched, specific observation about THEIR company."
+    - "Never assert a fact that isn't in the lead's research."
+    - "Exactly one clear call to action."
+
+# Research tuning.
+research:
+  max_facts: 12        # keep only the top-N facts (by confidence) — cost + signal
+
+# A/B experiment: measure whether the grounded, signal-led opener actually lifts replies.
+# When enabled, control_ratio of leads get a PLAIN control email (no researched signal);
+# /api/ab reports reply rate per variant. Off by default (everyone gets signal-led).
+experiment:
+  enabled: false
+  control_ratio: 0.5   # fraction of leads sent the plain control opener
+
+# Email verification (needs MILLIONVERIFIER_API_KEY; skipped if unset).
+verify:
+  block_risky: false          # true = also drop catch-all / unverifiable, not just undeliverable
+  require_deliverable: false  # true = hold sends unless the address verified 'deliverable'
+
+# Per-step model routing. Omit to use the engine defaults (all Gemini Flash).
+models:
+  research: { provider: gemini, model: gemini-2.5-flash }
+  personalize: { provider: gemini, model: gemini-2.5-flash }
+  quality_gate: { provider: gemini, model: gemini-2.5-flash }
+
+# Sending platform target + deliverability guardrails.
+# Guardrails hold approved leads in the queue (nothing is lost) instead of pushing.
+sending:
+  platform: apollo                              # send through your Apollo mailboxes
+  sequence_id: "<apollo emailer_campaign id>"   # the sequence to add approved leads to
+  mailbox_id:  "<apollo email_account id>"      # which mailbox to send from
+  subject_field: "email_subject"   # contact custom-field NAMES the sequence email step merges
+  body_field:    "email_body"      # (Subject {{email_subject}} / Body {{email_body}} in the template)
+  daily_cap: 50        # max pushes per day; 0 = unlimited
+  window:              # local time; omit to send any time
+    start_hour: 8
+    end_hour: 17
+    weekdays_only: true

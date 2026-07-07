@@ -1,0 +1,23 @@
+# secrets
+.env
+*.env
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# lead data / PII — never commit scraped prospects or run output
+data/
+out/
+*.csv
+*.jsonl
+
+# editor
+.vscode/
+.idea/
+.DS_Store

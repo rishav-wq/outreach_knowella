@@ -1,0 +1,11 @@
+openai>=1.40            # all LLM providers via OpenAI-compatible base_url
+httpx>=0.27             # web fetch + Tavily / Apollo / Instantly REST
+beautifulsoup4>=4.12    # HTML -> clean text for homepage research
+pydantic>=2.7           # typed Lead / Research / Draft models
+pyyaml>=6.0             # campaign config
+python-dotenv>=1.0      # load .env
+pymongo[srv]>=4.6       # MongoDB backend (srv extra for Atlas mongodb+srv URIs)
+fastapi>=0.110          # web API backend for the UI
+uvicorn[standard]>=0.29 # ASGI server to run the API
+python-multipart>=0.0.9 # CSV file uploads via the API
+pyjwt[crypto]>=2.8      # verify Clerk session JWTs against Clerk's public JWKS

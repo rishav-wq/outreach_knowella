@@ -1,0 +1,61 @@
+name: logistics-trucking
+icp:
+  titles:
+  - Safety Director
+  - Director of Safety
+  - EHS Manager
+  - Operations Director
+  - Fleet Manager
+  - VP Operations
+  industries:
+  - Logistics
+  - Trucking
+  - Freight
+  company_size: 4-20000
+  geographies:
+  - United States
+  - Canada
+offer:
+  product: Knowella App Builder
+  one_liner: Build safety & compliance workflows without code.
+  value_props:
+  - Replace paper checklists with mobile inspections
+  - Real-time compliance dashboards
+  call_to_action: a 15-minute demo
+  link: https://knowella.com
+knowledge:
+- Knowella serves EHS teams in manufacturing, construction, and logistics.
+voice:
+  tone: direct, peer-to-peer, no fake warmth
+  max_words: 75
+  rules:
+  - Open with a researched, specific observation about THEIR company.
+  - Never assert a fact that is not in the lead research.
+  - Exactly one clear call to action.
+sender:                       # email sign-off / footer — appended to every send, shown in Review
+  closing: Best,              # sign-off line before the signature
+  # Plain-text signature (kept light on purpose — logos/social/images hurt COLD deliverability).
+  # Matches the signature already on the sid@knowlogistics.ai mailbox.
+  signature: |-
+    Sid Singh
+    Founder & CEO
+    +1.604.970.8236
+    sid@knowella.com
+    KnowLogistics — a product of Knowella AI Inc.
+models:
+  personalize:
+    provider: gemini
+    model: gemini-2.5-pro    # stronger drafting model — holds the tight, no-repetition style (flash drifted)
+research: {}
+verify: {}
+experiment:
+  enabled: true
+  control_ratio: 0.5
+sending:
+  platform: apollo
+  sequence_id: 6a4d179dbe5c0200149ceb4e    # Apollo "Knowella Outreach" sequence
+  mailbox_id: 6a4bd89f6a803900144ea860     # sid@knowlogistics.ai
+  subject_field: email_subject
+  body_field: email_body
+  daily_cap: 50        # volume safety (per day); timing is unrestricted — send whenever
+  # no send window → the app never holds a send by time; you control when you click Send
