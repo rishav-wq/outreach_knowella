@@ -30,6 +30,9 @@ export default function Review({ campaign }) {
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
   const [sendFrom, setSendFrom] = useState('')
+  const [refineText, setRefineText] = useState('')
+  const [refining, setRefining] = useState(false)
+  const [refineErr, setRefineErr] = useState('')
   const poll = useRef(null)
 
   const loadStatus = () =>
@@ -74,6 +77,22 @@ export default function Review({ campaign }) {
   }
   const startEdit = () => { setESubject(current.subject); setEBody(current.body); setEditing(true) }
 
+  const doRefine = async () => {
+    const key = current.key
+    const instruction = refineText.trim()
+    if (!instruction || refining) return
+    setRefining(true); setRefineErr('')
+    try {
+      const r = await api.refineEmail(campaign, key, instruction)
+      patch(key, { subject: r.subject, body: r.body, edited: true })
+      setRefineText('')
+    } catch (e) {
+      setRefineErr(`Couldn’t tweak: ${e.message || e}`)
+    } finally {
+      setRefining(false)
+    }
+  }
+
   const saveEmail = async () => {
     setEmailErr('')
     try {
@@ -102,7 +121,7 @@ export default function Review({ campaign }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [view, current, total, editing, decide])
 
-  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr('') }, [i])
+  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr(''); setRefineText(''); setRefineErr('') }, [i])
 
   const sendApproved = async () => {
     if (!window.confirm(`Send ${approvedCount} approved ${approvedCount === 1 ? 'email' : 'emails'} through Apollo? This is the real send.`)) return
@@ -269,12 +288,25 @@ export default function Review({ campaign }) {
             </div>
 
             {!editing && (
-              <div className="rq-actions">
-                <span className="rq-keys">A approve · R reject · E edit · J/K move</span>
-                <button className="btn" onClick={startEdit}>Edit</button>
-                <button className="btn reject" onClick={() => decide('reject')}><Icon name="x" size={15} /> Reject</button>
-                <button className="btn approve" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
-              </div>
+              <>
+                <div className="ai-tweak">
+                  <Icon name="refresh" size={15} className="ai-tweak-ic" />
+                  <input className="field-input" value={refineText} disabled={refining}
+                    placeholder="Ask AI to tweak this draft — e.g. “make it shorter”, “lead with their hiring”, “warmer tone”"
+                    onChange={(e) => setRefineText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
+                  <button className="btn primary" onClick={doRefine} disabled={refining || !refineText.trim()}>
+                    {refining ? <><span className="spinner" /> Tweaking…</> : 'Refine'}
+                  </button>
+                </div>
+                {refineErr && <div className="ready-err">{refineErr}</div>}
+                <div className="rq-actions">
+                  <span className="rq-keys">A approve · R reject · E edit · J/K move</span>
+                  <button className="btn" onClick={startEdit}>Edit</button>
+                  <button className="btn reject" onClick={() => decide('reject')}><Icon name="x" size={15} /> Reject</button>
+                  <button className="btn approve" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
+                </div>
+              </>
             )}
           </main>
 

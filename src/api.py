@@ -75,6 +75,7 @@ def campaigns():
 class CampaignCreate(BaseModel):
     name: str
     icp: dict = {}
+    apollo: dict = {}   # Apollo pull filters (keywords/exclude/etc.) — extends icp
     offer: dict = {}
     knowledge: list = []
     voice: dict = {}
@@ -102,6 +103,8 @@ def create_campaign(c: CampaignCreate):
         "verify": c.verify,
         "sending": c.sending,
     }
+    if c.apollo:  # only write the pull-filter block when the wizard supplied one
+        cfg["apollo"] = c.apollo
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
@@ -114,6 +117,36 @@ def campaign_config(campaign: str):
     return _load(campaign)
 
 
+class CampaignUpdate(BaseModel):
+    campaign: str
+    icp: dict | None = None
+    apollo: dict | None = None
+    offer: dict | None = None
+    knowledge: list | None = None
+    voice: dict | None = None
+    verify: dict | None = None
+    sending: dict | None = None   # partial — merged over existing (protects ids/fields)
+
+
+@app.post("/api/campaign/update")
+def update_campaign(u: CampaignUpdate):
+    """Edit a campaign from the Settings screen. Sections replace; sending merges."""
+    path = _campaign_path(u.campaign)
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    for k in ("icp", "apollo", "offer", "voice", "verify"):
+        v = getattr(u, k)
+        if v is not None:
+            cfg[k] = v
+    if u.knowledge is not None:
+        cfg["knowledge"] = u.knowledge
+    if u.sending is not None:
+        cfg.setdefault("sending", {}).update(u.sending)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
+    return cfg
+
+
 @app.get("/api/mailboxes")
 def mailboxes(campaign: str | None = None):
     """The Apollo mailboxes you can send from, plus which one this campaign uses."""
@@ -121,6 +154,15 @@ def mailboxes(campaign: str | None = None):
     if campaign:
         current = (_load(campaign).get("sending") or {}).get("mailbox_id")
     return {"mailboxes": apollo_send.list_mailboxes(), "current": current}
+
+
+@app.get("/api/sequences")
+def sequences(campaign: str | None = None):
+    """The Apollo sequences approved leads can be added to, plus this campaign's current one."""
+    current = None
+    if campaign:
+        current = (_load(campaign).get("sending") or {}).get("sequence_id")
+    return {"sequences": apollo_send.list_sequences(), "current": current}
 
 
 class MailboxSet(BaseModel):
@@ -276,63 +318,84 @@ def _msg_text(m: dict) -> str:
     return (b or "").strip()
 
 
+def _conversations(sid: str, campaign_name: str) -> list[dict]:
+    """Group the sequence's messages into conversations (one item per lead thread)."""
+    raw = apollo_send.list_messages(sid)
+    directory = _lead_directory(open_store(), campaign_name)
+    convs: dict = {}
+    for m in raw:
+        cid = m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")
+        convs.setdefault(cid, []).append(m)
+    items = []
+    for cid, msgs in convs.items():
+        msgs.sort(key=lambda m: m.get("created_at") or "")
+        last = msgs[-1]
+        inbound = [m for m in msgs if apollo_send.is_inbound(m)]
+        first_out = next((m for m in msgs if not apollo_send.is_inbound(m)), None)
+        # the lead's address: whoever we sent to (or, for replies, the sender)
+        lead_email = ((first_out or {}).get("to_email") or (inbound[0].get("from_email") if inbound else "") or "").lower()
+        who = directory.get(lead_email, {})
+        items.append({
+            "thread_id": cid,
+            "subject": (first_out or last).get("subject") or "(no subject)",
+            "snippet": _msg_text(last)[:180],
+            "lead_email": lead_email,
+            "name": who.get("name") or (last.get("to_name") if not apollo_send.is_inbound(last) else "") or lead_email or "Conversation",
+            "company": who.get("company") or "",
+            "lead_key": who.get("key") or "",
+            "mailbox": ((first_out or {}).get("from_email") or "").lower(),
+            "has_reply": bool(inbound) or any(m.get("replied") for m in msgs),
+            "messages": len(msgs),
+            "ts": last.get("created_at") or "",
+            "unread": any(not m.get("is_read", True) for m in inbound),
+        })
+    items.sort(key=lambda x: x["ts"], reverse=True)
+    return items
+
+
 @app.get("/api/inbox")
 def inbox(campaign: str):
-    """Latest reply per thread from the Apollo sequence. connected=false when unwired.
+    """Conversations for the campaign's Apollo sequence, grouped per lead thread.
 
-    Reply message shape is mapped defensively — it populates once leads reply;
-    field names get a final pass against real reply data.
+    Each item says whether the lead replied (has_reply) and which mailbox sent it,
+    so the UI can offer a Replies tab and a combined multi-mailbox view.
     """
     cfg = _load(campaign)
     sid = _apollo_target(cfg)
     if not sid:
         return {"connected": False, "items": []}
     try:
-        raw = apollo_send.list_replies(sid)
+        items = _conversations(sid, cfg["name"])
     except Exception as e:
         return {"connected": False, "items": [], "error": str(e)}
-    directory = _lead_directory(open_store(), cfg["name"])
-    items = []
-    for m in raw:
-        lead_email = (m.get("from_email") or m.get("from_address") or "").lower()
-        who = directory.get(lead_email, {})
-        items.append({
-            "id": m.get("id"), "thread_id": m.get("thread_id") or m.get("id"),
-            "subject": m.get("subject") or "(no subject)",
-            "snippet": _msg_text(m)[:180],
-            "from": lead_email,
-            "lead_email": lead_email,
-            "name": who.get("name") or lead_email or "Reply", "company": who.get("company") or "",
-            "lead_key": who.get("key") or "",
-            "ts": m.get("created_at") or m.get("delivered_at") or "",
-            "unread": not bool(m.get("is_read")),
-        })
-    items.sort(key=lambda x: x["ts"], reverse=True)
-    return {"connected": True, "items": items}
+    mailboxes = sorted({i["mailbox"] for i in items if i["mailbox"]})
+    return {"connected": True, "items": items, "mailboxes": mailboxes}
 
 
 @app.get("/api/inbox/thread")
 def inbox_thread(campaign: str, thread_id: str):
-    """Full conversation for one thread, oldest first."""
+    """Full conversation for one thread (conversation_id), oldest first."""
     cfg = _load(campaign)
     sid = _apollo_target(cfg)
     if not sid:
         return {"connected": False, "messages": []}
     try:
-        raw = apollo_send.get_thread(thread_id)
+        raw = apollo_send.list_messages(sid)
     except Exception as e:
         return {"connected": False, "messages": [], "error": str(e)}
     msgs = []
     for m in raw:
-        # Apollo message type: sent from a mailbox vs received from the lead
-        received = bool(m.get("from_email")) and not m.get("email_account_id")
+        cid = m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")
+        if cid != thread_id:
+            continue
+        received = apollo_send.is_inbound(m)
         msgs.append({
             "id": m.get("id"),
             "subject": m.get("subject") or "",
             "from": m.get("from_email") or "",
             "to": m.get("to_email") or "",
             "text": _msg_text(m),
-            "ts": m.get("created_at") or m.get("delivered_at") or "",
+            "ts": m.get("created_at") or m.get("completed_at") or "",
             "direction": "in" if received else "out",
         })
     msgs.sort(key=lambda x: x["ts"])
@@ -434,6 +497,33 @@ def edit(e: EditReq):
     _load(e.campaign)
     open_store().update_outbox(e.key, e.subject, e.body)  # marks edited=True; preserved on re-runs
     return {"ok": True, "key": e.key}
+
+
+class RefineReq(BaseModel):
+    campaign: str
+    key: str
+    instruction: str
+
+
+@app.post("/api/review/refine")
+def refine(r: RefineReq):
+    """AI-tweak a draft: rewrite it per the user's instruction, kept grounded in the lead's facts."""
+    cfg = _load(r.campaign)
+    if not (r.instruction or "").strip():
+        raise HTTPException(400, "instruction is empty")
+    store = open_store()
+    lead = store.get_lead(r.key)
+    if not lead:
+        raise HTTPException(404, "lead not found")
+    ob = store.get_outbox(r.key)
+    if not ob:
+        raise HTTPException(400, "no draft to refine yet")
+    res = store.get_research_any(r.key)
+    draft, usage, model = personalize.refine_email(
+        lead, res, cfg, ob.get("subject", ""), ob.get("body", ""), r.instruction)
+    store.update_outbox(r.key, draft.subject, draft.body)  # marks edited=True; preserved on re-runs
+    store.log_llm(r.key, "refine", model, usage)
+    return {"subject": draft.subject, "body": draft.body}
 
 
 @app.post("/api/pull")

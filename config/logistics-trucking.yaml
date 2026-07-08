@@ -54,7 +54,7 @@ experiment:
 sending:
   platform: apollo
   sequence_id: 6a4d179dbe5c0200149ceb4e    # Apollo "Knowella Outreach" sequence
-  mailbox_id: 6a4bd89f6a803900144ea860     # sid@knowlogistics.ai
+  mailbox_id: 6a4bccdc4cec4c00103549e9     # sid@knowergo.ai
   subject_field: email_subject
   body_field: email_body
   daily_cap: 50        # volume safety (per day); timing is unrestricted — send whenever

@@ -1,9 +1,47 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import { fadeUp, stagger } from './anim'
+
+// Multi-select mailbox dropdown: tick one or more of the Apollo mailboxes and the
+// inbox combines exactly those. Empty selection = all mailboxes.
+function MailboxSelect({ all, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+  const toggle = (b) => onChange(selected.includes(b) ? selected.filter((x) => x !== b) : [...selected, b])
+  const label = selected.length === 0 ? 'All mailboxes'
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} mailboxes`
+  return (
+    <div className="mbox-select" ref={ref}>
+      <button className="btn mbox-btn" onClick={() => setOpen(!open)}>
+        <Icon name="inbox" size={14} /> {label} <Icon name="chevron" size={13} />
+      </button>
+      {open && (
+        <div className="mbox-menu">
+          <label className="mbox-opt">
+            <input type="checkbox" checked={selected.length === 0} onChange={() => onChange([])} />
+            All mailboxes
+          </label>
+          <div className="mbox-sep" />
+          {all.map((b) => (
+            <label key={b} className="mbox-opt">
+              <input type="checkbox" checked={selected.includes(b)} onChange={() => toggle(b)} />
+              {b}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const when = (ts) => {
   if (!ts) return ''
@@ -15,20 +53,26 @@ const when = (ts) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-// Unified reply inbox — every incumbent converges on this pattern:
-// thread list on the left, full conversation on the right.
+// Unified inbox: conversations per lead, with a Replies tab (what came back),
+// an All tab (everything sent), and a multi-mailbox filter — combined by default.
 export default function Inbox({ campaign }) {
   const [data, setData] = useState(null)
   const [sel, setSel] = useState(null)
   const [thread, setThread] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [tab, setTab] = useState('replies')       // 'replies' | 'all'
+  const [boxes, setBoxes] = useState([])          // selected mailboxes; empty = all
+  const [allBoxes, setAllBoxes] = useState([])    // every Apollo mailbox (for the dropdown)
 
   const load = () => api.getInbox(campaign)
-    .then((d) => { setData(d); if (d.items?.length && !sel) setSel(d.items[0].thread_id) })
+    .then(setData)
     .catch(() => setData({ connected: false, items: [] }))
     .finally(() => setRefreshing(false))
 
-  useEffect(() => { setData(null); setSel(null); setThread(null); load() }, [campaign])
+  useEffect(() => {
+    setData(null); setSel(null); setThread(null); setBoxes([]); load()
+    api.getMailboxes().then((d) => setAllBoxes((d.mailboxes || []).map((b) => b.email.toLowerCase()))).catch(() => {})
+  }, [campaign])
   useEffect(() => {
     if (!sel) { setThread(null); return }
     setThread(null)
@@ -62,12 +106,35 @@ export default function Inbox({ campaign }) {
     )
   }
 
+  const replies = data.items.filter((i) => i.has_reply)
+  const pool = tab === 'replies' ? replies : data.items
+  const items = boxes.length ? pool.filter((i) => boxes.includes(i.mailbox)) : pool
+  // dropdown lists every Apollo mailbox, even ones with no messages yet
+  const mailboxes = allBoxes.length ? allBoxes : (data.mailboxes || [])
+  const current = items.find((i) => i.thread_id === sel)
+
+  const filters = (
+    <div className="inbox-filters">
+      <div className="seg">
+        <button className={tab === 'replies' ? 'on' : ''} onClick={() => { setTab('replies'); setSel(null) }}>
+          Replies{replies.length > 0 && <span className="seg-count">{replies.length}</span>}
+        </button>
+        <button className={tab === 'all' ? 'on' : ''} onClick={() => { setTab('all'); setSel(null) }}>
+          All emails{data.items.length > 0 && <span className="seg-count">{data.items.length}</span>}
+        </button>
+      </div>
+      {mailboxes.length > 0 && (
+        <MailboxSelect all={mailboxes} selected={boxes} onChange={(v) => { setBoxes(v); setSel(null) }} />
+      )}
+    </div>
+  )
+
   if (data.items.length === 0) {
     return (
       <motion.div className="empty" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <div className="empty-icon"><Icon name="inbox" size={24} /></div>
-        <h3>No replies yet</h3>
-        <p className="muted">When a lead answers one of your sent emails, the conversation shows up here.</p>
+        <h3>Nothing sent yet</h3>
+        <p className="muted">Approve and send drafts from Review — sent emails and every reply show up here.</p>
         <div className="empty-actions">
           <button className="btn" onClick={() => { setRefreshing(true); load() }}>
             {refreshing ? <><span className="spinner spinner-dark" /> Checking…</> : 'Check again'}
@@ -77,59 +144,69 @@ export default function Inbox({ campaign }) {
     )
   }
 
-  const current = data.items.find((i) => i.thread_id === sel)
-
   return (
-    <div className="inbox">
-      <div className="inbox-list">
-        <div className="inbox-list-head">
-          <span>{data.items.length} {data.items.length === 1 ? 'conversation' : 'conversations'}</span>
-          <button className="icon-btn" title="Refresh" onClick={() => { setRefreshing(true); load() }}>
-            <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
-          </button>
-        </div>
-        <motion.div variants={stagger} initial="hidden" animate="show">
-          {data.items.map((it) => (
-            <motion.button key={it.thread_id} variants={fadeUp}
-              className={`inbox-item ${it.thread_id === sel ? 'sel' : ''}`} onClick={() => setSel(it.thread_id)}>
-              <div className="avatar sm">{(it.name || '?').slice(0, 1)}</div>
-              <div className="inbox-item-main">
-                <div className="inbox-item-top">
-                  <span className="nm">{it.name}{it.unread && <span className="unread-dot" />}</span>
-                  <span className="ts">{when(it.ts)}</span>
-                </div>
-                {it.company && <div className="inbox-item-sub">{it.company}</div>}
-                <div className="inbox-item-snippet">{it.snippet || it.subject}</div>
-              </div>
-            </motion.button>
-          ))}
-        </motion.div>
-      </div>
-
-      <div className="inbox-thread">
-        {!current ? <p className="muted">Select a conversation.</p> : !thread ? (
-          <><Skeleton w="45%" h={16} /><Skeleton w="100%" h={80} r={8} style={{ marginTop: 16 }} /></>
-        ) : (
-          <>
-            <div className="thread-head">
-              <div>
-                <div className="thread-name">{current.name}</div>
-                <div className="thread-sub">{[current.company, current.lead_email].filter(Boolean).join(' · ')}</div>
-              </div>
-              <span className="thread-subject">{current.subject}</span>
-            </div>
-            <div className="thread-msgs">
-              {thread.messages.map((m) => (
-                <div key={m.id} className={`msg ${m.direction}`}>
-                  <div className="msg-meta">{m.direction === 'in' ? current.name : 'You'} · {when(m.ts)}</div>
-                  <pre className="msg-text">{m.text || '(no text body)'}</pre>
-                </div>
+    <div>
+      {filters}
+      <div className="inbox">
+        <div className="inbox-list">
+          <div className="inbox-list-head">
+            <span>{items.length} {items.length === 1 ? 'conversation' : 'conversations'}</span>
+            <button className="icon-btn" title="Refresh" onClick={() => { setRefreshing(true); load() }}>
+              <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
+            </button>
+          </div>
+          {items.length === 0 ? (
+            <p className="muted inbox-none">
+              {tab === 'replies' ? 'No replies yet — they appear here the moment a lead answers.' : 'No conversations for this filter.'}
+            </p>
+          ) : (
+            <motion.div variants={stagger} initial="hidden" animate="show">
+              {items.map((it) => (
+                <motion.button key={it.thread_id} variants={fadeUp}
+                  className={`inbox-item ${it.thread_id === sel ? 'sel' : ''}`} onClick={() => setSel(it.thread_id)}>
+                  <div className="avatar sm">{(it.name || '?').slice(0, 1)}</div>
+                  <div className="inbox-item-main">
+                    <div className="inbox-item-top">
+                      <span className="nm">{it.name}{it.unread && <span className="unread-dot" />}</span>
+                      <span className="ts">{when(it.ts)}</span>
+                    </div>
+                    <div className="inbox-item-sub">
+                      {[it.company, it.mailbox && `via ${it.mailbox}`].filter(Boolean).join(' · ')}
+                      {it.has_reply && <span className="badge s-approved" style={{ marginLeft: 6 }}>replied</span>}
+                    </div>
+                    <div className="inbox-item-snippet">{it.snippet || it.subject}</div>
+                  </div>
+                </motion.button>
               ))}
-              {thread.messages.length === 0 && <p className="muted">Could not load this conversation{thread.error ? ` — ${thread.error.slice(0, 120)}` : '.'}</p>}
-            </div>
-            <p className="thread-note muted">Reply from your own mailbox — replies sent here would come from the rotation inbox, not you.</p>
-          </>
-        )}
+            </motion.div>
+          )}
+        </div>
+
+        <div className="inbox-thread">
+          {!current ? <p className="muted">Select a conversation.</p> : !thread ? (
+            <><Skeleton w="45%" h={16} /><Skeleton w="100%" h={80} r={8} style={{ marginTop: 16 }} /></>
+          ) : (
+            <>
+              <div className="thread-head">
+                <div>
+                  <div className="thread-name">{current.name}</div>
+                  <div className="thread-sub">{[current.company, current.lead_email, current.mailbox && `via ${current.mailbox}`].filter(Boolean).join(' · ')}</div>
+                </div>
+                <span className="thread-subject">{current.subject}</span>
+              </div>
+              <div className="thread-msgs">
+                {thread.messages.map((m) => (
+                  <div key={m.id} className={`msg ${m.direction}`}>
+                    <div className="msg-meta">{m.direction === 'in' ? current.name : 'You'} · {when(m.ts)}</div>
+                    <pre className="msg-text">{m.text || '(no text body)'}</pre>
+                  </div>
+                ))}
+                {thread.messages.length === 0 && <p className="muted">Could not load this conversation{thread.error ? ` — ${thread.error.slice(0, 120)}` : '.'}</p>}
+              </div>
+              <p className="thread-note muted">Reply from your own mailbox — replies sent here would come from the rotation inbox, not you.</p>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

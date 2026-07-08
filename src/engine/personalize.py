@@ -159,3 +159,54 @@ RULES: {voice.get('rules')}"""
         used_facts=data.get("used_facts") or [],
     )
     return draft, usage, spec.resolved_model()
+
+
+REFINE_SYSTEM = """You revise an existing first-touch cold email per the user's INSTRUCTION,
+while keeping it grounded and on-format.
+
+Hard rules — NEVER break, even if the instruction implies otherwise:
+- State ONLY lead-specific facts present in FACTS. Never invent a fact, statistic, customer, or quote.
+- Plain text only — no markdown, HTML, or bullet lists. Keep it tight, a few short sentences.
+- End with ONE low-friction interest question — never a demo/meeting ask, calendar link, or time.
+- Subject: 2-5 words, under ~40 chars, no question mark.
+- Do NOT add a sign-off or signature — that's appended automatically after this.
+
+Apply the INSTRUCTION faithfully within those rules. If it asks for something that breaks a rule
+(e.g. "ask for a meeting", "add a stat"), honor the intent but keep the rule (soft CTA; only real facts).
+
+Return STRICT JSON only: {"subject": "...", "body": "..."}"""
+
+
+def refine_email(lead: Lead, research: Research | None, cfg: dict, subject: str, body: str, instruction: str):
+    """Rewrite an existing draft per a user instruction, staying grounded. Returns (Draft, usage, model)."""
+    spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
+    offer, voice = cfg["offer"], cfg["voice"]
+    facts = _facts_block(research) if research else "FACTS:\n(none)"
+    user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}
+
+CURRENT EMAIL
+Subject: {subject}
+Body:
+{body}
+
+{facts}
+
+OFFER: {offer.get('product')} — {offer.get('one_liner')}
+KNOWLEDGE (you may rely on these as true): {cfg.get('knowledge')}
+VOICE: tone={voice.get('tone')}, max_words={voice.get('max_words')}
+
+INSTRUCTION FROM THE USER: {instruction}"""
+
+    text, usage = llm.complete(
+        [{"role": "system", "content": REFINE_SYSTEM}, {"role": "user", "content": user}],
+        spec,
+        temperature=0.5,
+    )
+    data = llm.parse_json(text)
+    draft = Draft(
+        subject=data.get("subject") or subject,
+        body=data.get("body") or body,
+        angle=f"refined: {instruction[:80]}",
+        used_facts=[],
+    )
+    return draft, usage, spec.resolved_model()

@@ -56,7 +56,16 @@ def _build_filters(cfg: dict) -> dict:
 
     apollo block (all optional) overrides/extends the icp:
       titles, locations, keywords, exclude_keywords: [str]
-      employee_ranges: ['lo,hi', ...]   (else derived from icp.company_size)
+      employee_ranges: ['lo,hi', ...]        (else derived from icp.company_size)
+      seniorities: [owner|founder|c_suite|partner|vp|head|director|manager|senior|entry|intern]
+      exclude_titles: [str]                  (person_not_titles — live-verified, undocumented)
+      person_locations: [str]                (where the PERSON lives; `locations` = employer HQ)
+      email_status: [verified|unverified|likely to engage|unavailable]
+      hiring_job_titles: [str]               (companies with active postings for these roles)
+      hiring_min_jobs: int                   (companies with at least N open roles)
+      revenue_min / revenue_max: int         (annual revenue USD)
+    All live-probed against api_search 2026-07-08 (docs/outreach-campaign-fields-research.md);
+    plan-gated filters may stop matching if the Apollo plan changes.
     """
     icp = cfg.get("icp") or {}
     ap = cfg.get("apollo") or {}
@@ -64,9 +73,15 @@ def _build_filters(cfg: dict) -> dict:
     titles = ap.get("titles") or icp.get("titles") or []
     if titles:
         f["person_titles"] = titles
+    if ap.get("exclude_titles"):
+        f["person_not_titles"] = ap["exclude_titles"]
+    if ap.get("seniorities"):
+        f["person_seniorities"] = ap["seniorities"]
     locations = ap.get("locations") or icp.get("geographies") or []
     if locations:
         f["organization_locations"] = locations
+    if ap.get("person_locations"):
+        f["person_locations"] = ap["person_locations"]
     ranges = ap.get("employee_ranges") or _size_ranges(icp.get("company_size"))
     if ranges:
         f["organization_num_employees_ranges"] = ranges
@@ -76,6 +91,20 @@ def _build_filters(cfg: dict) -> dict:
     exclude = ap.get("exclude_keywords") or []
     if exclude:
         f["q_not_organization_keyword_tags"] = exclude
+    if ap.get("email_status"):
+        f["contact_email_status"] = ap["email_status"]
+    if ap.get("hiring_job_titles"):
+        f["q_organization_job_titles"] = ap["hiring_job_titles"]
+        f["organization_num_jobs_range"] = {"min": int(ap.get("hiring_min_jobs") or 1)}
+    elif ap.get("hiring_min_jobs"):
+        f["organization_num_jobs_range"] = {"min": int(ap["hiring_min_jobs"])}
+    if ap.get("revenue_min") or ap.get("revenue_max"):
+        rr = {}
+        if ap.get("revenue_min"):
+            rr["min"] = int(ap["revenue_min"])
+        if ap.get("revenue_max"):
+            rr["max"] = int(ap["revenue_max"])
+        f["revenue_range"] = rr
     return f
 
 

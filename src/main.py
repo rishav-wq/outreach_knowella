@@ -25,7 +25,7 @@ from .store import open_store as _open_store
 
 
 def open_store(args):
-    return _open_store(args.db)
+    return _open_store()  # Mongo-only now; the old --db flag is ignored
 
 
 def cmd_run(args) -> None:

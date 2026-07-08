@@ -75,6 +75,22 @@ def _find_contact_id(email: str, key: str) -> str | None:
     return None
 
 
+def list_sequences() -> list[dict]:
+    """The Apollo sequences (emailer_campaigns) approved leads can be added to.
+
+    Returns [{id, name, archived}] so a campaign can pick one instead of pasting an id.
+    """
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        return []
+    data = _request("POST", "/emailer_campaigns/search", key, {})
+    out = []
+    for c in data.get("emailer_campaigns", []):
+        if c.get("id"):
+            out.append({"id": c["id"], "name": c.get("name") or c["id"], "archived": bool(c.get("archived"))})
+    return out
+
+
 def list_mailboxes() -> list[dict]:
     """The Apollo mailboxes (email accounts) available to send from.
 
@@ -104,23 +120,40 @@ def sequence_stats(sequence_id: str) -> dict:
     return {}
 
 
-def list_replies(sequence_id: str, limit: int = 50) -> list[dict]:
-    """Received messages (replies) for a sequence — the Inbox feed. Empty until leads reply."""
+def list_messages(sequence_id: str, limit: int = 200) -> list[dict]:
+    """All emailer messages for a sequence (sent + received), raw from Apollo.
+
+    Outbound messages carry email_account_id + type 'outreach_automatic_email';
+    threading lives in conversation_id. The API layer groups these into conversations.
+    """
     key = os.environ.get("APOLLO_API_KEY")
     if not key:
         raise RuntimeError("APOLLO_API_KEY not set")
-    data = _request("POST", "/emailer_messages/search", key,
-                    {"emailer_campaign_ids": [sequence_id], "per_page": limit})
-    return data.get("emailer_messages", []) or []
+    out: list[dict] = []
+    page = 1
+    while len(out) < limit:  # Apollo caps per_page low, so page through
+        data = _request("POST", "/emailer_messages/search", key,
+                        {"emailer_campaign_ids": [sequence_id], "per_page": 50, "page": page})
+        batch = data.get("emailer_messages", []) or []
+        out.extend(batch)
+        if len(batch) < 50:
+            break
+        page += 1
+    return out[:limit]
 
 
-def get_thread(thread_id: str, limit: int = 50) -> list[dict]:
-    """All messages in one conversation thread, for the conversation view."""
-    key = os.environ.get("APOLLO_API_KEY")
-    if not key:
-        raise RuntimeError("APOLLO_API_KEY not set")
-    data = _request("POST", "/emailer_messages/search", key, {"q_keywords": thread_id, "per_page": limit})
-    return data.get("emailer_messages", []) or []
+def is_inbound(m: dict) -> bool:
+    """True when the message came FROM the lead (a reply), not from one of our mailboxes."""
+    t = (m.get("type") or "").lower()
+    if "reply" in t or "received" in t:
+        return True
+    # outbound sequence emails always carry the sending account id
+    return bool(m.get("from_email")) and not m.get("email_account_id")
+
+
+def list_replies(sequence_id: str, limit: int = 200) -> list[dict]:
+    """Only the received messages (lead replies) — used by the A/B reply sync."""
+    return [m for m in list_messages(sequence_id, limit) if is_inbound(m)]
 
 
 def push_lead(lead: Lead, draft: Draft, campaign: dict) -> str:
