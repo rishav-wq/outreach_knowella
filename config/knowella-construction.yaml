@@ -1,0 +1,101 @@
+name: knowella-construction
+# Micro-segment (validated live 2026-07-09, ~2,366 people): US construction
+# companies, 51-500 employees, ACTIVELY HIRING field crews (laborers, carpenters,
+# superintendents, foremen, PMs) — live projects, growing safety exposure — with
+# a verified-email safety decision-maker. Flagship Knowella platform pitch.
+icp:
+  titles:
+  - Safety Director
+  - Safety Manager
+  - HSE Manager
+  - EHS Manager
+  - Director of Safety
+  - Health & Safety Manager
+  - Corporate Safety Director
+  - Field Safety Manager
+  industries:
+  - Construction
+  - General Contractor
+  - Building Materials
+  company_size: 51-500
+  geographies:
+  - United States
+apollo:
+  keywords:
+  - Construction
+  - General Contractor
+  - Building Materials
+  exclude_keywords:
+  - computer software
+  - information technology
+  - staffing & recruiting
+  - consulting
+  employee_ranges:
+  - 51,100
+  - 101,200
+  - 201,500
+  seniorities:
+  - manager
+  - director
+  - head
+  - vp
+  - c_suite
+  - owner
+  exclude_titles:
+  - assistant
+  email_status:
+  - verified
+  - likely to engage
+  # the campaign's core signal: hiring field crews = active projects, rising exposure
+  hiring_job_titles:
+  - laborer
+  - carpenter
+  - superintendent
+  - foreman
+  - project manager
+offer:
+  product: Knowella
+  one_liner: Build your own safety inspections, checklists, and incident reporting — no code, one platform.
+  value_props:
+  - Frontline crews report hazards, near-misses, and incidents from a phone, on-site
+  - Build inspections and checklists with drag-and-drop — no code, no IT queue
+  - Real-time dashboards and audit logs across every site and crew
+  - QR-code logins get field workers submitting in seconds
+  call_to_action: a 15-minute demo
+  link: https://knowella.com
+knowledge:
+- Knowella is a no-code platform where teams build their own safety inspections, checklists, and incident-reporting apps with drag-and-drop.
+- Frontline workers submit reports from a phone or QR-code kiosk; results feed real-time dashboards and audit logs.
+- Add-ons include AI ergonomic video scoring and CCTV camera safety alerts.
+voice:
+  tone: direct, peer-to-peer, no fake warmth
+  max_words: 75
+  rules:
+  - Open with a researched, specific observation about THEIR company.
+  - Never assert a fact that is not in the lead research.
+  - End with ONE low-friction interest question — never a demo or meeting ask on the first touch.
+research: {}
+verify: {}
+experiment:
+  enabled: true
+  control_ratio: 0.2
+models:
+  personalize:
+    provider: gemini
+    model: gemini-2.5-pro
+sender:
+  closing: Best,
+  signature: |-
+    Sid Singh
+    Founder & CEO
+    +1.604.970.8236
+    sid@knowella.com
+    Knowella AI Inc.
+  opt_out_line: If this isn't relevant, reply "no thanks" and I won't email again.
+sending:
+  platform: apollo
+  sequence_id: 6a4f83ee2563120018347971   # Apollo "Knowella Construction Safety" (API-created, 3 steps, 24/7)
+  mailbox_id: 6a4bca94df143e001018727e    # sid@knowellaai.com — flagship brand
+  subject_field: email_subject
+  body_field: email_body
+  daily_cap: 50

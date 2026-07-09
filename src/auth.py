@@ -107,12 +107,16 @@ def _jwks():
 
 
 def verify_token(token: str) -> dict:
-    """Verify a Clerk session JWT's signature + issuer + expiry. Raises on failure."""
+    """Verify a Clerk session JWT's signature + issuer + expiry. Raises on failure.
+
+    leeway: Clerk session tokens live ~60s; a few seconds of clock skew between this
+    machine and Clerk otherwise causes intermittent 'token not yet valid / expired'.
+    """
     import jwt
     signing_key = _jwks().get_signing_key_from_jwt(token).key
     return jwt.decode(
         token, signing_key, algorithms=["RS256"],
-        issuer=_issuer(), options={"verify_aud": False},
+        issuer=_issuer(), options={"verify_aud": False}, leeway=15,
     )
 
 
@@ -125,13 +129,17 @@ async def require_auth(request: Request):
     # stay public — the app gates itself via Clerk, and every /api call carries a token.
     if request.method == "OPTIONS" or not path.startswith("/api/") or path in _OPEN_API_PATHS:
         return None
+    import logging
+    log = logging.getLogger("uvicorn.error")
     authz = request.headers.get("authorization") or ""
     if not authz.lower().startswith("bearer "):
+        log.warning("[auth] 401 %s — no Authorization header (frontend sent no token; signed out or Clerk not loaded)", path)
         raise HTTPException(status_code=401, detail="missing bearer token")
     token = authz.split(" ", 1)[1].strip()
     try:
         claims = verify_token(token)
     except Exception as e:  # signature/expiry/issuer mismatch → unauthenticated
+        log.warning("[auth] 401 %s — token rejected: %s", path, e)
         raise HTTPException(status_code=401, detail=f"invalid session: {e}")
     _check_allowed(claims)  # 403 if an allowlist is set and this user isn't on it
     request.state.user = claims.get("sub")

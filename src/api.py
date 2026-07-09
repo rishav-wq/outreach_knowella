@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import auth, config, pipeline
-from .engine import personalize
+from .engine import classify, personalize
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich
 from .store import open_store
 
@@ -82,6 +82,7 @@ class CampaignCreate(BaseModel):
     research: dict = {}
     verify: dict = {}
     sending: dict = {}
+    experiment: dict = {}   # {enabled, control_ratio} — wizard slider; defaulted if absent
 
 
 @app.post("/api/campaigns")
@@ -105,6 +106,17 @@ def create_campaign(c: CampaignCreate):
     }
     if c.apollo:  # only write the pull-filter block when the wizard supplied one
         cfg["apollo"] = c.apollo
+    # Product defaults every campaign should ship with (wizard doesn't ask):
+    # the A/B experiment (research: signal-opener lift is unproven — measure it),
+    # the strong drafting model (flash drifts on tight style), and the sender
+    # signature + opt-out (emails must never go out unsigned).
+    cfg["experiment"] = c.experiment or {"enabled": True, "control_ratio": 0.2}
+    cfg["models"] = {"personalize": {"provider": "gemini", "model": "gemini-2.5-pro"}}
+    cfg["sender"] = {
+        "closing": "Best,",
+        "signature": "Sid Singh\nFounder & CEO\n+1.604.970.8236\nsid@knowella.com\nKnowella AI Inc.",
+        "opt_out_line": 'If this isn\'t relevant, reply "no thanks" and I won\'t email again.',
+    }
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
@@ -124,8 +136,39 @@ class CampaignUpdate(BaseModel):
     offer: dict | None = None
     knowledge: list | None = None
     voice: dict | None = None
+    research: dict | None = None
+    experiment: dict | None = None
     verify: dict | None = None
     sending: dict | None = None   # partial — merged over existing (protects ids/fields)
+
+
+class CampaignRename(BaseModel):
+    campaign: str
+    new_name: str
+
+
+@app.post("/api/campaign/rename")
+def rename_campaign(r: CampaignRename):
+    """Rename a campaign safely: the slug keys both the config file and every lead
+    record, so this migrates the file AND re-keys the leads in one action."""
+    old_path = _campaign_path(r.campaign)
+    slug = re.sub(r"[^a-z0-9]+", "-", r.new_name.lower()).strip("-")
+    if not slug:
+        raise HTTPException(400, "campaign name must contain letters or numbers")
+    if slug == r.campaign:
+        return {"renamed": slug, "leads_moved": 0}
+    new_path = os.path.join(CONFIG_DIR, f"{slug}.yaml")
+    if os.path.exists(new_path):
+        raise HTTPException(409, f"campaign '{slug}' already exists")
+    with open(old_path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    cfg["name"] = slug
+    with open(new_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
+    moved = open_store().rename_campaign(r.campaign, slug)
+    os.remove(old_path)
+    _runs.pop(r.campaign, None)
+    return {"renamed": slug, "leads_moved": moved}
 
 
 @app.post("/api/campaign/update")
@@ -134,7 +177,7 @@ def update_campaign(u: CampaignUpdate):
     path = _campaign_path(u.campaign)
     with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
-    for k in ("icp", "apollo", "offer", "voice", "verify"):
+    for k in ("icp", "apollo", "offer", "voice", "research", "experiment", "verify"):
         v = getattr(u, k)
         if v is not None:
             cfg[k] = v
@@ -145,6 +188,97 @@ def update_campaign(u: CampaignUpdate):
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
     return cfg
+
+
+# --- sending health: DNS auth (SPF/DKIM/DMARC) + Apollo mailbox scorecards ----
+_dns_cache: dict = {}   # domain -> checks (per process; DNS changes are rare)
+_DKIM_SELECTORS = ["selector1", "selector2", "google", "k1", "k2", "mail", "zoho", "default", "dkim"]
+
+
+def _txt_records(name: str) -> list[str]:
+    """TXT lookup via Google DNS-over-HTTPS (no local resolver dependency)."""
+    import httpx
+    try:
+        r = httpx.get("https://dns.google/resolve", params={"name": name, "type": "TXT"}, timeout=10)
+        return [a.get("data", "").strip('"') for a in (r.json().get("Answer") or [])]
+    except Exception:
+        return []
+
+
+def _domain_auth(domain: str) -> dict:
+    """SPF / DKIM / DMARC presence for a sending domain (cached per process)."""
+    if domain in _dns_cache:
+        return _dns_cache[domain]
+    spf = any("v=spf1" in t for t in _txt_records(domain))
+    dmarc_recs = [t for t in _txt_records(f"_dmarc.{domain}") if "v=dmarc1" in t.lower()]
+    dmarc_policy = ""
+    if dmarc_recs:
+        import re as _re
+        m = _re.search(r"p=(\w+)", dmarc_recs[0])
+        dmarc_policy = m.group(1) if m else ""
+    dkim = False
+    for sel in _DKIM_SELECTORS:
+        if any("v=DKIM1" in t or "k=rsa" in t for t in _txt_records(f"{sel}._domainkey.{domain}")):
+            dkim = True
+            break
+    out = {"spf": spf, "dkim": dkim, "dmarc": bool(dmarc_recs), "dmarc_policy": dmarc_policy}
+    _dns_cache[domain] = out
+    return out
+
+
+@app.get("/api/health/sending")
+def sending_health(campaign: str):
+    """Deliverability panel: per-mailbox Apollo scorecards + DNS auth per domain +
+    the campaign sequence's bounce rate (warn past the ~2% industry line)."""
+    cfg = _load(campaign)
+    try:
+        boxes = apollo_send.mailbox_health()
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+    for b in boxes:
+        b["dns"] = _domain_auth(b["domain"])
+    seq = {}
+    sid = _apollo_target(cfg)
+    if sid:
+        try:
+            a = apollo_send.sequence_stats(sid)
+            delivered = a.get("unique_delivered", 0) or 0
+            bounced = a.get("unique_bounced", 0) or 0
+            attempted = delivered + bounced
+            rate = (bounced / attempted * 100) if attempted else 0.0
+            seq = {"delivered": delivered, "bounced": bounced,
+                   "bounce_rate": round(rate, 1), "warn": rate > 2.0}
+        except Exception:
+            seq = {}
+    return {"connected": True, "mailboxes": boxes, "sequence": seq}
+
+
+class SuppressReq(BaseModel):
+    value: str          # an email, or a whole domain like 'acme.com'
+    reason: str = ""
+
+
+@app.get("/api/suppression")
+def suppression_list():
+    """The global do-not-contact list (emails + domains)."""
+    return {"items": open_store().list_suppressed()}
+
+
+@app.post("/api/suppression")
+def suppression_add(r: SuppressReq):
+    v = (r.value or "").strip()
+    if not v or (" " in v) or ("." not in v):
+        raise HTTPException(400, "enter an email address or a domain like acme.com")
+    store = open_store()
+    store.suppress(v, r.reason or "added manually")
+    return {"ok": True, "items": store.list_suppressed()}
+
+
+@app.post("/api/suppression/remove")
+def suppression_remove(r: SuppressReq):
+    store = open_store()
+    store.unsuppress(r.value)
+    return {"ok": True, "items": store.list_suppressed()}
 
 
 @app.get("/api/mailboxes")
@@ -163,6 +297,24 @@ def sequences(campaign: str | None = None):
     if campaign:
         current = (_load(campaign).get("sending") or {}).get("sequence_id")
     return {"sequences": apollo_send.list_sequences(), "current": current}
+
+
+class SequenceCreate(BaseModel):
+    name: str
+
+
+@app.post("/api/sequences/create")
+def sequence_create(r: SequenceCreate):
+    """Create a ready-to-use Apollo sequence from the wizard: 3 steps on our merge
+    fields (first touch, day-3, day-7), 24/7 schedule, stop-on-reply. The user still
+    flips Apollo's Activate toggle once (not settable via API)."""
+    name = (r.name or "").strip()
+    if not name:
+        raise HTTPException(400, "sequence name is required")
+    try:
+        return apollo_send.create_sequence(name)
+    except Exception as e:
+        raise HTTPException(502, f"Apollo would not create the sequence: {e}")
 
 
 class MailboxSet(BaseModel):
@@ -284,7 +436,10 @@ def review(campaign: str):
             "key": lead.key, "name": lead.full_name, "company": lead.company,
             "title": lead.title, "source": lead.source,
             "verdict": ob["verdict"], "subject": ob["subject"], "body": ob["body"],
+            "variant": ob.get("variant", "signal"),
             "signature": signature,
+            "followups": [{"step": n, "subject": ob.get(f"subject_{n}", ""), "body": ob.get(f"body_{n}", "")}
+                          for n in (2, 3) if ob.get(f"body_{n}")],
             "facts": facts, "decision": store.get_review(lead.key) or "",
             "edited": bool(ob.get("edited")),
             "email": lead.email,
@@ -318,10 +473,44 @@ def _msg_text(m: dict) -> str:
     return (b or "").strip()
 
 
-def _conversations(sid: str, campaign_name: str) -> list[dict]:
+_LABEL_PRIORITY = ["opt_out", "interested", "not_interested", "ooo", "other"]
+
+
+def _classify_inbound(store, cfg: dict, inbound: list[dict], lead_email: str, lead_key: str) -> str:
+    """Label a conversation's inbound replies (classify new ones; cached per message).
+
+    Side effects: opt_out auto-suppresses the sender; real replies mark the lead
+    replied with their label (feeds A/B + positive-reply stats). Returns the
+    conversation's label ('' when there are no replies).
+    """
+    if not inbound:
+        return ""
+    ids = [m.get("id") for m in inbound if m.get("id")]
+    known = store.get_reply_classes(ids)
+    labels = []
+    for m in inbound:
+        mid = m.get("id")
+        label = known.get(mid)
+        if not label:
+            label = classify.classify_reply(_msg_text(m), cfg)
+            if mid:
+                store.save_reply_class(mid, m.get("from_email") or lead_email, label)
+        labels.append(label)
+    conv_label = next((l for l in _LABEL_PRIORITY if l in labels), "other")
+    if conv_label == "opt_out" and lead_email and not store.is_suppressed(lead_email):
+        store.suppress(lead_email, "opted out via reply (auto)")
+        if lead_key:
+            store.set_status(lead_key, "suppressed")
+    if lead_key and conv_label != "ooo":   # an OOO auto-reply is not a real reply
+        store.mark_replied(lead_key, conv_label)
+    return conv_label
+
+
+def _conversations(sid: str, cfg: dict) -> list[dict]:
     """Group the sequence's messages into conversations (one item per lead thread)."""
     raw = apollo_send.list_messages(sid)
-    directory = _lead_directory(open_store(), campaign_name)
+    store = open_store()
+    directory = _lead_directory(store, cfg["name"])
     convs: dict = {}
     for m in raw:
         cid = m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")
@@ -335,7 +524,17 @@ def _conversations(sid: str, campaign_name: str) -> list[dict]:
         # the lead's address: whoever we sent to (or, for replies, the sender)
         lead_email = ((first_out or {}).get("to_email") or (inbound[0].get("from_email") if inbound else "") or "").lower()
         who = directory.get(lead_email, {})
+        label = _classify_inbound(store, cfg, inbound, lead_email, who.get("key") or "")
+        # bounce handling: a bounced send marks the address undeliverable (blocks any
+        # future send via the verification gate) and flags the lead
+        bounced = any(m.get("bounce") for m in msgs if not apollo_send.is_inbound(m))
+        if bounced and lead_email:
+            store.save_verify(lead_email, "undeliverable")
+            if who.get("key"):
+                store.set_status(who["key"], "bounced")
         items.append({
+            "bounced": bounced,
+            "meeting": bool(who.get("key")) and bool(store.meeting_keys([who["key"]])),
             "thread_id": cid,
             "subject": (first_out or last).get("subject") or "(no subject)",
             "snippet": _msg_text(last)[:180],
@@ -345,6 +544,7 @@ def _conversations(sid: str, campaign_name: str) -> list[dict]:
             "lead_key": who.get("key") or "",
             "mailbox": ((first_out or {}).get("from_email") or "").lower(),
             "has_reply": bool(inbound) or any(m.get("replied") for m in msgs),
+            "label": label,
             "messages": len(msgs),
             "ts": last.get("created_at") or "",
             "unread": any(not m.get("is_read", True) for m in inbound),
@@ -355,17 +555,42 @@ def _conversations(sid: str, campaign_name: str) -> list[dict]:
 
 @app.get("/api/inbox")
 def inbox(campaign: str):
-    """Conversations for the campaign's Apollo sequence, grouped per lead thread.
+    """Conversations grouped per lead thread. campaign='__all__' returns the GLOBAL
+    inbox: every campaign's sequence merged into one stream, items tagged with their
+    campaign (shared sequences are read once, not duplicated)."""
+    if campaign == "__all__":
+        items, seen_seq, connected, err = [], set(), False, ""
+        for name in campaigns():
+            try:
+                cfg = _load(name)
+            except Exception:
+                continue
+            sid = _apollo_target(cfg)
+            if not sid or sid in seen_seq:
+                continue
+            seen_seq.add(sid)
+            try:
+                its = _conversations(sid, cfg)
+            except Exception as e:
+                err = str(e)
+                continue
+            connected = True
+            for i in its:
+                i["campaign"] = name
+            items += its
+        items.sort(key=lambda x: x["ts"], reverse=True)
+        mailboxes = sorted({i["mailbox"] for i in items if i["mailbox"]})
+        out = {"connected": connected, "items": items, "mailboxes": mailboxes}
+        if not connected and err:
+            out["error"] = err
+        return out
 
-    Each item says whether the lead replied (has_reply) and which mailbox sent it,
-    so the UI can offer a Replies tab and a combined multi-mailbox view.
-    """
     cfg = _load(campaign)
     sid = _apollo_target(cfg)
     if not sid:
         return {"connected": False, "items": []}
     try:
-        items = _conversations(sid, cfg["name"])
+        items = _conversations(sid, cfg)
     except Exception as e:
         return {"connected": False, "items": [], "error": str(e)}
     mailboxes = sorted({i["mailbox"] for i in items if i["mailbox"]})
@@ -404,15 +629,20 @@ def inbox_thread(campaign: str, thread_id: str):
 
 @app.get("/api/analytics")
 def analytics(campaign: str):
-    """Delivery analytics from the Apollo sequence. connected=false when unwired."""
+    """Delivery (Apollo sequence) + outcome analytics (positive replies, meetings).
+
+    Outcomes come from our own store (classified replies + marked meetings), so they
+    work even when the Apollo sequence is unwired.
+    """
     cfg = _load(campaign)
+    outcomes = open_store().outcome_stats(cfg["name"])
     sid = _apollo_target(cfg)
     if not sid:
-        return {"connected": False}
+        return {"connected": False, "outcomes": outcomes}
     try:
         a = apollo_send.sequence_stats(sid)
     except Exception as e:
-        return {"connected": False, "error": str(e)}
+        return {"connected": False, "outcomes": outcomes, "error": str(e)}
     return {
         "connected": True,
         "sent": a.get("unique_delivered", 0),
@@ -420,7 +650,26 @@ def analytics(campaign: str):
         "replies": a.get("unique_replied", 0),
         "bounced": a.get("unique_bounced", 0),
         "clicks": a.get("unique_clicked", 0),
+        "outcomes": outcomes,
     }
+
+
+class MeetingReq(BaseModel):
+    campaign: str
+    key: str
+    booked: bool = True
+
+
+@app.post("/api/lead/meeting")
+def lead_meeting(m: MeetingReq):
+    """Mark (or unmark) a meeting booked with this lead — the end-goal metric."""
+    _load(m.campaign)
+    store = open_store()
+    if m.booked:
+        store.mark_meeting(m.key)
+    else:
+        store.unmark_meeting(m.key)
+    return {"ok": True, "key": m.key, "booked": m.booked}
 
 
 @app.get("/api/ab")
@@ -444,7 +693,9 @@ def ab(campaign: str):
     variants = {}
     for v, s in stats.items():
         base = s["sent"] or s["drafted"]
-        variants[v] = {**s, "reply_rate": round(s["replied"] / base * 100, 1) if base else 0.0}
+        variants[v] = {**s,
+                       "reply_rate": round(s["replied"] / base * 100, 1) if base else 0.0,
+                       "positive_rate": round(s.get("interested", 0) / base * 100, 1) if base else 0.0}
     return {"variants": variants, "experiment": bool((cfg.get("experiment") or {}).get("enabled"))}
 
 
@@ -499,6 +750,23 @@ def edit(e: EditReq):
     return {"ok": True, "key": e.key}
 
 
+class FollowupEditReq(BaseModel):
+    campaign: str
+    key: str
+    step: int          # 2 or 3
+    subject: str
+    body: str
+
+
+@app.post("/api/review/edit_followup")
+def edit_followup(e: FollowupEditReq):
+    if e.step not in (2, 3):
+        raise HTTPException(400, "step must be 2 or 3")
+    _load(e.campaign)
+    open_store().update_followup(e.key, e.step, e.subject, e.body)
+    return {"ok": True}
+
+
 class RefineReq(BaseModel):
     campaign: str
     key: str
@@ -535,14 +803,18 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
     with open(tmp, "wb") as f:
         f.write(data)
     leads_in = csv_source.from_csv(tmp)
+    skipped = 0
     for lead in leads_in:
         lead.source = source
+        if lead.email and store.is_suppressed(lead.email):  # compliance: never re-import
+            skipped += 1
+            continue
         if not lead.company_domain and lead.company:  # enrich missing domains (free, guarded)
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
         store.upsert_lead(lead, cfg["name"])
-    return {"pulled": len(leads_in), "counts": store.counts(cfg["name"])}
+    return {"pulled": len(leads_in) - skipped, "suppressed": skipped, "counts": store.counts(cfg["name"])}
 
 
 class ApolloPull(BaseModel):
@@ -565,14 +837,19 @@ def pull_apollo(r: ApolloPull):
         leads_in, credits = apollo.fetch_leads(cfg, limit=min(max(r.limit, 1), 2000), known_ids=known_ids)
     except Exception as e:
         raise HTTPException(400, str(e))
+    skipped = 0
     for lead in leads_in:
         lead.source = "apollo"
+        if lead.email and store.is_suppressed(lead.email):  # compliance: never re-import
+            skipped += 1
+            continue
         if not lead.company_domain and lead.company:  # enrich missing domains (free, guarded)
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
         store.upsert_lead(lead, cfg["name"])
-    return {"pulled": len(leads_in), "credits_used": credits, "counts": store.counts(cfg["name"])}
+    return {"pulled": len(leads_in) - skipped, "suppressed": skipped,
+            "credits_used": credits, "counts": store.counts(cfg["name"])}
 
 
 class RunReq(BaseModel):

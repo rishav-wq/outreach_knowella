@@ -40,7 +40,7 @@ def send_guard(store: Store, cfg: dict) -> str:
 
 def research_hash(lead: Lead, cfg: dict) -> str:
     # bump the rev string whenever research logic changes (invalidates the cache)
-    return hash_inputs("research-rev2", lead.key)
+    return hash_inputs("research-rev3", lead.key)
 
 
 def variant_for(lead_key: str, cfg: dict) -> str:
@@ -57,7 +57,7 @@ def variant_for(lead_key: str, cfg: dict) -> str:
 
 def draft_hash(research: Research, cfg: dict, variant: str = "signal") -> str:
     return hash_inputs(
-        "draft-rev6",  # bump when the personalize prompt/format changes (invalidates drafts)
+        "draft-rev8",  # bump when the personalize prompt/format changes (invalidates drafts)
         variant,       # signal vs plain control cache separately
         research.model_dump(),
         cfg.get("offer"),
@@ -111,6 +111,11 @@ def ensure_gate(store: Store, lead: Lead, draft: Draft, research: Research, cfg:
 
 
 def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool = True) -> dict:
+    # Stage -1: do-not-contact list (compliance) — before spending anything
+    if lead.email and store.is_suppressed(lead.email):
+        store.set_status(lead.key, "suppressed")
+        return {"lead": lead, "verdict": "suppressed", "reason": "on the do-not-contact list", "draft": None}
+
     # Stage 0: email verification — drop dead addresses before spending research tokens
     vstatus = ensure_verified(store, lead, cfg)
     block = {"undeliverable"}
@@ -123,7 +128,11 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     res = ensure_research(store, lead, cfg)
     store.set_status(lead.key, "researched")
 
-    variant = variant_for(lead.key, cfg)   # A/B: signal-led vs plain control
+    # A/B arm: assigned ONCE, then sticky. Changing the experiment slider only
+    # affects leads that haven't been drafted yet — an already-reviewed draft never
+    # silently flips arms (and regenerates) because the ratio moved.
+    _ob = store.get_outbox(lead.key) or {}
+    variant = _ob.get("variant") or variant_for(lead.key, cfg)
     dh = draft_hash(res, cfg, variant)
     draft = ensure_draft(store, lead, res, cfg, dh, variant)
     store.set_status(lead.key, "drafted")
@@ -139,6 +148,18 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     ob = store.get_outbox(lead.key)
     if not (ob and ob.get("edited")):
         store.save_outbox(lead.key, final, gate.verdict, variant)  # refresh unless manually edited
+
+    # follow-ups (sequence steps 2 & 3): drafted from the final first email, cached by
+    # fu_hash so they regenerate only when the first email changes and aren't hand-edited.
+    ob = store.get_outbox(lead.key) or {}
+    fuh = hash_inputs("fu-rev2", final.subject, final.body, variant)
+    if ob.get("fu_hash") != fuh and not ob.get("edited"):
+        body2, body3, usage, model = personalize.write_followups(
+            lead, res, cfg, final.subject, final.body, variant)
+        if body2 and body3:
+            store.save_followups(lead.key, f"Re: {final.subject}", body2,
+                                 f"Re: {final.subject}", body3, fuh)
+            store.log_llm(lead.key, "followups", model, usage)
 
     if dry_run:
         store.set_status(lead.key, "queued")
@@ -182,8 +203,12 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     outbox = store.get_outbox(lead.key)
     send_draft = (Draft(subject=outbox["subject"], body=outbox["body"], angle=outbox.get("angle", ""))
                   if outbox else final)
+    if store.is_suppressed(lead.email):   # final gate — suppression added after approval
+        store.set_status(lead.key, "suppressed")
+        return {"lead": lead, "verdict": "suppressed", "reason": "on the do-not-contact list", "draft": final}
     if not store.is_sent(lead.key):
-        pid = apollo_send.push_lead(lead, send_draft, cfg)
+        fu = {k: (outbox or {}).get(k, "") for k in ("subject_2", "body_2", "subject_3", "body_3")}
+        pid = apollo_send.push_lead(lead, send_draft, cfg, followups=fu)
         store.mark_sent(lead.key, "apollo", pid or "")
     store.set_status(lead.key, "sent")
     return {"lead": lead, "verdict": "sent", "reason": "pushed", "draft": send_draft}

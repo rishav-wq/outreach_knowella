@@ -1,0 +1,4 @@
+{$DOMAIN} {
+	reverse_proxy app:7860
+	encode gzip
+}

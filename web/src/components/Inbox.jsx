@@ -43,6 +43,15 @@ function MailboxSelect({ all, selected, onChange }) {
   )
 }
 
+// classification -> badge look + wording
+const LABELS = {
+  interested: { cls: 's-approved', text: 'interested' },
+  not_interested: { cls: 's-drafted', text: 'not interested' },
+  opt_out: { cls: 's-invalid', text: 'opted out' },
+  ooo: { cls: 's-held', text: 'out of office' },
+  other: { cls: 's-drafted', text: 'replied' },
+}
+
 const when = (ts) => {
   if (!ts) return ''
   const d = new Date(ts)
@@ -61,10 +70,11 @@ export default function Inbox({ campaign }) {
   const [thread, setThread] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [tab, setTab] = useState('replies')       // 'replies' | 'all'
+  const [scope, setScope] = useState('one')       // 'one' = this campaign | 'all' = every campaign
   const [boxes, setBoxes] = useState([])          // selected mailboxes; empty = all
   const [allBoxes, setAllBoxes] = useState([])    // every Apollo mailbox (for the dropdown)
 
-  const load = () => api.getInbox(campaign)
+  const load = (sc = scope) => api.getInbox(sc === 'all' ? '__all__' : campaign)
     .then(setData)
     .catch(() => setData({ connected: false, items: [] }))
     .finally(() => setRefreshing(false))
@@ -72,11 +82,12 @@ export default function Inbox({ campaign }) {
   useEffect(() => {
     setData(null); setSel(null); setThread(null); setBoxes([]); load()
     api.getMailboxes().then((d) => setAllBoxes((d.mailboxes || []).map((b) => b.email.toLowerCase()))).catch(() => {})
-  }, [campaign])
+  }, [campaign, scope])
   useEffect(() => {
     if (!sel) { setThread(null); return }
     setThread(null)
-    api.getThread(campaign, sel).then(setThread).catch(() => setThread({ messages: [] }))
+    const it = (data?.items || []).find((x) => x.thread_id === sel)
+    api.getThread(it?.campaign || campaign, sel).then(setThread).catch(() => setThread({ messages: [] }))
   }, [campaign, sel])
 
   if (!data) {
@@ -116,6 +127,10 @@ export default function Inbox({ campaign }) {
   const filters = (
     <div className="inbox-filters">
       <div className="seg">
+        <button className={scope === 'one' ? 'on' : ''} onClick={() => { setScope('one'); setSel(null) }}>This campaign</button>
+        <button className={scope === 'all' ? 'on' : ''} onClick={() => { setScope('all'); setSel(null) }}>All campaigns</button>
+      </div>
+      <div className="seg">
         <button className={tab === 'replies' ? 'on' : ''} onClick={() => { setTab('replies'); setSel(null) }}>
           Replies{replies.length > 0 && <span className="seg-count">{replies.length}</span>}
         </button>
@@ -141,6 +156,37 @@ export default function Inbox({ campaign }) {
           </button>
         </div>
       </motion.div>
+    )
+  }
+
+  // Nothing to triage on this tab: one purposeful panel instead of two empty panes.
+  if (items.length === 0) {
+    return (
+      <div>
+        {filters}
+        <motion.div className="inbox-wait" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="iw-eyebrow">{tab === 'replies' ? 'Watching for replies' : 'No conversations here'}</div>
+          <h3 className="iw-title">{tab === 'replies'
+            ? `${data.items.length} ${data.items.length === 1 ? 'email' : 'emails'} out · 0 answers yet`
+            : 'Nothing matches this mailbox filter'}</h3>
+          <p className="muted iw-sub">
+            {tab === 'replies'
+              ? 'The moment a lead answers, the conversation lands here — auto-labeled interested, not interested, opted out, or out of office. Opt-outs go straight to the do-not-contact list.'
+              : 'Pick different mailboxes above, or clear the filter to see everything.'}
+          </p>
+          <div className="iw-actions">
+            {tab === 'replies' && data.items.length > 0 && (
+              <button className="btn" onClick={() => { setTab('all'); setSel(null) }}>See sent emails</button>
+            )}
+            {boxes.length > 0 && tab === 'all' && (
+              <button className="btn" onClick={() => setBoxes([])}>Clear mailbox filter</button>
+            )}
+            <button className="btn" onClick={() => { setRefreshing(true); load() }}>
+              {refreshing ? <><span className="spinner spinner-dark" /> Checking…</> : 'Check again'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
     )
   }
 
@@ -172,7 +218,12 @@ export default function Inbox({ campaign }) {
                     </div>
                     <div className="inbox-item-sub">
                       {[it.company, it.mailbox && `via ${it.mailbox}`].filter(Boolean).join(' · ')}
-                      {it.has_reply && <span className="badge s-approved" style={{ marginLeft: 6 }}>replied</span>}
+                      {scope === 'all' && it.campaign && <span className="badge s-drafted" style={{ marginLeft: 6 }}>{it.campaign}</span>}
+                      {it.has_reply && (() => {
+                        const l = LABELS[it.label] || LABELS.other
+                        return <span className={`badge ${l.cls}`} style={{ marginLeft: 6 }}>{l.text}</span>
+                      })()}
+                      {it.bounced && <span className="badge s-invalid" style={{ marginLeft: 6 }}>bounced</span>}
                     </div>
                     <div className="inbox-item-snippet">{it.snippet || it.subject}</div>
                   </div>
@@ -192,7 +243,28 @@ export default function Inbox({ campaign }) {
                   <div className="thread-name">{current.name}</div>
                   <div className="thread-sub">{[current.company, current.lead_email, current.mailbox && `via ${current.mailbox}`].filter(Boolean).join(' · ')}</div>
                 </div>
-                <span className="thread-subject">{current.subject}</span>
+                <div className="thread-tools">
+                  <span className="thread-subject">{current.subject}</span>
+                  {current.lead_key && current.has_reply && (
+                    <button className={`btn ${current.meeting ? 'approve' : ''}`}
+                      title={current.meeting ? 'Meeting is marked booked — click to undo' : 'Record that this reply turned into a booked meeting'}
+                      onClick={async () => {
+                        await api.markMeeting(current.campaign || campaign, current.lead_key, !current.meeting)
+                        setData((p) => ({ ...p, items: p.items.map((x) => x.thread_id === current.thread_id ? { ...x, meeting: !current.meeting } : x) }))
+                      }}>
+                      <Icon name="check" size={13} /> {current.meeting ? 'Meeting booked ✓' : 'Meeting booked?'}
+                    </button>
+                  )}
+                  {current.lead_email && (
+                    <button className="btn reject" title="Add to the do-not-contact list — never pulled, drafted, or emailed again (any campaign)"
+                      onClick={async () => {
+                        if (!window.confirm(`Never contact ${current.lead_email} again? This suppresses them across all campaigns.`)) return
+                        await api.addSuppression(current.lead_email, 'opted out via reply')
+                      }}>
+                      <Icon name="x" size={13} /> Don’t contact again
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="thread-msgs">
                 {thread.messages.map((m) => (

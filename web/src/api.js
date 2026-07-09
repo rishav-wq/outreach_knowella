@@ -41,14 +41,22 @@ export const getAnalytics = (c) => apiGet(`/api/analytics?campaign=${encodeURICo
 export const getAB = (c) => apiGet(`/api/ab?campaign=${encodeURIComponent(c)}`)
 export const getCampaignConfig = (c) => apiGet(`/api/campaign/config?campaign=${encodeURIComponent(c)}`)
 export const updateCampaign = (campaign, patch) => apiSend('/api/campaign/update', 'POST', { campaign, ...patch })
+export const renameCampaign = (campaign, new_name) => apiSend('/api/campaign/rename', 'POST', { campaign, new_name })
 export const getMailboxes = (c) => apiGet(`/api/mailboxes${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
 export const getSequences = (c) => apiGet(`/api/sequences${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
+export const createSequence = (name) => apiSend('/api/sequences/create', 'POST', { name })
 export const setMailbox = (campaign, mailbox_id) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_id })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
 export const setLeadEmail = (campaign, key, email) => apiSend('/api/lead/email', 'POST', { campaign, key, email })
 export const editEmail = (campaign, key, subject, body) => apiSend('/api/review/edit', 'POST', { campaign, key, subject, body })
 export const refineEmail = (campaign, key, instruction) => apiSend('/api/review/refine', 'POST', { campaign, key, instruction })
+export const editFollowup = (campaign, key, step, subject, body) => apiSend('/api/review/edit_followup', 'POST', { campaign, key, step, subject, body })
+export const getSendingHealth = (c) => apiGet(`/api/health/sending?campaign=${encodeURIComponent(c)}`)
+export const markMeeting = (campaign, key, booked = true) => apiSend('/api/lead/meeting', 'POST', { campaign, key, booked })
+export const getSuppression = () => apiGet('/api/suppression')
+export const addSuppression = (value, reason = '') => apiSend('/api/suppression', 'POST', { value, reason })
+export const removeSuppression = (value) => apiSend('/api/suppression/remove', 'POST', { value })
 export const runPipeline = (campaign, send = false, limit = null) => apiSend('/api/run', 'POST', { campaign, send, limit })
 
 export const pull = (campaign, file, source = 'manual') => {

@@ -16,6 +16,40 @@ const nextUndecided = (items, from) => {
   return from
 }
 
+// One follow-up email (sequence step 2 or 3): collapsed preview, inline edit.
+function FollowupCard({ campaign, leadKey, fu, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [s, setS] = useState(fu.subject)
+  const [b, setB] = useState(fu.body)
+  const save = async () => {
+    await api.editFollowup(campaign, leadKey, fu.step, s, b)
+    onSaved(s, b)
+    setEditing(false)
+  }
+  const label = fu.step === 2 ? 'Follow-up 1 · day 3' : 'Follow-up 2 · day 7'
+  return (
+    <div className="fu-card">
+      <div className="fu-head">
+        <span className="fu-tag">{label}</span>
+        <span className="fu-subject">{fu.subject}</span>
+        {!editing && <button className="linklike" onClick={() => { setS(fu.subject); setB(fu.body); setEditing(true) }}>edit</button>}
+      </div>
+      {editing ? (
+        <div className="edit-form">
+          <input className="edit-subject" value={s} onChange={(e) => setS(e.target.value)} />
+          <textarea className="edit-body" value={b} onChange={(e) => setB(e.target.value)} rows={6} />
+          <div className="edit-actions">
+            <button className="btn" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn primary" onClick={save}>Save</button>
+          </div>
+        </div>
+      ) : (
+        <pre className="fu-body">{fu.body}</pre>
+      )}
+    </div>
+  )
+}
+
 export default function Review({ campaign }) {
   const [items, setItems] = useState(null)
   const [i, setI] = useState(0)
@@ -29,7 +63,8 @@ export default function Review({ campaign }) {
   const [sendable, setSendable] = useState(false)
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
-  const [sendFrom, setSendFrom] = useState('')
+  const [boxes, setBoxes] = useState([])          // all Apollo mailboxes
+  const [mailboxId, setMailboxId] = useState('')  // which one this campaign sends from
   const [refineText, setRefineText] = useState('')
   const [refining, setRefining] = useState(false)
   const [refineErr, setRefineErr] = useState('')
@@ -42,14 +77,23 @@ export default function Review({ campaign }) {
     .catch(() => setItems([]))
 
   useEffect(() => {
-    setItems(null); setI(0); setEditing(false); setSendFrom('')
+    setItems(null); setI(0); setEditing(false); setBoxes([]); setMailboxId('')
     load(); loadStatus()
     api.getMailboxes(campaign).then((d) => {
-      const cur = (d.mailboxes || []).find((b) => b.id === d.current)
-      setSendFrom(cur ? cur.email : '')
+      setBoxes(d.mailboxes || [])
+      setMailboxId(d.current || '')
     }).catch(() => {})
     return () => clearInterval(poll.current)
   }, [campaign])
+
+  const sendFrom = (boxes.find((b) => b.id === mailboxId) || {}).email || ''
+
+  // switch which mailbox this campaign sends from, right where you review
+  const changeMailbox = async (id) => {
+    const prev = mailboxId
+    setMailboxId(id)
+    try { await api.setMailbox(campaign, id) } catch { setMailboxId(prev) }
+  }
 
   const current = items && items[i]
   const total = items?.length || 0
@@ -165,7 +209,13 @@ export default function Review({ campaign }) {
           <button className={view === 'queue' ? 'on' : ''} onClick={() => setView('queue')}><Icon name="list" size={14} /> Queue</button>
           <button className={view === 'board' ? 'on' : ''} onClick={() => setView('board')}><Icon name="columns" size={14} /> Board</button>
         </div>
-        {sendFrom && <span className="guard-note" title="Approved emails send from this Apollo mailbox"><Icon name="inbox" size={12} /> {sendFrom}</span>}
+        {boxes.length > 0 && (
+          <select className="src-select" value={mailboxId} onChange={(e) => changeMailbox(e.target.value)}
+            title="Which Apollo mailbox this campaign's approved emails send from — switch any time">
+            {!mailboxId && <option value="">choose mailbox…</option>}
+            {boxes.map((b) => <option key={b.id} value={b.id} disabled={!b.active}>{b.email}{b.active ? '' : ' (inactive)'}</option>)}
+          </select>
+        )}
         {guardLabel() && <span className="guard-note">{guardLabel()}</span>}
         <button className="btn primary" disabled={!sendable || !approvedCount || sending}
           title={!sendable ? 'Connect Apollo (sequence + mailbox) to enable sending' : ''} onClick={sendApproved}>
@@ -230,21 +280,8 @@ export default function Review({ campaign }) {
             })}
           </aside>
 
-          {/* draft */}
+          {/* draft — an email document you sign off, headed like a form */}
           <main className="rq-draft">
-            <div className="rq-who">
-              <div className="avatar">{(current.name || '?').slice(0, 1)}</div>
-              <div>
-                <div className="rq-who-name">{current.name} <span className="muted">· {current.title || current.company}</span></div>
-                <div className="rq-who-sub">
-                  {current.source && <span className="src-tag">{current.source}</span>}
-                  {current.verdict && <span className={`badge v-${current.verdict}`}>{current.verdict}</span>}
-                  {current.edited && <span className="badge s-drafted">edited</span>}
-                  {current.decision && <span className={`badge s-${current.decision}`}>{current.decision}</span>}
-                </div>
-              </div>
-            </div>
-
             {editing ? (
               <div className="edit-form">
                 <input className="edit-subject" value={eSubject} onChange={(e) => setESubject(e.target.value)} placeholder="Subject" />
@@ -255,48 +292,76 @@ export default function Review({ campaign }) {
                 </div>
               </div>
             ) : (
-              <div className="drawer-email rq-email">
-                <div className="subject">{current.subject}</div>
-                <pre className="body">{current.body}</pre>
-                {current.signature
-                  ? <pre className="body sig">{current.signature}</pre>
-                  : <div className="sig-missing">No sender signature set — add a <code>sender</code> block in Settings/config so emails are signed.</div>}
-              </div>
-            )}
-
-            <div className={`ready ${ready.kind}`}>
-              <span className={`dot ${ready.kind === 'ok' ? 'd-ok' : 'd-held'}`} />
-              <div className="ready-main">
-                <div className="ready-text">{ready.text}</div>
-                {current.email && !emailEdit && (
-                  <div className="ready-email">
-                    {current.email}
-                    {current.verify_active && <span className={`badge ${current.verify === 'deliverable' ? 's-approved' : current.verify === 'undeliverable' ? 's-invalid' : 's-held'}`}>{current.verify || 'unchecked'}</span>}
-                    <button className="linklike ready-edit" onClick={() => { setEEmail(current.email); setEmailEdit(true) }}>change</button>
+              <>
+                <div className="doc">
+                  <div className="doc-head">
+                    <div className="doc-row">
+                      <span className="doc-k">To</span>
+                      <span className="doc-v">
+                        <b>{current.name}</b>{(current.title || current.company) && <span className="muted"> · {current.title || current.company}</span>}
+                        {current.email && !emailEdit && (
+                          <span className="doc-email">
+                            {current.email}
+                            {current.verify_active && <span className={`badge ${current.verify === 'deliverable' ? 's-approved' : current.verify === 'undeliverable' ? 's-invalid' : 's-held'}`}>{current.verify || 'unchecked'}</span>}
+                            <button className="linklike" onClick={() => { setEEmail(current.email); setEmailEdit(true) }}>change</button>
+                          </span>
+                        )}
+                        {(!current.email || emailEdit) && (
+                          <span className="ready-form">
+                            <input className="field-input" type="email" placeholder="name@company.com" value={eEmail}
+                              onChange={(e) => setEEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEmail()} />
+                            <button className="btn" onClick={saveEmail}>Save email</button>
+                            {emailEdit && <button className="icon-btn" onClick={() => setEmailEdit(false)} aria-label="Cancel"><Icon name="x" size={14} /></button>}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="doc-row"><span className="doc-k">From</span><span className="doc-v">{sendFrom || <span className="muted">choose a mailbox in campaign settings</span>}</span></div>
+                    <div className="doc-row"><span className="doc-k">Subject</span><span className="doc-v doc-subject">{current.subject}</span></div>
+                    <div className="doc-tags">
+                      {current.source && <span className="src-tag">{current.source}</span>}
+                      <span className={`badge ${current.variant === 'plain' ? 's-drafted' : 's-approved'}`}
+                        title={current.variant === 'plain'
+                          ? 'A/B control — deliberately no researched facts, to measure whether fact-led openers lift replies'
+                          : 'Fact-led — the opener uses this lead’s verified research'}>
+                        {current.variant === 'plain' ? 'control' : 'fact-led'}
+                      </span>
+                      {current.verdict && <span className={`badge v-${current.verdict}`}>{current.verdict}</span>}
+                      {current.edited && <span className="badge s-drafted">edited</span>}
+                      {current.decision && <span className={`badge s-${current.decision}`}>{current.decision}</span>}
+                      <span className={`badge ${ready.kind === 'ok' ? 's-approved' : 's-held'}`}>{ready.text}</span>
+                    </div>
                   </div>
-                )}
-                {(!current.email || emailEdit) && (
-                  <div className="ready-form">
-                    <input className="field-input" type="email" placeholder="name@company.com" value={eEmail}
-                      onChange={(e) => setEEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEmail()} />
-                    <button className="btn" onClick={saveEmail}>Save email</button>
-                    {emailEdit && <button className="icon-btn" onClick={() => setEmailEdit(false)} aria-label="Cancel"><Icon name="x" size={14} /></button>}
-                  </div>
-                )}
+                  <pre className="body">{current.body}</pre>
+                  {current.signature
+                    ? <pre className="body sig">{current.signature}</pre>
+                    : <div className="sig-missing">No sender signature set — add a <code>sender</code> block in the campaign config so emails are signed.</div>}
+                </div>
                 {emailErr && <div className="ready-err">{emailErr}</div>}
-              </div>
-            </div>
+                {(current.followups || []).length > 0 && (
+                  <div className="fu-block">
+                    <div className="drawer-label">Follow-ups — auto-send to non-repliers (day 3 &amp; day 7); anyone who replies exits the sequence</div>
+                    {current.followups.map((fu) => (
+                      <FollowupCard key={fu.step} campaign={campaign} leadKey={current.key} fu={fu}
+                        onSaved={(subject, body) => patch(current.key, {
+                          followups: current.followups.map((x) => x.step === fu.step ? { ...x, subject, body } : x),
+                        })} />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
             {!editing && (
               <>
                 <div className="ai-tweak">
-                  <Icon name="refresh" size={15} className="ai-tweak-ic" />
-                  <input className="field-input" value={refineText} disabled={refining}
-                    placeholder="Ask AI to tweak this draft — e.g. “make it shorter”, “lead with their hiring”, “warmer tone”"
+                  <span className="ai-tweak-k">Revise</span>
+                  <input className="ai-tweak-input" value={refineText} disabled={refining}
+                    placeholder="ask for a change — “make it shorter”, “lead with their hiring”, “warmer tone”"
                     onChange={(e) => setRefineText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
-                  <button className="btn primary" onClick={doRefine} disabled={refining || !refineText.trim()}>
-                    {refining ? <><span className="spinner" /> Tweaking…</> : 'Refine'}
+                  <button className="btn" onClick={doRefine} disabled={refining || !refineText.trim()}>
+                    {refining ? <><span className="spinner spinner-dark" /> revising…</> : 'Revise'}
                   </button>
                 </div>
                 {refineErr && <div className="ready-err">{refineErr}</div>}
@@ -304,7 +369,7 @@ export default function Review({ campaign }) {
                   <span className="rq-keys">A approve · R reject · E edit · J/K move</span>
                   <button className="btn" onClick={startEdit}>Edit</button>
                   <button className="btn reject" onClick={() => decide('reject')}><Icon name="x" size={15} /> Reject</button>
-                  <button className="btn approve" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
+                  <button className="btn approve stamp" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
                 </div>
               </>
             )}

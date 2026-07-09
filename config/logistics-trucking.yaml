@@ -16,15 +16,19 @@ icp:
   - United States
   - Canada
 offer:
-  product: Knowella App Builder
-  one_liner: Build safety & compliance workflows without code.
+  product: KnowDoc AI
+  one_liner: Turn driver and carrier paperwork into clean, audit-ready records — automatically.
   value_props:
-  - Replace paper checklists with mobile inspections
-  - Real-time compliance dashboards
+  - Paperwork arrives by email and is read, split, and filed automatically — BOLs, PODs, freight bills, safety forms
+  - Safety records stay accurate and audit-ready, with certification and training expiry tracked
+  - Fewer data-entry errors and faster carrier pay cycles
+  - Real-time visibility into every document's status, with a full audit trail
   call_to_action: a 15-minute demo
-  link: https://knowella.com
+  link: https://knowdoc.ai
 knowledge:
-- Knowella serves EHS teams in manufacturing, construction, and logistics.
+- KnowDoc AI reads inbound paperwork (emailed PDFs, invoices, forms) and turns it into structured, audit-ready records.
+- It splits and validates carrier packets — BOLs, PODs, freight bills, rate confirmations — and flags exceptions.
+- It tracks safety certifications and training records with expiry alerts and a full audit trail.
 voice:
   tone: direct, peer-to-peer, no fake warmth
   max_words: 75
@@ -41,7 +45,9 @@ sender:                       # email sign-off / footer — appended to every se
     Founder & CEO
     +1.604.970.8236
     sid@knowella.com
-    KnowLogistics — a product of Knowella AI Inc.
+    KnowDoc AI — a product of Knowella AI Inc.
+  # compliance: low-key opt-out honored via the do-not-contact list
+  opt_out_line: If this isn't relevant, reply "no thanks" and I won't email again.
 models:
   personalize:
     provider: gemini
@@ -50,11 +56,13 @@ research: {}
 verify: {}
 experiment:
   enabled: true
-  control_ratio: 0.5
+  # 1 in 5 sends is a plain control — enough to measure whether the researched
+  # opener lifts replies, while 80% of sends actually use the gathered facts.
+  control_ratio: 0.2
 sending:
   platform: apollo
   sequence_id: 6a4d179dbe5c0200149ceb4e    # Apollo "Knowella Outreach" sequence
-  mailbox_id: 6a4bccdc4cec4c00103549e9     # sid@knowergo.ai
+  mailbox_id: 6a4b200014377f001cea14ca     # sid@knowdoc.ai — brand-matched to KnowDoc
   subject_field: email_subject
   body_field: email_body
   daily_cap: 50        # volume safety (per day); timing is unrestricted — send whenever

@@ -8,23 +8,23 @@ export const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 // (bright card, indigo primary, our type) instead of Clerk's dark default.
 export const clerkAppearance = {
   variables: {
-    colorPrimary: '#4b40e6',
-    colorText: '#0e1226',
-    colorTextSecondary: '#838aa8',
+    colorPrimary: '#0e8098',
+    colorText: '#10222b',
+    colorTextSecondary: '#77898f',
     colorBackground: '#ffffff',
     colorInputBackground: '#ffffff',
-    colorInputText: '#0e1226',
-    colorNeutral: '#10142c',
-    colorDanger: '#e5484d',
-    colorSuccess: '#0ea472',
-    borderRadius: '12px',
+    colorInputText: '#10222b',
+    colorNeutral: '#0b2530',
+    colorDanger: '#c92a2a',
+    colorSuccess: '#15803d',
+    borderRadius: '10px',
     fontFamily: "'Instrument Sans', system-ui, sans-serif",
     fontFamilyButtons: "'Instrument Sans', system-ui, sans-serif",
   },
   elements: {
-    card: { boxShadow: '0 6px 16px rgba(16,20,44,0.06), 0 42px 82px -22px rgba(58,47,176,0.26)', border: '1px solid #e6e8f5' },
-    formButtonPrimary: { background: 'linear-gradient(135deg,#4b40e6 0%,#7b6bff 52%,#24c9e6 100%)', textTransform: 'none', fontSize: '14px' },
-    footerActionLink: { color: '#4b40e6' },
+    card: { boxShadow: '0 4px 10px rgba(16,34,41,0.06), 0 32px 64px -24px rgba(16,34,41,0.24)', border: '1px solid #cbdadf' },
+    formButtonPrimary: { background: '#0e8098', textTransform: 'none', fontSize: '14px' },
+    footerActionLink: { color: '#0e8098' },
   },
 }
 

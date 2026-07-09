@@ -76,11 +76,17 @@ def _gather(lead: Lead, log: list[str]) -> list[SourceDoc]:
 EXTRACT_SYSTEM = """Extract atomic, verifiable FACTS about the company from TEXT.
 Each fact MUST include the exact verbatim quote from TEXT that supports it.
 
-PRIORITIZE facts useful for sales outreach — recent or operational signals:
-recent news/announcements, expansion, new sites/facilities, hiring, acquisitions,
-incidents/recalls, scale (locations, plants, employees), tech/tools, regulatory/OSHA.
-AVOID founding/origin stories, "family-owned since 19xx", company history, awards,
-and mission/marketing fluff. No opinions, no guesses, no duplicates.
+Every claim MUST carry at least one CONCRETE ANCHOR — a specific place, number,
+named role, named product/site, or date. A fact without a specific is useless
+for outreach: SKIP generic capability/marketing statements ("provides transportation
+services across the United States", "committed to safety", "serves customers nationwide").
+
+PRIORITIZE recent or operational signals: news/announcements, expansion, new
+sites/facilities, hiring (WITH the roles being hired), acquisitions, incidents/recalls,
+scale (how many locations/trucks/employees), tech/tools, regulatory/OSHA.
+AVOID founding/origin stories, "family-owned since 19xx", old history (events more
+than ~2 years back), awards, and mission/marketing fluff. No opinions, no guesses,
+no duplicates.
 Return STRICT JSON: {"facts":[{"claim":"...","quote":"...exact text from TEXT..."}]}"""
 
 
@@ -107,11 +113,23 @@ def _quote_ok(quote: str, text: str) -> bool:
 
 
 # --------------------------------------------------------------- recency
+def _this_year() -> int:
+    from datetime import date
+    return date.today().year
+
+
 def _recent_enough(f: Fact) -> bool:
     if not f.published:
-        return True  # undated (e.g. homepage) — keep
+        return True  # undated (e.g. homepage) — keep; _score penalizes stale claims
     m = re.search(r"(20\d\d)", f.published)
-    return True if not m else int(m.group(1)) >= 2025
+    return True if not m else int(m.group(1)) >= _this_year() - 1
+
+
+def _claim_is_stale(f: Fact) -> bool:
+    """A claim that only references years >2 back is history, wherever it came from
+    (catches undated homepage facts like 'acquired X on January 1, 2011')."""
+    years = [int(y) for y in re.findall(r"(20\d\d|19\d\d)", f.claim)]
+    return bool(years) and max(years) < _this_year() - 2
 
 
 # ------------------------------------------------------------ corroborate
@@ -142,6 +160,10 @@ def _score(f: Fact) -> float:
         s += 0.30
     if _HISTORY_RE.search(f.claim):
         s -= 0.35
+    if _claim_is_stale(f):          # "acquired X in 2011" is history, not a signal
+        s -= 0.60
+    if re.search(r"\d", f.claim):   # concrete anchors (counts, dates, sizes) draft better
+        s += 0.10
     return s
 
 

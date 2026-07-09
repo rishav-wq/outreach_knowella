@@ -18,6 +18,11 @@ Every word must earn its place. If a sentence could be cut without losing meanin
    signal, OR one regulatory/safety record (an OSHA citation/inspection, a crash/out-of-service
    trend), OR notable scale, OR a tool they use. Pick the SINGLE strongest — do NOT stack two or
    three facts into one sentence, that reads like a data dump. It must prove the email was written for THEM.
+   NAME THE SPECIFICS: carry the fact's concrete anchor into the sentence — the place, number,
+   role, or named thing ("hiring Class A CDL drivers", "the new Dover, Ohio complex", "13
+   terminals across Idaho"). BANNED vague compressions: "is actively expanding", "is growing",
+   "has been making changes", "recently expanded" or ANY paraphrase that names no specific —
+   if the best fact has no concrete anchor, use the strongest one that does.
    BANNED openers: anything beyond "Hi <first>,"; "I hope this finds you well"; "I was on
    your website and noticed"; "As a <industry> company, you probably"; empty flattery.
 2) BRIDGE (1 sentence) — tie THAT signal to a likely, CONCRETE challenge (PAIN as a hypothesis).
@@ -43,6 +48,9 @@ Every word must earn its place. If a sentence could be cut without losing meanin
 Format rules:
 - SHORT and skimmable above all else — comfortably under the voice max_words, short sentences,
   one idea each. Plain text only: no markdown, no HTML, no bullet lists.
+- LAYOUT (hard rule): ONE sentence per line, with a BLANK line between every sentence/paragraph.
+  Cold email is read on a phone — a dense block of run-together sentences kills replies. Never
+  produce a paragraph of more than 2 short sentences.
 - State ONLY lead-specific facts present in FACTS. Pain stays a hypothesis. Invent nothing.
 - Subject: 2-5 words, under ~40 characters, specific to THEM (their company/situation),
   lowercase fine. No first name in the subject, no clickbait, no question mark.
@@ -71,7 +79,8 @@ Write it TIGHT: 3-4 short sentences, ONE idea per sentence, no run-ons. Every wo
    BANNED: "book a demo", "N-minute meeting/call", "hop on a call", any calendar link.
 
 Format: SHORT and skimmable — short sentences, one idea each, under the voice max_words; plain
-text (no markdown/HTML/bullets). Subject: 2-5 words, under ~40 chars, no first name, no question
+text (no markdown/HTML/bullets). LAYOUT (hard rule): ONE sentence per line with a BLANK line
+between each — never a dense block. Subject: 2-5 words, under ~40 chars, no first name, no question
 mark. At most one link (never a calendar link). Invent nothing; any product claim must be in KNOWLEDGE.
 Return STRICT JSON only:
 {"subject": "...", "body": "...", "angle": "control (no signal opener)", "used_facts": []}"""
@@ -86,10 +95,14 @@ def signature_text(cfg: dict) -> str:
     """
     s = cfg.get("sender") or {}
     closing = (s.get("closing") or "").strip()
+    # compliance: a low-key opt-out line after the sign-off. Honoring it is enforced
+    # by the do-not-contact list (suppression) at pull/pipeline/send.
+    opt_out = (s.get("opt_out_line") or "").strip()
+    tail = f"\n\n{opt_out}" if opt_out else ""
     # a verbatim signature block wins — lets you paste your exact plain-text sign-off
     raw = (s.get("signature") or "").strip()
     if raw:
-        return f"{closing}\n{raw}" if closing else raw
+        return (f"{closing}\n{raw}" if closing else raw) + tail
     name = (s.get("name") or "").strip()
     if not name:
         return ""
@@ -102,7 +115,7 @@ def signature_text(cfg: dict) -> str:
     link = (s.get("link") or (cfg.get("offer") or {}).get("link") or "").strip()
     if link:
         lines.append(link)
-    return "\n".join(lines)
+    return "\n".join(lines) + tail
 
 
 def with_signature(body: str, cfg: dict) -> str:
@@ -161,12 +174,68 @@ RULES: {voice.get('rules')}"""
     return draft, usage, spec.resolved_model()
 
 
+FOLLOWUP_SYSTEM = """You write the TWO follow-up emails for a cold outreach sequence. The lead
+already received the FIRST EMAIL below and did not reply. Same hard rules as the first email:
+plain text only, ONLY facts present in FACTS, invent nothing, no sign-off/signature (appended
+automatically), each ends with ONE low-friction interest question — never a meeting ask,
+calendar link, or time proposal.
+
+FOLLOW-UP 1 (sends ~3 days later) — a short, polite bump. 2-3 short sentences max:
+acknowledge you emailed ("wanted to float this back up"), restate the value in ONE fresh plain
+line (do NOT repeat the first email's opener fact or phrasing), end with a soft question.
+No guilt-tripping ("did you see my email?", "any thoughts?" alone is lazy — add one line of value).
+
+FOLLOW-UP 2 (sends ~1 week after that) — a NEW ANGLE, not a bump. If FACTS offers a different
+usable fact than the first email used, lead with THAT; otherwise lead with a different pain or
+outcome. 3-4 short sentences. Calm "last note" tone — no pressure, no "final attempt" drama.
+
+LAYOUT (hard rule, both follow-ups): ONE sentence per line with a BLANK line between each —
+read on a phone, never a dense block.
+
+Return STRICT JSON only: {"followup1_body": "...", "followup2_body": "..."}"""
+
+
+def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subject: str,
+                    first_body: str, variant: str = "signal"):
+    """The two follow-up bodies for sequence steps 2 & 3. Returns (body2, body3, usage, model).
+
+    Subjects are derived deterministically ('Re: <first subject>') so the thread reads
+    continuous whether Apollo sends them as replies or new threads.
+    """
+    spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
+    offer, voice = cfg["offer"], cfg["voice"]
+    facts = ("(control variant — no researched facts; keep both follow-ups role-based and generic)"
+             if variant == "plain" else (_facts_block(research) if research else "FACTS:\n(none)"))
+    user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}
+
+FIRST EMAIL (already sent, no reply)
+Subject: {first_subject}
+Body:
+{first_body}
+
+{facts}
+
+OFFER: {offer.get('product')} — {offer.get('one_liner')}
+VALUE PROPS: {offer.get('value_props')}
+KNOWLEDGE (you may rely on these as true): {cfg.get('knowledge')}
+VOICE: tone={voice.get('tone')}, max_words={voice.get('max_words')}"""
+
+    text, usage = llm.complete(
+        [{"role": "system", "content": FOLLOWUP_SYSTEM}, {"role": "user", "content": user}],
+        spec,
+        temperature=0.6,
+    )
+    data = llm.parse_json(text)
+    return data.get("followup1_body", ""), data.get("followup2_body", ""), usage, spec.resolved_model()
+
+
 REFINE_SYSTEM = """You revise an existing first-touch cold email per the user's INSTRUCTION,
 while keeping it grounded and on-format.
 
 Hard rules — NEVER break, even if the instruction implies otherwise:
 - State ONLY lead-specific facts present in FACTS. Never invent a fact, statistic, customer, or quote.
 - Plain text only — no markdown, HTML, or bullet lists. Keep it tight, a few short sentences.
+- LAYOUT: ONE sentence per line with a blank line between each — never a dense paragraph block.
 - End with ONE low-friction interest question — never a demo/meeting ask, calendar link, or time.
 - Subject: 2-5 words, under ~40 chars, no question mark.
 - Do NOT add a sign-off or signature — that's appended automatically after this.

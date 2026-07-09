@@ -12,7 +12,7 @@ const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { durat
 export default function Leads({ campaign, onNavigate }) {
   const [leads, setLeads] = useState(null)
   const [q, setQ] = useState('')
-  const [limit, setLimit] = useState(250)
+  const [limit, setLimit] = useState(25)
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
 
@@ -52,10 +52,13 @@ export default function Leads({ campaign, onNavigate }) {
   const sourceActions = (
     <div className="import-controls">
       <select className="src-select" value={limit} onChange={(e) => setLimit(Number(e.target.value))} title="How many leads to pull from Apollo" disabled={!!busy}>
+        <option value={5}>5 leads</option>
+        <option value={10}>10 leads</option>
+        <option value={25}>25 leads</option>
+        <option value={50}>50 leads</option>
         <option value={100}>100 leads</option>
         <option value={250}>250 leads</option>
         <option value={500}>500 leads</option>
-        <option value={1000}>1,000 leads</option>
       </select>
       <motion.button className="btn primary" {...tap} disabled={!!busy} onClick={pullApollo}>
         {busy === 'apollo' ? <><span className="spinner" /> Pulling…</> : <><Icon name="download" size={15} /> Pull from Apollo</>}

@@ -1,0 +1,100 @@
+name: knowella-ergonomics
+# Micro-segment (validated live 2026-07-09, ~800 people): US manufacturers,
+# 101-1000 employees, ACTIVELY HIRING manual-handling roles — i.e. adding
+# ergonomic-injury exposure right now — with a verified-email EHS decision-maker.
+icp:
+  titles:
+  - EHS Manager
+  - EHS Director
+  - Environmental Health and Safety Manager
+  - Safety Manager
+  - Health & Safety Manager
+  - Plant Safety Manager
+  - Ergonomist
+  - Occupational Health Manager
+  industries:
+  - Manufacturing
+  - Food Production
+  - Automotive
+  - Chemicals
+  company_size: 101-1000
+  geographies:
+  - United States
+apollo:
+  keywords:
+  - Manufacturing
+  - Food Production
+  - Automotive
+  - Chemicals
+  exclude_keywords:
+  - computer software
+  - information technology
+  - staffing & recruiting
+  - consulting
+  employee_ranges:
+  - 101,200
+  - 201,500
+  - 501,1000
+  seniorities:
+  - manager
+  - director
+  - head
+  - vp
+  - c_suite
+  - owner
+  exclude_titles:
+  - assistant
+  email_status:
+  - verified
+  - likely to engage
+  # the campaign's core signal: hiring manual-handling roles = rising MSD exposure
+  hiring_job_titles:
+  - material handler
+  - warehouse associate
+  - production worker
+  - assembler
+offer:
+  product: Knowella Ergonomics
+  one_liner: Turn a phone video of a worker into an automated ergonomic injury-risk score.
+  value_props:
+  - Score injury risk from a short video — no wearables or manual stopwatch scoring
+  - Assess multiple workers in one clip at once
+  - Auto-applies REBA, RULA, NIOSH, Snook, HSE MAC and WISHA standards
+  - Annotated video + joint-angle timelines as defensible evidence for reports
+  call_to_action: a 15-minute demo
+  link: https://knowella.com
+knowledge:
+- Knowella's ergonomics tool scores worker injury risk from a video using REBA, RULA, NIOSH, Snook, HSE MAC, and WISHA standards.
+- It assesses multiple workers in one clip and returns an annotated video with joint-angle timelines.
+voice:
+  tone: direct, peer-to-peer, no fake warmth
+  max_words: 75
+  rules:
+  - Open with a researched, specific observation about THEIR company.
+  - Never assert a fact that is not in the lead research.
+  - End with ONE low-friction interest question — never a demo or meeting ask on the first touch.
+research: {}
+verify: {}
+experiment:
+  enabled: true
+  control_ratio: 0.2
+models:
+  personalize:
+    provider: gemini
+    model: gemini-2.5-pro
+sender:
+  closing: Best,
+  signature: |-
+    Sid Singh
+    Founder & CEO
+    +1.604.970.8236
+    sid@knowella.com
+    KnowErgo — a product of Knowella AI Inc.
+  opt_out_line: If this isn't relevant, reply "no thanks" and I won't email again.
+sending:
+  platform: apollo
+  sequence_id: 6a4f76fd9293ad0018028fd1   # Apollo "Knowella Ergonomics" (created via API, 3 steps, 24/7)
+  mailbox_id: 6a4bccdc4cec4c00103549e9    # sid@knowergo.ai — brand-matched; NOTE: placement-unhealthy, warm before scale
+  subject_field: email_subject
+  body_field: email_body
+  daily_cap: 50

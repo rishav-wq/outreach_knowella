@@ -39,11 +39,32 @@ It assesses multiple workers in one clip and returns an annotated video with joi
 
 ---
 
-## Ella AI — [to profile]
-*(repo: `backend (Ella AI)`; product key `prod_U3dT…`)* — not yet analyzed.
+## KnowDoc AI — document automation *(the logistics/trucking campaign product)*
+*(repo: `~/Desktop/Knowdoc` (codename "MailOCR"); domain **knowdoc.ai**; contact knowdocai@knowella.com)*
 
-## App Builder — [to profile]
-*(product `prod_Mk0N…`)* — currently the wizard default ("Build safety & compliance workflows without code"). Confirm the full profile.
+- **One-liner:** Turn driver and carrier paperwork into clean, audit-ready records — automatically.
+- **What it does:** Documents arrive by email or upload (PDFs, invoices, forms); AI OCR extracts and validates the data, splits multi-doc carrier packets (BOLs, PODs, freight bills, rate confirmations), flags exceptions, and delivers structured records via dashboard/webhooks/API — with TMS auto-fill for freight paperwork.
+- **Audience:** Logistics/transportation back-office & ops leaders ("Automate Carrier Paperwork at Scale") and safety/compliance leaders ("Keep Safety Records Accurate and Audit-Ready"); also accounting/procurement.
+- **Value props:** email-in paperwork read/split/filed automatically · safety certifications + training records tracked with expiry alerts · fewer data-entry errors, faster carrier pay cycles · real-time document status + full audit trail.
+- **Goal:** a 15-minute demo · **Link:** https://knowdoc.ai
+- **Proof points:** site claims (92% less manual paperwork, 99.8% accuracy, testimonials from "Meridian Logistics"/"FreightCo") are **unverified/illustrative — do NOT cite in emails**. Real integration tenants exist (Trademark TMS; carriers incl. Frozen Food Express, H&M Bay) but are internal references, **[confirm] before naming**.
+- **⚠️ Messaging guardrail:** no native DOT/FMCSA/CDL/HOS features found in the product — position as digitizing/tracking *existing* safety and compliance documents, never as built-in DOT/FMCSA compliance.
+
+**`knowledge` block in use (config/logistics-trucking.yaml):** reads inbound paperwork into structured audit-ready records · splits/validates carrier packets, flags exceptions · tracks certifications and training records with expiry alerts and an audit trail.
+
+## Knowella (flagship platform) *(the construction campaign product)*
+*(repos: `~/Desktop/customerweb` (Angular app) + `~/Desktop/adminapi` (NestJS); app.knowella.com / knowella.com)*
+
+- **Tagline (verbatim, auth pages):** "Your Platform for Operational Excellence"
+- **One-liner:** Build your own safety inspections, checklists, and incident reporting — no code, one platform.
+- **What it does:** No-code drag-and-drop App Builder for safety/inspection/compliance apps; frontline reporting (phone + QR-code kiosk logins), scheduling, real-time dashboards, audit logs. AI add-ons: **KnowErgo** (video ergonomic scoring), **Camera Alerts** (CCTV hazard monitoring), **Ella AI** assistant, KnowHealth. (KnowTrain/KnowDoc/KnowRFP/KnowLogistics listed as *coming soon* in-app — don't pitch as shipped from this profile; KnowDoc ships separately, see above.)
+- **Audience:** EHS/safety managers, ops leaders, facility managers; industrial/manufacturing/warehousing/construction — anywhere with frontline physical work.
+- **Pricing shape:** Platform Subscription base + AI add-on modules, monthly/yearly.
+- **Proof points:** none in-repo (authenticated app, not marketing site) — the two real testimonials on the outreach landing page (food manufacturing Director of Safety, food distribution Supply Chain Manager) are the citable ones.
+- **`knowledge` block in use (config/knowella-construction.yaml):** no-code builder for inspections/checklists/incident apps · frontline submits via phone/QR, feeding dashboards + audit logs · add-ons include AI ergonomic scoring and CCTV alerts.
+
+## Ella AI — [to profile]
+*(module of the platform: "The Knowella AI assistant" — LLM chat, RAG over your docs; product key `prod_U3dT…`)* — profile if it ever gets its own campaign.
 
 ---
 

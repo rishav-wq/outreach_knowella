@@ -166,30 +166,137 @@ class MongoStore:
             return None
         return {"subject": d["subject"], "body": d["body"], "angle": d.get("angle", ""),
                 "verdict": d["verdict"], "edited": bool(d.get("edited", False)),
-                "variant": d.get("variant", "signal")}
+                "variant": d.get("variant", "signal"),
+                "subject_2": d.get("subject_2", ""), "body_2": d.get("body_2", ""),
+                "subject_3": d.get("subject_3", ""), "body_3": d.get("body_3", ""),
+                "fu_hash": d.get("fu_hash", "")}
 
     def update_outbox(self, key: str, subject: str, body: str) -> None:
         self.db.outbox.update_one({"_id": key}, {"$set": {"subject": subject, "body": body, "edited": True}})
 
+    def save_followups(self, key: str, subject_2: str, body_2: str, subject_3: str, body_3: str, fu_hash: str) -> None:
+        """The two follow-up emails for this lead (sequence steps 2 & 3). fu_hash caches
+        against the first draft so follow-ups regenerate when the first email changes."""
+        self.db.outbox.update_one({"_id": key}, {"$set": {
+            "subject_2": subject_2, "body_2": body_2,
+            "subject_3": subject_3, "body_3": body_3, "fu_hash": fu_hash}})
+
+    def update_followup(self, key: str, step: int, subject: str, body: str) -> None:
+        """Manual edit of one follow-up (step 2 or 3)."""
+        self.db.outbox.update_one({"_id": key}, {"$set": {
+            f"subject_{step}": subject, f"body_{step}": body, "edited": True}})
+
+    def rename_campaign(self, old: str, new: str) -> int:
+        """Re-key every lead from one campaign name to another. Returns leads moved."""
+        return self.db.leads.update_many({"campaign": old}, {"$set": {"campaign": new}}).modified_count
+
+    # --- suppression (do-not-contact) ----------------------------------------
+    # Global compliance list: emails and whole domains that must never be
+    # contacted again. Enforced at pull, pipeline, and send.
+    @staticmethod
+    def _suppress_keys(value: str) -> str:
+        return (value or "").strip().lower().lstrip("@")
+
+    def suppress(self, value: str, reason: str = "") -> None:
+        """Add an email or a domain (e.g. 'acme.com') to the do-not-contact list."""
+        v = self._suppress_keys(value)
+        if v:
+            self.db.suppression.replace_one(
+                {"_id": v}, {"_id": v, "reason": reason,
+                             "added_at": datetime.now(timezone.utc).isoformat()}, upsert=True)
+
+    def unsuppress(self, value: str) -> None:
+        self.db.suppression.delete_one({"_id": self._suppress_keys(value)})
+
+    def is_suppressed(self, email: str) -> bool:
+        """True if the exact email OR its domain is on the do-not-contact list."""
+        e = self._suppress_keys(email)
+        if not e:
+            return False
+        keys = [e]
+        if "@" in e:
+            keys.append(e.rsplit("@", 1)[-1])
+        return self.db.suppression.count_documents({"_id": {"$in": keys}}) > 0
+
+    def list_suppressed(self) -> list[dict]:
+        return [{"value": d["_id"], "reason": d.get("reason", ""), "added_at": d.get("added_at", "")}
+                for d in self.db.suppression.find().sort("added_at", -1)]
+
+    # --- reply classification (per message, cached) ---------------------------
+    def get_reply_classes(self, msg_ids: list[str]) -> dict:
+        """message id -> label, for messages already classified."""
+        if not msg_ids:
+            return {}
+        return {d["_id"]: d["label"] for d in self.db.reply_class.find({"_id": {"$in": msg_ids}})}
+
+    def save_reply_class(self, msg_id: str, email: str, label: str) -> None:
+        self.db.reply_class.replace_one(
+            {"_id": msg_id},
+            {"_id": msg_id, "email": (email or "").lower(), "label": label,
+             "at": datetime.now(timezone.utc).isoformat()}, upsert=True)
+
     # --- A/B outcomes: reply attribution + per-variant stats -----------------
-    def mark_replied(self, key: str) -> None:
-        self.db.replies.update_one({"_id": key}, {"$setOnInsert": {"replied": True}}, upsert=True)
+    def mark_replied(self, key: str, label: str = "") -> None:
+        self.db.replies.update_one(
+            {"_id": key},
+            {"$setOnInsert": {"replied": True}, **({"$set": {"label": label}} if label else {})},
+            upsert=True)
+
+    # --- outcomes: the metrics that matter (positive replies, meetings) -------
+    def mark_meeting(self, key: str) -> None:
+        self.db.meetings.replace_one(
+            {"_id": key}, {"_id": key, "at": datetime.now(timezone.utc).isoformat()}, upsert=True)
+
+    def unmark_meeting(self, key: str) -> None:
+        self.db.meetings.delete_one({"_id": key})
+
+    def meeting_keys(self, keys: list[str]) -> set:
+        return {d["_id"] for d in self.db.meetings.find({"_id": {"$in": keys}}, {"_id": 1})}
+
+    def outcome_stats(self, campaign: str) -> dict:
+        """Sent / replies by classification / positive-reply rate / meetings booked.
+
+        'positive' = replies classified interested. OOO auto-replies never reach the
+        replies collection, so they don't pollute these numbers.
+        """
+        keys = [d["_id"] for d in self.db.leads.find({"campaign": campaign}, {"_id": 1})]
+        if not keys:
+            return {"sent": 0, "replies": 0, "by_label": {}, "positive": 0,
+                    "positive_rate": 0.0, "meetings": 0}
+        sent = self.db.sends.count_documents({"_id": {"$in": keys}})
+        by_label: dict = {}
+        replies = 0
+        for d in self.db.replies.find({"_id": {"$in": keys}}):
+            replies += 1
+            label = d.get("label") or "other"
+            by_label[label] = by_label.get(label, 0) + 1
+        positive = by_label.get("interested", 0)
+        return {
+            "sent": sent, "replies": replies, "by_label": by_label,
+            "positive": positive,
+            "positive_rate": round(positive / sent * 100, 1) if sent else 0.0,
+            "meetings": len(self.meeting_keys(keys)),
+        }
 
     def ab_stats(self, campaign: str) -> dict:
         keys = [d["_id"] for d in self.db.leads.find({"campaign": campaign}, {"_id": 1})]
         if not keys:
             return {}
         sent = {d["_id"] for d in self.db.sends.find({"_id": {"$in": keys}}, {"_id": 1})}
-        replied = {d["_id"] for d in self.db.replies.find({"_id": {"$in": keys}}, {"_id": 1})}
+        replied = {}
+        for d in self.db.replies.find({"_id": {"$in": keys}}):
+            replied[d["_id"]] = d.get("label") or "other"
         out: dict = {}
         for d in self.db.outbox.find({"_id": {"$in": keys}}, {"_id": 1, "variant": 1}):
             v = d.get("variant", "signal")
-            s = out.setdefault(v, {"drafted": 0, "sent": 0, "replied": 0})
+            s = out.setdefault(v, {"drafted": 0, "sent": 0, "replied": 0, "interested": 0})
             s["drafted"] += 1
             if d["_id"] in sent:
                 s["sent"] += 1
             if d["_id"] in replied:
                 s["replied"] += 1
+                if replied[d["_id"]] == "interested":
+                    s["interested"] += 1
         return out
 
     # --- reviews -------------------------------------------------------------
