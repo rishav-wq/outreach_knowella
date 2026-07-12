@@ -1,4 +1,5 @@
 import { SignedIn, SignedOut, SignIn, SignUp, RedirectToSignIn, UserButton, useAuth } from '@clerk/clerk-react'
+import Logo from './components/Logo'
 
 // Auth is opt-in: with no publishable key (local dev) the app renders exactly as
 // before. Set VITE_CLERK_PUBLISHABLE_KEY and the app goes behind a sign-in wall.
@@ -42,7 +43,7 @@ export function AuthPage() {
   return (
     <div className="auth-gate">
       <div className="auth-gate-head">
-        <div className="auth-gate-brand"><span className="logo">K</span> Knowella <span className="auth-gate-brand-sub">Outreach</span></div>
+        <div className="auth-gate-brand"><span className="logo"><Logo /></span> Knowella <span className="auth-gate-brand-sub">Outreach</span></div>
         <p className="auth-gate-tag">Grounded, human-approved cold outreach. Sign in to continue.</p>
       </div>
       {signUp

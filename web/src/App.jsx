@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import * as api from './api'
 import Icon from './components/Icon'
+import Logo from './components/Logo'
 import Dashboard from './components/Dashboard'
 import Review from './components/Review'
 import Leads from './components/Leads'
@@ -83,7 +84,7 @@ export default function App({ onHome }) {
     <div className="layout">
       <aside className="sidebar">
         <button className="brand" onClick={onHome} title="Back to home">
-          <span className="logo">K</span>
+          <span className="logo"><Logo /></span>
           <div>
             <div className="brand-name">Knowella</div>
             <div className="brand-sub">Outreach</div>

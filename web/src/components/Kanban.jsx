@@ -120,13 +120,8 @@ export default function Kanban({ campaign, embedded = false }) {
               <motion.div className="kcol-body" variants={stagger} initial="hidden" animate="show">
                 {items.map((c) => (
                   <motion.button key={c.key} variants={fadeUp} className="kcard" onClick={() => setSel(c.key)}>
-                    <div className="kcard-top">
-                      <div className="avatar sm">{(c.name || '?').slice(0, 1)}</div>
-                      <div className="kcard-id">
-                        <div className="kcard-name">{c.name}</div>
-                        <div className="kcard-co">{c.company}</div>
-                      </div>
-                    </div>
+                    <div className="kcard-name">{c.name}</div>
+                    <div className="kcard-co">{c.company}</div>
                     {(c.source || c.decision) && (
                       <div className="kcard-tags">
                         {c.source && <span className="src-tag">{c.source}</span>}

@@ -1,72 +1,68 @@
 /* ============================================================
-   Knowella Outreach — "evidence ledger" identity.
-   The product's world: industrial safety, OSHA records, verified
-   facts. So: ink-green control-room sidebar, bone paper, one
-   safety-orange action color, verify-green for approvals, and a
-   mono "audit log" register for every status, tag and count.
-   Type: Bricolage Grotesque (display) / Instrument Sans (body) /
-   IBM Plex Mono (data).
+   Knowella Outreach — Knowella's own design system, applied.
+   Every value below is lifted from customerweb (the shipping
+   Knowella product): cornflower #6e63ff primary, teal #04B492
+   confirm, Poppins everywhere, 8px buttons, #242a32 ink, and
+   the four pinwheel petals (green/teal/purple/yellow) from the
+   real logo as the accent + stripe system.
    ============================================================ */
 :root {
-  /* "Proof" — the verified-green identity. The product's promise IS verification,
-     so the brand color is the color of the VERIFIED stamp: calm emerald on warm
-     mist-white, deep pine dark surfaces, soft premium radii/shadows, and IBM Plex
-     Mono as the status register. Airy and product-forward, never hazard-industrial. */
-  --bg: #f6fafa;
-  --paper: #f6fafa;
+  /* Palette: customerweb src/app/core/styles/_variable.scss */
+  --bg: #f9f9f9;                /* $white-light-gray */
+  --paper: #f9f9f9;
   --panel: #ffffff;
   --glass: rgba(255, 255, 255, 0.92);
   --glass-strong: #ffffff;
-  --glass-border: #e0e9ec;
-  --ink: #0b2530;               /* deep pine — sidebar & dark bands */
-  --ink-2: #113443;
-  --ink-3: #1a4a5e;
-  --ink-text: #e6eff2;
-  --ink-muted: #7fa0ac;
-  --line: #e2eaec;
-  --line-strong: #cbdadf;
-  --text: #10222b;
-  --text-2: #40565f;
-  --muted: #77898f;
-  --signal: #0e8098;            /* verified emerald — the primary action color */
-  --signal-deep: #0a6478;
-  --signal-tint: #e6f4f7;
-  --signal-line: #b4dee8;
-  --grad-brand: linear-gradient(135deg, #0e8098 0%, #2fb6c9 100%);
-  --grad-bar: linear-gradient(90deg, #0e8098, #2fb6c9);
-  --verify: #15803d;            /* approval stamp — sibling green, deeper */
-  --verify-tint: #e4f2e7;
-  --caution: #a06a00;
-  --caution-tint: #f7f0da;
-  --alert: #c92a2a;
-  --alert-tint: #fbe9e9;
-  --info: #1f6f8b;
-  --info-tint: #e5f1f5;
-  --font-display: 'Gabarito', 'Instrument Sans', system-ui, sans-serif;
-  --font-body: 'Instrument Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --glass-border: #e0e2ec;
+  --ink: #242a32;               /* $header-black — dark bands & sidebar */
+  --ink-2: #2d3540;
+  --ink-3: #3a434f;
+  --ink-text: #eef0f4;
+  --ink-muted: #96a1af;         /* $nav-color */
+  --line: #e6ecf1;              /* $table-header-bg — hairlines */
+  --line-strong: #d5d9df;       /* $border-color */
+  --text: #242a32;
+  --text-2: #464e57;            /* $gray-dark */
+  --muted: #64707c;             /* $secondary-font-color */
+  --signal: #6e63ff;            /* $primary-color / $cornflower */
+  --signal-deep: #5a52e0;       /* $hover-primary */
+  --signal-tint: #f8f7ff;       /* $sidebar-heightlight */
+  --signal-line: #dbd8fd;       /* $fileborderline */
+  --grad-brand: linear-gradient(135deg, #7a6fff 0%, #5a52e0 100%);
+  /* The stripe IS the logo: the four pinwheel petals, in order. */
+  --grad-bar: linear-gradient(90deg, #87dd75, #04b492, #6459ff, #ffd600);
+  --verify: #04b492;            /* $secondary-color — Knowella's confirm teal */
+  --verify-tint: #e6f8f4;       /* from $login-gradient-bg */
+  --caution: #fd750e;           /* $not-verified */
+  --caution-tint: #ffeadb;
+  --alert: #d80000;             /* $error-color */
+  --alert-tint: #f8d7da;        /* $danger-shadow */
+  --info: #2e5bff;              /* $active */
+  --info-tint: #e2e8ff;
+  --font-display: 'Poppins', system-ui, sans-serif;
+  --font-body: 'Poppins', system-ui, sans-serif;
+  --font-mono: 'Poppins', system-ui, sans-serif;
   --radius: 12px;
-  --radius-sm: 8px;
-  --radius-lg: 18px;
-  /* Soft, premium elevation — a lifted card, not a glass pane. */
-  --shadow-sm: 0 1px 2px rgba(16, 34, 41, 0.05), 0 1px 3px rgba(16, 34, 41, 0.04);
-  --shadow-md: 0 2px 6px rgba(16, 34, 41, 0.05), 0 14px 30px -14px rgba(16, 34, 41, 0.16);
-  --shadow-lg: 0 4px 10px rgba(16, 34, 41, 0.06), 0 32px 64px -24px rgba(16, 34, 41, 0.24);
-  --shadow-glow: 0 8px 22px -8px rgba(14, 128, 152, 0.45);
+  --radius-sm: 8px;             /* customerweb button radius */
+  --radius-lg: 16px;            /* customerweb table/card radius */
+  --shadow-sm: 0 1px 2px rgba(36, 42, 50, 0.05), 0 1px 3px rgba(36, 42, 50, 0.04);
+  --shadow-md: 0 2px 6px rgba(36, 42, 50, 0.05), 0 14px 30px -14px rgba(36, 42, 50, 0.16);
+  --shadow-lg: 0 4px 10px rgba(36, 42, 50, 0.06), 0 32px 64px -24px rgba(36, 42, 50, 0.22);
+  --shadow-glow: 0 8px 22px -8px rgba(110, 99, 255, 0.5);
   --edge: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --stripe: var(--grad-bar);
-  --chev-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2377898f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  --chev-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237fa0ac' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  --chev-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364707c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  --chev-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2396a1af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
   font-family: var(--font-body);
-  /* One restrained emerald mist — the reference's airy softness, in our hue. */
+  /* Knowella's login-page mist: soft lavender + mint, from $login-gradient-bg. */
   background:
-    radial-gradient(1100px 600px at 85% -10%, rgba(47, 182, 201, 0.10), transparent 60%),
-    radial-gradient(900px 560px at 0% 8%, rgba(14, 128, 152, 0.06), transparent 55%),
+    radial-gradient(1100px 600px at 85% -10%, rgba(226, 224, 255, 0.55), transparent 60%),
+    radial-gradient(900px 560px at 0% 8%, rgba(230, 248, 244, 0.5), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -99,11 +95,11 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   border-top: 3px solid transparent; border-image: var(--stripe) 1;
 }
 .brand { display: flex; align-items: center; gap: 11px; padding: 22px 8px 8px; border: none; background: none; font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; }
+/* The logo is Knowella's real pinwheel mark (inline SVG) — no tile behind it. */
 .logo {
-  width: 36px; height: 36px; border-radius: 10px; background: var(--grad-brand); color: #fff;
-  display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 18px; flex-shrink: 0;
-  box-shadow: var(--shadow-glow);
+  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
 }
+.logo svg { width: 100%; height: 100%; display: block; }
 .brand-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.15; }
 .brand-sub { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); }
 
@@ -190,11 +186,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .auth-gate-head { text-align: center; }
 .auth-gate-brand { display: inline-flex; align-items: center; gap: 11px; font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: -0.01em; color: var(--ink); }
-.auth-gate-brand .logo {
-  width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 11px; background: var(--grad-brand); color: #fff; font-weight: 700; font-size: 20px;
-  box-shadow: var(--shadow-glow);
-}
+.auth-gate-brand .logo { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
 .auth-gate-brand-sub { font-weight: 500; color: var(--muted); }
 .auth-gate-tag { margin: 12px 0 0; color: var(--text-2); font-size: 14.5px; max-width: 380px; }
 
@@ -354,51 +346,75 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .search:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-tint); }
 
-.board { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 12px; }
-.kcol { min-width: 236px; flex: 1; background: #eaece6; border-radius: var(--radius); padding: 9px 9px 11px; }
+/* Kanban — mirrors customerweb's subs-kanban exactly: #F4F7FA columns with a
+   full-width colored header bar per status, white 8px cards with Knowella's
+   card shadows, and the card title accented by a left border. */
+.board { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 16px; }
+.kcol {
+  flex: 0 0 272px; display: flex; flex-direction: column;
+  background: #f4f7fa; border: 1px solid #e6ecf1; border-radius: 8px;
+  padding: 0 0 12px; min-height: 100px;
+}
 .kcol-head {
-  display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px;
-  font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-2); padding: 6px 6px 11px;
+  display: flex; align-items: center; gap: 12px; height: 46px; padding: 12px 16px;
+  border-radius: 7px 7px 0 0; background: var(--kbg, #e6ecf1); color: var(--ktx, #464e57);
+  font-size: 15px; font-weight: 600;
 }
-.kdot { width: 8px; height: 8px; border-radius: 50%; background: #a9aea6; flex-shrink: 0; }
-.kcount { margin-left: auto; background: var(--panel); color: var(--muted); font-size: 11px; padding: 0 8px; border-radius: 99px; }
-.kcol-body { display: flex; flex-direction: column; gap: 8px; min-height: 44px; }
+.kdot { display: none; }
+.kcount { margin-left: auto; background: transparent; color: inherit; opacity: 0.85; font-size: 13px; font-weight: 600; padding: 0; }
+.kcol-body { display: flex; flex-direction: column; gap: 12px; min-height: 80px; padding: 12px 12px 0; }
 .kcard {
-  text-align: left; width: 100%; background: var(--panel); border: 1px solid var(--line);
-  border-left: 3px solid var(--kc, var(--line-strong)); border-radius: var(--radius-sm);
-  padding: 12px 13px; cursor: pointer; font: inherit; box-shadow: var(--shadow-sm);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+  text-align: left; width: 100%; background: #ffffff; border: 1px solid #e6ecf1; border-radius: 8px;
+  padding: 13px 14px 11px; cursor: pointer; font: inherit;
+  box-shadow: 0 1px 4px rgba(12, 12, 13, 0.1), 0 1px 4px rgba(12, 12, 13, 0.05);
+  transition: box-shadow 0.15s ease;
 }
-.kcard:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kcard:hover { box-shadow: 0 4px 12px rgba(12, 12, 13, 0.15); }
 .kcard-top { display: flex; gap: 10px; align-items: center; }
 .kcard-id { min-width: 0; }
-.kcard-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kcard-co { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kcard-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.kcol-empty { text-align: center; color: #a9aea6; font-family: var(--font-mono); font-size: 11px; padding: 16px 0; }
-.k-new { --kc: #a9aea6; } .k-new .kdot { background: #a9aea6; }
-.k-drafted { --kc: var(--info); } .k-drafted .kdot { background: var(--info); }
-.k-review { --kc: var(--signal); } .k-review .kdot { background: var(--signal); }
-.k-approved { --kc: var(--verify); } .k-approved .kdot { background: var(--verify); }
-.k-sent { --kc: var(--verify); } .k-sent .kdot { background: var(--verify); }
-.k-skipped { --kc: #cf9992; } .k-skipped .kdot { background: var(--alert); }
-
-/* ---------- drawer ---------- */
-.drawer-backdrop { position: fixed; inset: 0; background: rgba(16, 21, 18, 0.4); z-index: 40; }
-.drawer {
-  position: fixed; top: 0; right: 0; height: 100vh; width: 500px; max-width: 94vw;
-  background: var(--panel); box-shadow: -16px 0 50px rgba(16, 21, 18, 0.22); z-index: 50;
-  display: flex; flex-direction: column;
+.kcard-name {
+  font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-left: 3px solid var(--kc, var(--line-strong)); padding-left: 8px;
 }
+.kcard-co { font-size: 12px; color: var(--muted); margin-top: 3px; padding-left: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kcard-tags { display: flex; gap: 6px; margin-top: 10px; padding-left: 11px; flex-wrap: wrap; }
+.kcol-empty { text-align: center; color: #96a1af; font-size: 12px; padding: 16px 0; }
+.k-new      { --kbg: #e6ecf1; --ktx: #464e57; --kc: #96a1af; }
+.k-drafted  { --kbg: #e2e0ff; --ktx: #4a41c9; --kc: #6459ff; }
+.k-review   { --kbg: #fff1bd; --ktx: #7d6300; --kc: #f5cd00; }
+.k-approved { --kbg: #e6f8f4; --ktx: #037a63; --kc: #04b492; }
+.k-sent     { --kbg: #dff5d8; --ktx: #2f7d1e; --kc: #87dd75; }
+.k-skipped  { --kbg: #f8d7da; --ktx: #842029; --kc: #d80000; }
+
+/* ---------- drawer — Knowella's signature slideout (workflow-panel pattern):
+   a floating panel inset 8px from the viewport edge, wrapped in a slowly
+   animating purple→teal gradient border. ---------- */
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.54); backdrop-filter: blur(2px); z-index: 40; }
+.drawer {
+  position: fixed; top: 8px; right: 8px; height: calc(100vh - 16px); width: 500px; max-width: 94vw;
+  background: linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(135deg, #6e63ff, #04b492, #6e63ff) border-box;
+  border: 4px solid transparent; border-radius: 8px;
+  background-size: 100% 100%, 300% 300%;
+  animation: kn-border 6s ease infinite;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22); z-index: 50;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+@keyframes kn-border {
+  0% { background-position: 0% 50%, 0% 50%; }
+  50% { background-position: 0% 50%, 100% 50%; }
+  100% { background-position: 0% 50%, 0% 50%; }
+}
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
 .drawer-pad { padding: 24px; }
 .drawer-head {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
-  padding: 22px 24px; border-bottom: 1px solid var(--line); background: var(--panel);
+  padding: 16px; border-bottom: 1px solid #e6ecf1; background: var(--panel); flex-shrink: 0;
 }
 .drawer-who { display: flex; gap: 14px; align-items: flex-start; }
 .drawer-who .avatar { width: 40px; height: 40px; font-size: 16px; border-radius: 10px; }
-.drawer-name { font-family: var(--font-display); font-weight: 600; font-size: 18px; line-height: 1.2; }
-.drawer-co { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.drawer-name { font-family: var(--font-display); font-weight: 600; font-size: 19px; line-height: 1.25; color: #000; }
+.drawer-co { font-size: 12.5px; color: var(--text-2); margin-top: 3px; }
 .drawer-sub { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .icon-btn { border: none; background: none; color: var(--muted); cursor: pointer; padding: 5px; border-radius: 6px; line-height: 0; }
 .icon-btn:hover { background: #f0f1ec; color: var(--text); }
@@ -440,8 +456,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .kv:last-child { border-bottom: none; }
 .kv span { color: var(--muted); }
 .kv b { font-weight: 500; color: var(--text); word-break: break-all; text-align: right; }
-.drawer-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--panel); }
+.drawer-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 16px; border-top: 1px solid #e6ecf1; background: var(--panel); }
 .drawer-actions .hint { margin-right: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+/* Knowella action buttons: 40px tall, 8px radius (customerweb _action_btn.scss) */
+.drawer-actions .btn { height: 40px; padding: 8px 22px; border-radius: 8px; }
 
 /* ============================================================
    Focused review — the hero. Queue rail · draft · evidence.
@@ -821,28 +839,26 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-links a { font-size: 14px; color: var(--text-2); font-weight: 500; }
 .lp-links a:hover { color: var(--text); text-decoration: none; }
 
-.lp-hero { position: relative; max-width: 1120px; margin: 0 auto; padding: 84px 24px 72px; display: flex; flex-direction: column; align-items: center; gap: 48px; }
-/* Bold, drifting aurora in brand colors (orange / verify-green / ink-blue) —
-   visible atmosphere, deliberately NOT the blue-sky-and-grass SaaS default. */
-.lp-hero-glow {
-  position: absolute; z-index: 0; inset: -8% -6% 0 18%; pointer-events: none;
-  background:
-    radial-gradient(46% 62% at 72% 34%, rgba(255, 79, 0, 0.10), transparent 66%),
-    radial-gradient(46% 58% at 40% 74%, rgba(21, 127, 61, 0.10), transparent 70%);
-  filter: blur(34px);
-  animation: aurora 15s ease-in-out infinite alternate;
+/* Hero: everything lives inside ONE contained panel washed in Knowella's
+   actual login gradient — copy left, live product window right, metrics as
+   a frosted strip along the panel's bottom edge. */
+.lp-hero { position: relative; max-width: 1320px; margin: 0 auto; padding: 20px 20px 0; }
+.lp-hero-panel {
+  position: relative; overflow: hidden; border-radius: 24px;
+  background: linear-gradient(-45deg, #e2e0ff, #d0e8f0, #e6f8f4, #c8cef5); /* $login-gradient-bg */
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow-md);
+  display: grid; grid-template-columns: 0.92fr 1.08fr; align-items: center; gap: 32px 48px;
+  padding: 52px 52px 0;
 }
-@keyframes aurora { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-3%, 2%, 0) scale(1.07); } }
-/* Faint inspection-grid texture behind the hero — a blueprint nod, edge-faded. */
-.lp-hero::before {
-  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.6;
-  background-image: radial-gradient(rgba(20, 27, 23, 0.055) 1px, transparent 1px);
-  background-size: 22px 22px;
-  -webkit-mask-image: radial-gradient(72% 72% at 46% 42%, #000, transparent 76%);
-          mask-image: radial-gradient(72% 72% at 46% 42%, #000, transparent 76%);
+/* Soft light bloom in the panel's top-right corner — depth without noise. */
+.lp-hero-panel::before {
+  content: ''; position: absolute; z-index: 0; pointer-events: none;
+  inset: -30% -20% auto auto; width: 62%; height: 110%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.75), transparent 72%);
 }
-.lp-hero-text { position: relative; z-index: 1; text-align: center; display: flex; flex-direction: column; align-items: center; max-width: 760px; }
-.lp-hero-text .lp-cta { justify-content: center; }
+.lp-hero-text { position: relative; z-index: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
+.lp-hero-text .lp-cta { justify-content: flex-start; }
 .lp-pill {
   display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.09em; color: var(--signal-deep); background: var(--signal-tint);
@@ -850,9 +866,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .lp-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 0 rgba(14, 128, 152, 0.5); animation: pulse 2.4s ease-out infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(75, 64, 230, 0.45); } 70% { box-shadow: 0 0 0 7px rgba(75, 64, 230, 0); } 100% { box-shadow: 0 0 0 0 rgba(75, 64, 230, 0); } }
-.lp-hero h1 { font-family: var(--font-display); font-size: clamp(40px, 5.2vw, 64px); font-weight: 700; line-height: 1.0; letter-spacing: -0.03em; }
-.lp-hero h1 .hl { background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
-.lp-hero p { font-size: 17.5px; line-height: 1.7; color: var(--text-2); margin: 22px 0 30px; max-width: 36em; }
+.lp-hero h1 { font-family: var(--font-display); font-size: clamp(34px, 3.6vw, 48px); font-weight: 700; line-height: 1.08; letter-spacing: -0.03em; }
+/* Headline highlight in the two lead petal colors — purple into teal. */
+.lp-hero h1 .hl { background: linear-gradient(105deg, #6459ff 20%, #04b492 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.lp-hero p { font-size: 16px; line-height: 1.7; color: var(--text-2); margin: 18px 0 26px; max-width: 30em; }
 .lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
 .lp-trust { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
 .lp-trust span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -866,15 +883,15 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .receipt-head {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--ink-muted); background: var(--ink); padding: 12px 18px;
+  color: var(--muted); background: var(--signal-tint); border-bottom: 1px solid var(--signal-line); padding: 12px 18px;
 }
-.receipt-head b { color: var(--ink-text); font-weight: 500; }
+.receipt-head b { color: var(--text); font-weight: 600; }
 .receipt-status { display: inline-grid; }
 .receipt-status > * { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.rs-working { color: var(--ink-muted); }
+.rs-working { color: var(--muted); }
 .rs-dots { animation: blink 1s steps(3, end) infinite; }
 @keyframes blink { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-.rs-done { color: #6fcf97; }
+.rs-done { color: var(--verify); font-weight: 600; }
 .receipt-body { padding: 22px; font-size: 13.5px; line-height: 1.8; color: var(--text-2); }
 .receipt-subject { font-weight: 600; color: var(--text); font-size: 15px; margin-bottom: 14px; }
 .ev2 { white-space: normal; }
@@ -940,11 +957,13 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg); overflow: hidden;
 }
-.lpw-chrome { display: flex; align-items: center; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: #fbfdfb; }
+.lpw-chrome { display: flex; align-items: center; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: #fbfbfe; }
 .lpw-chrome span { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
 .lpw-chrome em { margin-left: 10px; font-style: normal; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--muted); }
-.lpw-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr) 250px; }
-.lpw-side { background: var(--ink); padding: 14px 10px; display: flex; flex-direction: column; gap: 3px; }
+/* In the split hero the window sits in a half column: the receipt + evidence
+   rail carry the story, so the mock nav is dropped to give them the room. */
+.lpw-grid { display: grid; grid-template-columns: minmax(0, 1fr) 208px; }
+.lpw-side { display: none; background: var(--ink); padding: 14px 10px; flex-direction: column; gap: 3px; }
 .lpw-brand { margin: 0 0 12px 4px; }
 .lpw-brand .logo { width: 26px; height: 26px; font-size: 13px; }
 .lpw-nav { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; color: var(--ink-muted); font-size: 12.5px; font-weight: 500; }
@@ -952,16 +971,24 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lpw-nav.on { background: var(--ink-2); color: #fff; box-shadow: inset 2px 0 0 var(--signal); }
 .lpw-nav.on i { color: var(--signal); }
 .receipt.in-window { border: none; border-radius: 0; box-shadow: none; }
-.lpw-ev { border-left: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fbfdfb; }
+.lpw-ev { border-left: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fbfbfe; }
 .lpw-ev-label { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
 .lpw-ev .ev-card { box-shadow: none; }
 @media (max-width: 860px) { .lpw-grid { grid-template-columns: 1fr; } .lpw-side, .lpw-ev { display: none; } }
 
 /* metric strip under the window (the reference's logo-strip slot) */
-.lp-metrics { position: relative; z-index: 1; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: min(1040px, 100%); }
-.lp-metrics > div { flex: 1; min-width: 170px; text-align: center; padding: 18px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow-sm); }
-.lp-metrics b { display: block; font-family: var(--font-display); font-size: 34px; font-weight: 750; letter-spacing: -0.02em; color: var(--signal-deep); line-height: 1.1; }
-.lp-metrics span { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+/* Metrics: a frosted strip bleeding to the panel's edges — part of the hero,
+   not four cards floating in dead space. */
+.lp-metrics {
+  position: relative; z-index: 1; grid-column: 1 / -1; display: flex; flex-wrap: wrap;
+  margin: 26px -52px 0; padding: 20px 40px;
+  background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+}
+.lp-metrics > div { flex: 1; min-width: 150px; text-align: center; padding: 2px 12px; }
+.lp-metrics > div + div { border-left: 1px solid rgba(36, 42, 50, 0.1); }
+.lp-metrics b { display: block; font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; color: var(--signal-deep); line-height: 1.15; }
+.lp-metrics span { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
 
 /* alternating feature rows with product crops */
 .lp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 44px 0; }
@@ -996,8 +1023,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-copy { color: var(--muted); font-family: var(--font-mono); font-size: 11px; margin-top: 36px; border-top: 1px solid var(--line); padding-top: 24px; }
 
 @media (max-width: 880px) {
-  .lp-hero { grid-template-columns: 1fr; padding-top: 56px; gap: 44px; }
-  .lp-hero-glow { display: none; }
+  .lp-hero { padding: 12px 12px 0; }
+  .lp-hero-panel { grid-template-columns: 1fr; padding: 36px 24px 0; gap: 32px; }
+  .lp-metrics { margin: 18px -24px 0; padding: 16px 12px; }
+  .lp-metrics > div + div { border-left: none; }
   .lp-steps { grid-template-columns: 1fr; }
   .lp-step + .lp-step { border-left: none; border-top: 1px solid var(--line); }
   .lp-features, .lp-quotes, .lp-foot, .lp-foot-cols { grid-template-columns: 1fr; }

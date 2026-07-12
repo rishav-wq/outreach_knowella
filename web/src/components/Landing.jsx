@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
+import Logo from './Logo'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -36,7 +37,7 @@ function VerifyReceipt() {
           transition={{ delay: 0.8, duration: 1.5, ease: 'easeInOut' }} />
       )}
       <div className="receipt-head">
-        <b>Draft · Meridian Foods</b>
+        <b>Draft · Meridian Logistics</b>
         <span className="receipt-status">
           <motion.span className="rs-working" initial={on({ opacity: 1 })} animate={{ opacity: 0 }} transition={{ delay: 2.4, duration: 0.3 }}>
             verifying<span className="rs-dots">…</span>
@@ -47,20 +48,20 @@ function VerifyReceipt() {
         </span>
       </div>
       <div className="receipt-body">
-        <div className="receipt-subject">Your Dayton plant&apos;s recordables</div>
+        <div className="receipt-subject">Your new Dayton hub</div>
         <p style={{ margin: 0 }}>
           Hi Maria — saw that Meridian{' '}
           <span className="ev2">
-            <motion.mark {...claim(1.0)}>closed out its OSHA citation from the March inspection</motion.mark>
-            <motion.span className="ev-tag" {...stamp(1.4)}>osha</motion.span>
+            <motion.mark {...claim(1.0)}>opened a second distribution hub in Dayton last month</motion.mark>
+            <motion.span className="ev-tag" {...stamp(1.4)}>news</motion.span>
           </span>{' '}
           and is{' '}
           <span className="ev2">
-            <motion.mark {...claim(1.6)}>hiring two EHS coordinators in Dayton</motion.mark>
+            <motion.mark {...claim(1.6)}>hiring two operations coordinators there</motion.mark>
             <motion.span className="ev-tag" {...stamp(2.0)}>hiring</motion.span>
           </span>.
-          Teams doing that shift usually hit a wall tracking corrective actions in spreadsheets —
-          that&apos;s the exact gap Knowella closes…
+          Standing up a second site usually means processes split across spreadsheets —
+          that&apos;s the exact gap we close…
         </p>
       </div>
       <div className="receipt-foot">
@@ -87,7 +88,7 @@ function AppWindow() {
       <div className="lpw-chrome"><span /><span /><span /><em>knowella outreach — review</em></div>
       <div className="lpw-grid">
         <div className="lpw-side">
-          <div className="lpw-brand"><span className="logo">K</span></div>
+          <div className="lpw-brand"><span className="logo"><Logo /></span></div>
           {[['01', 'Overview'], ['02', 'Leads'], ['03', 'Review'], ['04', 'Inbox']].map(([n, t]) => (
             <div key={n} className={`lpw-nav ${t === 'Review' ? 'on' : ''}`}><i>{n}</i>{t}</div>
           ))}
@@ -95,8 +96,8 @@ function AppWindow() {
         <VerifyReceipt />
         <div className="lpw-ev">
           <div className="lpw-ev-label">Grounded in 7 verified facts</div>
-          <div className="ev-card"><div className="ev-claim">Closed out OSHA citation from the March inspection at the Dayton plant.</div><div className="ev-meta"><span className="src">osha</span></div></div>
-          <div className="ev-card"><div className="ev-claim">Hiring two EHS coordinators in Dayton, posted 11 days ago.</div><div className="ev-meta"><span className="src">hiring</span></div></div>
+          <div className="ev-card"><div className="ev-claim">Opened a second distribution hub in Dayton, announced last month.</div><div className="ev-meta"><span className="src">news</span></div></div>
+          <div className="ev-card"><div className="ev-claim">Hiring two operations coordinators in Dayton, posted 11 days ago.</div><div className="ev-meta"><span className="src">hiring</span></div></div>
         </div>
       </div>
     </motion.div>
@@ -115,7 +116,7 @@ export default function Landing({ onLaunch }) {
     <div className="lp">
       <nav className="lp-nav">
         <div className="lp-nav-inner">
-          <div className="lp-logo"><span className="logo">K</span> Knowella <span className="muted">Outreach</span></div>
+          <div className="lp-logo"><span className="logo"><Logo /></span> Knowella <span className="muted">Outreach</span></div>
           <div className="lp-links">
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
@@ -125,27 +126,29 @@ export default function Landing({ onLaunch }) {
         </div>
       </nav>
 
-      {/* centered hero: claim → sub → CTAs, then the product itself as the centerpiece */}
+      {/* hero: one contained panel in Knowella's login gradient — copy left,
+          the live product window right, metrics as a frosted strip along the bottom */}
       <header className="lp-hero">
-        <div className="lp-hero-glow" aria-hidden="true" />
-        <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-text">
-          <div className="lp-pill"><span className="lp-pill-dot" /> Outreach for EHS &amp; safety teams</div>
-          <h1>Cold outreach that&apos;s <span className="hl">researched, not&nbsp;guessed</span>.</h1>
-          <p>Every lead researched against real sources. Every claim quote-verified. Every send approved by you — then followed up automatically until they reply.</p>
-          <div className="lp-cta">
-            <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
-            <a className="btn lg" href="#how">See how it works</a>
-          </div>
-        </motion.div>
+        <div className="lp-hero-panel">
+          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-text">
+            <div className="lp-pill"><span className="lp-pill-dot" /> AI-researched outreach for B2B teams</div>
+            <h1>Cold outreach that&apos;s <span className="hl">researched, not&nbsp;guessed</span>.</h1>
+            <p>Every lead researched against real sources. Every claim quote-verified. Every send approved by you — then followed up automatically until they reply.</p>
+            <div className="lp-cta">
+              <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
+              <a className="btn lg" href="#how">See how it works</a>
+            </div>
+          </motion.div>
 
-        <AppWindow />
+          <AppWindow />
 
-        <motion.div {...fade} className="lp-metrics">
-          <div><b>12+</b><span>verified facts per lead</span></div>
-          <div><b>3</b><span>touches per lead, auto-sent</span></div>
-          <div><b>100%</b><span>human-approved sends</span></div>
-          <div><b>0</b><span>made-up claims</span></div>
-        </motion.div>
+          <motion.div {...fade} className="lp-metrics">
+            <div><b>12+</b><span>verified facts per lead</span></div>
+            <div><b>3</b><span>touches per lead, auto-sent</span></div>
+            <div><b>100%</b><span>human-approved sends</span></div>
+            <div><b>0</b><span>made-up claims</span></div>
+          </motion.div>
+        </div>
       </header>
 
       <section className="lp-section" id="how">
@@ -176,7 +179,7 @@ export default function Landing({ onLaunch }) {
           <motion.div {...fade} className="lp-row">
             <div className="lp-row-text">
               <h3>Grounded, never guessed</h3>
-              <p>Every lead-specific claim is quote-verified against a real source — OSHA records, hiring posts, their own site, the news. If it can&apos;t be proven, it never gets written.</p>
+              <p>Every lead-specific claim is quote-verified against a real source — hiring posts, the news, public records, their own site. If it can&apos;t be proven, it never gets written.</p>
               <ul>
                 <li>Exact supporting quote stored with every fact</li>
                 <li>Stale and boilerplate facts filtered out</li>
@@ -201,7 +204,7 @@ export default function Landing({ onLaunch }) {
             </div>
             <div className="lp-row-art">
               <div className="lp-doc-mock">
-                <div className="ldm-row"><i>To</i><b>Jerry Knight · Safety Director</b></div>
+                <div className="ldm-row"><i>To</i><b>Jerry Knight · Operations Director</b></div>
                 <div className="ldm-row"><i>Subject</i><b>Berner&apos;s new Dover facility</b></div>
                 <div className="ldm-body">Saw Berner Trucking moved into a larger complex to accommodate growth…</div>
                 <div className="ldm-actions"><span className="btn">Revise</span><span className="btn approve"><Icon name="check" size={12} /> Approve</span></div>
@@ -260,7 +263,7 @@ export default function Landing({ onLaunch }) {
       <footer className="lp-footer">
         <div className="lp-inner lp-foot">
           <div className="lp-foot-brand">
-            <div className="lp-logo"><span className="logo">K</span> Knowella <span className="muted">Outreach</span></div>
+            <div className="lp-logo"><span className="logo"><Logo /></span> Knowella <span className="muted">Outreach</span></div>
             <p>Grounded cold outreach that researches every lead and never makes things up.</p>
           </div>
           <div className="lp-foot-cols">
