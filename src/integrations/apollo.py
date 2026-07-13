@@ -64,7 +64,18 @@ def _build_filters(cfg: dict) -> dict:
       hiring_job_titles: [str]               (companies with active postings for these roles)
       hiring_min_jobs: int                   (companies with at least N open roles)
       revenue_min / revenue_max: int         (annual revenue USD)
-    All live-probed against api_search 2026-07-08 (docs/outreach-campaign-fields-research.md);
+      naics_codes: [str]                     (organization_naics_codes — live-verified 2026-07-13,
+                                              undocumented on people search but honored; any prefix
+                                              length works, e.g. '484' matches all of 4841x/4842x)
+      sic_codes: [str]                       (organization_sic_codes — same probe, honored)
+      lookalike_seeds: [{id, label}]         (lookalike_person_ids — live-verified 2026-07-13:
+                                              finds people similar to the seed leads; ANDs with
+                                              the other filters; label is display-only)
+      schools: [{id, label}]                 (person_education_school_ids — live-verified
+                                              2026-07-13: alumni of these schools; multiple
+                                              ids OR together. Ids come from search_schools;
+                                              label is display-only)
+    All live-probed against api_search (docs/outreach-campaign-fields-research.md);
     plan-gated filters may stop matching if the Apollo plan changes.
     """
     icp = cfg.get("icp") or {}
@@ -98,6 +109,16 @@ def _build_filters(cfg: dict) -> dict:
         f["organization_num_jobs_range"] = {"min": int(ap.get("hiring_min_jobs") or 1)}
     elif ap.get("hiring_min_jobs"):
         f["organization_num_jobs_range"] = {"min": int(ap["hiring_min_jobs"])}
+    seed_ids = [s.get("id") for s in (ap.get("lookalike_seeds") or []) if s.get("id")]
+    if seed_ids:
+        f["lookalike_person_ids"] = seed_ids
+    school_ids = [s.get("id") for s in (ap.get("schools") or []) if s.get("id")]
+    if school_ids:
+        f["person_education_school_ids"] = school_ids
+    if ap.get("naics_codes"):
+        f["organization_naics_codes"] = [str(c) for c in ap["naics_codes"]]
+    if ap.get("sic_codes"):
+        f["organization_sic_codes"] = [str(c) for c in ap["sic_codes"]]
     if ap.get("revenue_min") or ap.get("revenue_max"):
         rr = {}
         if ap.get("revenue_min"):
@@ -196,6 +217,48 @@ def _reveal(previews: list[dict], hdr: dict) -> tuple[list[Lead], int]:
         if pv.get("id") and pv["id"] not in revealed:
             leads.append(Lead(first_name=pv["first_name"], title=pv["title"], company=pv["company"]))
     return leads, credits
+
+
+COMPANY_ENDPOINT = "https://api.apollo.io/api/v1/mixed_companies/search"
+
+
+def search_schools(q: str, limit: int = 8) -> list[dict]:
+    """Resolve a typed university name to Apollo school choices: [{id, name}].
+
+    Apollo's education filter is id-based (schools are organization records), and
+    its autocomplete API isn't reachable with our key — but the documented
+    q_organization_name search works as a resolver. The top hit isn't always the
+    school ('MIT' ranks MIT Technology Review first), so callers should show the
+    choices and let the user pick, not auto-take the first. Searching is free.
+    """
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    r = httpx.post(COMPANY_ENDPOINT, json={"q_organization_name": q, "page": 1, "per_page": limit},
+                   headers=hdr, timeout=30.0)
+    _raise_for_status(r)
+    j = r.json()
+    orgs = j.get("organizations") or j.get("accounts") or []
+    return [{"id": o.get("id"), "name": o.get("name") or ""} for o in orgs if o.get("id")]
+
+
+def search_total(cfg: dict) -> int:
+    """How many people match the campaign's filters right now — FREE, no credits.
+
+    api_search returns the match count as a TOP-LEVEL `total_entries` (there is
+    no `pagination` object on this endpoint, unlike mixed_companies/search).
+    This is the same number Apollo's People tab shows for identical filters, so
+    the UI can surface it for cross-checking before any paid reveal.
+    """
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    payload = {**_build_filters(cfg), "page": 1, "per_page": 1}
+    r = httpx.post(ENDPOINT, json=payload, headers=hdr, timeout=30.0)
+    _raise_for_status(r)
+    return int(r.json().get("total_entries") or 0)
 
 
 def fetch_leads(cfg: dict, limit: int = 250, reveal: bool = True,

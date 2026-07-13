@@ -53,17 +53,26 @@ def _request(method: str, path: str, key: str, payload: dict | None = None) -> d
 
 
 def _resolve_field_ids(names: list[str], key: str) -> dict[str, str]:
-    """Map contact custom-field names -> ids (cached). Names are what you set in config."""
+    """Map contact custom-field names -> ids (cached), CREATING any that don't exist.
+
+    Auto-creation (textarea contact fields) is live-verified 2026-07-13 — it's what
+    lets sequences have any number of steps without manual Apollo setup: step N's
+    email_subject_N / email_body_N fields appear on first use.
+    """
     need = [n for n in names if n and n not in _field_cache]
     if need:
         data = _request("GET", "/typed_custom_fields", key)
         for f in data.get("typed_custom_fields", []):
             if f.get("name"):
                 _field_cache[f["name"]] = f.get("id")
-    missing = [n for n in names if n and not _field_cache.get(n)]
-    if missing:
-        raise RuntimeError(f"Apollo custom field(s) not found: {missing}. "
-                           f"Create them as contact fields in Apollo and reference them in the sequence template.")
+    for n in names:
+        if n and not _field_cache.get(n):
+            created = _request("POST", "/typed_custom_fields", key,
+                               {"name": n, "type": "textarea", "modality": "contact"})
+            fid = (created.get("typed_custom_field") or {}).get("id")
+            if not fid:
+                raise RuntimeError(f"Apollo would not create custom field '{n}'")
+            _field_cache[n] = fid
     return {n: _field_cache[n] for n in names if n}
 
 
@@ -91,10 +100,15 @@ def list_sequences() -> list[dict]:
     return out
 
 
-def create_sequence(name: str) -> dict:
-    """Create a fully-wired Apollo sequence for a campaign, ready for our send path:
-    3 auto-email steps on the contact merge fields (first touch, day-3, day-7),
-    24/7 schedule, stop-on-reply + stop-on-interested. Returns {id, name}.
+def create_sequence(name: str, waits: list[int] | None = None) -> dict:
+    """Create a fully-wired Apollo sequence for a campaign, ready for our send path.
+
+    waits = days between each follow-up and the previous email, one entry per
+    follow-up — so [3, 4] is the classic first touch + day-3 + day-7 (the default),
+    [] is a single-email sequence, and [2, 3, 5, 7] is a 5-email sequence. Each
+    step's template references the contact merge fields (email_body_N); follow-up
+    templates keep an empty subject so Apollo threads them as replies. 24/7
+    schedule, stop-on-reply + stop-on-interested. Returns {id, name}.
 
     Apollo won't activate a sequence via API — the user flips the Activate toggle
     in Apollo once; surface that in the UI.
@@ -118,8 +132,8 @@ def create_sequence(name: str) -> dict:
                      {"subject": subj_tag, "body_html": body_tag})
 
     step(1, 0, "{{contact.email_body}}", "{{contact.email_subject}}")
-    step(2, 3, "{{contact.email_body_2}}")
-    step(3, 4, "{{contact.email_body_3}}")
+    for i, wd in enumerate([3, 4] if waits is None else waits, start=2):
+        step(i, max(1, int(wd or 1)), f"{{{{contact.email_body_{i}}}}}")
 
     # 24/7 schedule if one exists (any schedule covering all 7 days), else leave default
     try:
@@ -231,8 +245,9 @@ def list_replies(sequence_id: str, limit: int = 200) -> list[dict]:
 def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None = None) -> str:
     """Upsert the contact with personalized copy, add it to the sequence. Returns contact id.
 
-    followups: {'subject_2','body_2','subject_3','body_3'} for sequence steps 2 & 3
+    followups: {'subject_N','body_N'} for every follow-up step (N = 2..), any count
     (the sequence auto-stops for anyone who replies, so follow-ups only reach silence).
+    Missing custom fields for higher steps are created on the fly.
     """
     key = os.environ.get("APOLLO_API_KEY")
     if not key:
@@ -247,21 +262,18 @@ def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None =
     if not lead.email:
         raise RuntimeError(f"lead {lead.full_name} has no email — cannot send")
 
-    names = [subject_name, body_name]
     fu = followups or {}
-    if fu.get("body_2"):
-        names += [f"{subject_name}_2", f"{body_name}_2"]
-    if fu.get("body_3"):
-        names += [f"{subject_name}_3", f"{body_name}_3"]
+    steps = sorted(int(k.rsplit("_", 1)[-1]) for k in fu
+                   if k.startswith("body_") and k.rsplit("_", 1)[-1].isdigit() and fu[k])
+    names = [subject_name, body_name]
+    for n in steps:
+        names += [f"{subject_name}_{n}", f"{body_name}_{n}"]
     fields = _resolve_field_ids(names, key)
     body = personalize.with_signature(draft.body, campaign)   # append the sender footer
     custom = {fields[subject_name]: draft.subject, fields[body_name]: body}
-    if fu.get("body_2"):
-        custom[fields[f"{subject_name}_2"]] = fu.get("subject_2") or f"Re: {draft.subject}"
-        custom[fields[f"{body_name}_2"]] = personalize.with_signature(fu["body_2"], campaign)
-    if fu.get("body_3"):
-        custom[fields[f"{subject_name}_3"]] = fu.get("subject_3") or f"Re: {draft.subject}"
-        custom[fields[f"{body_name}_3"]] = personalize.with_signature(fu["body_3"], campaign)
+    for n in steps:
+        custom[fields[f"{subject_name}_{n}"]] = fu.get(f"subject_{n}") or f"Re: {draft.subject}"
+        custom[fields[f"{body_name}_{n}"]] = personalize.with_signature(fu[f"body_{n}"], campaign)
 
     # 1) upsert the contact with the copy in its custom fields
     cid = _find_contact_id(lead.email, key)

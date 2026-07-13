@@ -56,14 +56,29 @@ def variant_for(lead_key: str, cfg: dict) -> str:
 
 
 def draft_hash(research: Research, cfg: dict, variant: str = "signal") -> str:
+    seq_steps = (cfg.get("sequence") or {}).get("steps") or []
     return hash_inputs(
-        "draft-rev8",  # bump when the personalize prompt/format changes (invalidates drafts)
+        "draft-rev9",  # bump when the personalize prompt/format changes (invalidates drafts)
         variant,       # signal vs plain control cache separately
         research.model_dump(),
         cfg.get("offer"),
         cfg.get("voice"),
         (cfg.get("models") or {}).get("personalize"),
+        (seq_steps[0].get("template") or "") if seq_steps else "",  # first-email template steers the draft
     )
+
+
+def followup_steps(cfg: dict) -> list[dict]:
+    """Follow-up step configs (sequence steps 2..N) from the campaign's sequence block.
+
+    sequence.steps[0] is the first email; entries after it are the follow-ups. No
+    sequence block = the classic default: a day-3 bump + a day-7 new-angle note.
+    """
+    steps = (cfg.get("sequence") or {}).get("steps") or []
+    if steps:
+        return [{"wait_days": int(s.get("wait_days") or 3), "template": s.get("template") or ""}
+                for s in steps[1:]]
+    return [{"wait_days": 3, "template": ""}, {"wait_days": 4, "template": ""}]
 
 
 def ensure_verified(store: Store, lead: Lead, cfg: dict) -> str:
@@ -149,17 +164,22 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     if not (ob and ob.get("edited")):
         store.save_outbox(lead.key, final, gate.verdict, variant)  # refresh unless manually edited
 
-    # follow-ups (sequence steps 2 & 3): drafted from the final first email, cached by
-    # fu_hash so they regenerate only when the first email changes and aren't hand-edited.
+    # follow-ups (sequence steps 2..N, count from the campaign's sequence block):
+    # drafted from the final first email, cached by fu_hash so they regenerate only
+    # when the first email or the step templates change and aren't hand-edited.
     ob = store.get_outbox(lead.key) or {}
-    fuh = hash_inputs("fu-rev2", final.subject, final.body, variant)
-    if ob.get("fu_hash") != fuh and not ob.get("edited"):
-        body2, body3, usage, model = personalize.write_followups(
-            lead, res, cfg, final.subject, final.body, variant)
-        if body2 and body3:
-            store.save_followups(lead.key, f"Re: {final.subject}", body2,
-                                 f"Re: {final.subject}", body3, fuh)
+    fu_steps = followup_steps(cfg)
+    fuh = hash_inputs("fu-rev3", final.subject, final.body, variant,
+                      [(s["wait_days"], s["template"]) for s in fu_steps])
+    if fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
+        bodies, usage, model = personalize.write_followups(
+            lead, res, cfg, final.subject, final.body, fu_steps, variant)
+        if all(bodies):
+            store.save_followups(
+                lead.key, [{"subject": f"Re: {final.subject}", "body": b} for b in bodies], fuh)
             store.log_llm(lead.key, "followups", model, usage)
+    elif not fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
+        store.save_followups(lead.key, [], fuh)   # single-email sequence: clear stale follow-ups
 
     if dry_run:
         store.set_status(lead.key, "queued")
@@ -207,7 +227,9 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
         store.set_status(lead.key, "suppressed")
         return {"lead": lead, "verdict": "suppressed", "reason": "on the do-not-contact list", "draft": final}
     if not store.is_sent(lead.key):
-        fu = {k: (outbox or {}).get(k, "") for k in ("subject_2", "body_2", "subject_3", "body_3")}
+        # every stored follow-up step rides along, however many the sequence has
+        fu = {k: v for k, v in (outbox or {}).items()
+              if (k.startswith("subject_") or k.startswith("body_")) and k.rsplit("_", 1)[-1].isdigit()}
         pid = apollo_send.push_lead(lead, send_draft, cfg, followups=fu)
         store.mark_sent(lead.key, "apollo", pid or "")
     store.set_status(lead.key, "sent")

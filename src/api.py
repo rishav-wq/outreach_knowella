@@ -82,6 +82,7 @@ class CampaignCreate(BaseModel):
     research: dict = {}
     verify: dict = {}
     sending: dict = {}
+    sequence: dict = {}     # {steps: [{wait_days, template}]} — step 1 = first touch
     experiment: dict = {}   # {enabled, control_ratio} — wizard slider; defaulted if absent
 
 
@@ -106,6 +107,8 @@ def create_campaign(c: CampaignCreate):
     }
     if c.apollo:  # only write the pull-filter block when the wizard supplied one
         cfg["apollo"] = c.apollo
+    if c.sequence:  # sequence shape: how many emails, per-step template + wait
+        cfg["sequence"] = c.sequence
     # Product defaults every campaign should ship with (wizard doesn't ask):
     # the A/B experiment (research: signal-opener lift is unproven — measure it),
     # the strong drafting model (flash drifts on tight style), and the sender
@@ -139,6 +142,7 @@ class CampaignUpdate(BaseModel):
     research: dict | None = None
     experiment: dict | None = None
     verify: dict | None = None
+    sequence: dict | None = None
     sending: dict | None = None   # partial — merged over existing (protects ids/fields)
 
 
@@ -177,7 +181,7 @@ def update_campaign(u: CampaignUpdate):
     path = _campaign_path(u.campaign)
     with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
-    for k in ("icp", "apollo", "offer", "voice", "research", "experiment", "verify"):
+    for k in ("icp", "apollo", "offer", "voice", "research", "experiment", "verify", "sequence"):
         v = getattr(u, k)
         if v is not None:
             cfg[k] = v
@@ -301,18 +305,20 @@ def sequences(campaign: str | None = None):
 
 class SequenceCreate(BaseModel):
     name: str
+    waits: list[int] | None = None   # days before each follow-up (one per follow-up step)
 
 
 @app.post("/api/sequences/create")
 def sequence_create(r: SequenceCreate):
-    """Create a ready-to-use Apollo sequence from the wizard: 3 steps on our merge
-    fields (first touch, day-3, day-7), 24/7 schedule, stop-on-reply. The user still
-    flips Apollo's Activate toggle once (not settable via API)."""
+    """Create a ready-to-use Apollo sequence from the wizard: one step per email on
+    our merge fields (any count — waits sets the day gaps; default day-3 + day-7),
+    24/7 schedule, stop-on-reply. The user still flips Apollo's Activate toggle
+    once (not settable via API)."""
     name = (r.name or "").strip()
     if not name:
         raise HTTPException(400, "sequence name is required")
     try:
-        return apollo_send.create_sequence(name)
+        return apollo_send.create_sequence(name, r.waits)
     except Exception as e:
         raise HTTPException(502, f"Apollo would not create the sequence: {e}")
 
@@ -439,7 +445,9 @@ def review(campaign: str):
             "variant": ob.get("variant", "signal"),
             "signature": signature,
             "followups": [{"step": n, "subject": ob.get(f"subject_{n}", ""), "body": ob.get(f"body_{n}", "")}
-                          for n in (2, 3) if ob.get(f"body_{n}")],
+                          for n in sorted(int(k.rsplit("_", 1)[-1]) for k in ob
+                                          if k.startswith("body_") and k.rsplit("_", 1)[-1].isdigit())
+                          if ob.get(f"body_{n}")],
             "facts": facts, "decision": store.get_review(lead.key) or "",
             "edited": bool(ob.get("edited")),
             "email": lead.email,
@@ -815,6 +823,76 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
                 lead.company_domain = d
         store.upsert_lead(lead, cfg["name"])
     return {"pulled": len(leads_in) - skipped, "suppressed": skipped, "counts": store.counts(cfg["name"])}
+
+
+class ApolloPreview(BaseModel):
+    icp: dict = {}
+    apollo: dict = {}
+
+
+@app.post("/api/preview/apollo")
+def preview_apollo(r: ApolloPreview):
+    """How many people match these audience filters in Apollo — free (search costs
+    no credits; only revealing contacts does). Takes the filter blocks directly so
+    the wizard can show a live count BEFORE the campaign exists, and so edits show
+    the count for the form's current (unsaved) state. The number equals Apollo's
+    own People-tab total for identical filters — a cross-check against their UI."""
+    if not apollo.has_key():
+        raise HTTPException(400, "APOLLO_API_KEY is not set. Add it to .env and restart the backend.")
+    try:
+        total = apollo.search_total({"icp": r.icp, "apollo": r.apollo})
+    except Exception as e:
+        raise HTTPException(502, str(e))
+    return {"total": total}
+
+
+@app.get("/api/apollo/schools")
+def apollo_schools(q: str):
+    """University-name typeahead for the alumni filter: resolves a typed name to
+    Apollo school records (id + name) via the company-name search. The user picks
+    the exact school — top hit isn't always right ('MIT' → MIT Technology Review)."""
+    if not apollo.has_key():
+        raise HTTPException(400, "APOLLO_API_KEY is not set. Add it to .env and restart the backend.")
+    if len(q.strip()) < 3:
+        return {"schools": []}
+    try:
+        return {"schools": apollo.search_schools(q.strip())}
+    except Exception as e:
+        raise HTTPException(502, str(e))
+
+
+class LookalikeReq(BaseModel):
+    campaign: str
+    key: str          # lead key
+    on: bool = True   # add (True) or remove (False) this lead as a lookalike seed
+
+
+@app.post("/api/campaign/lookalike")
+def toggle_lookalike(r: LookalikeReq):
+    """Mark a lead as a lookalike seed: future Apollo pulls add `lookalike_person_ids`
+    so the search returns people SIMILAR to your proven leads (live-verified — a
+    Safety-Director-at-a-trucking-co seed returns other trucking safety directors).
+    Seeds AND with the campaign's other filters. Stored as {id, label} in the
+    config's apollo block; only Apollo-sourced leads carry a person id to seed from."""
+    cfg = _load(r.campaign)
+    lead = open_store().get_lead(r.key)
+    if not lead:
+        raise HTTPException(404, "lead not found")
+    pid = (lead.raw or {}).get("id")
+    if not pid:
+        raise HTTPException(400, "this lead has no Apollo person id (only Apollo-pulled leads can seed lookalikes)")
+    path = _campaign_path(r.campaign)
+    with open(path, encoding="utf-8") as f:
+        raw_cfg = yaml.safe_load(f) or {}
+    ap = raw_cfg.setdefault("apollo", {})
+    seeds = [s for s in (ap.get("lookalike_seeds") or []) if s.get("id") != pid]
+    if r.on:
+        label = " · ".join(x for x in (lead.full_name, lead.company) if x) or pid
+        seeds.append({"id": pid, "label": label})
+    ap["lookalike_seeds"] = seeds
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw_cfg, f, sort_keys=False, allow_unicode=True)
+    return {"lookalike_seeds": seeds}
 
 
 class ApolloPull(BaseModel):

@@ -44,7 +44,7 @@ export const updateCampaign = (campaign, patch) => apiSend('/api/campaign/update
 export const renameCampaign = (campaign, new_name) => apiSend('/api/campaign/rename', 'POST', { campaign, new_name })
 export const getMailboxes = (c) => apiGet(`/api/mailboxes${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
 export const getSequences = (c) => apiGet(`/api/sequences${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
-export const createSequence = (name) => apiSend('/api/sequences/create', 'POST', { name })
+export const createSequence = (name, waits) => apiSend('/api/sequences/create', 'POST', { name, waits })
 export const setMailbox = (campaign, mailbox_id) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_id })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
@@ -68,3 +68,10 @@ export const pull = (campaign, file, source = 'manual') => {
 }
 
 export const pullApollo = (campaign, limit = 25) => apiSend('/api/pull/apollo', 'POST', { campaign, limit })
+// Free live match count for a set of audience filters (no campaign needed — the
+// wizard calls this before the campaign exists).
+export const previewApollo = (icp, apollo) => apiSend('/api/preview/apollo', 'POST', { icp, apollo })
+// Mark/unmark a lead as a lookalike seed — future pulls find people similar to it
+export const setLookalike = (campaign, key, on) => apiSend('/api/campaign/lookalike', 'POST', { campaign, key, on })
+// University-name typeahead for the alumni filter (returns Apollo school ids + names)
+export const searchSchools = (q) => apiGet(`/api/apollo/schools?q=${encodeURIComponent(q)}`)

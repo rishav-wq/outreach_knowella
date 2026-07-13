@@ -146,10 +146,22 @@ def write_email(lead: Lead, research: Research, cfg: dict, variant: str = "signa
     system = PLAIN_SYSTEM if variant == "plain" else SYSTEM
     # the control variant is deliberately NOT given the researched facts
     facts_line = "(control variant — no researched facts provided)" if variant == "plain" else _facts_block(research)
+    # optional user-pasted template for the first email (sequence step 1) — steers
+    # structure/length/voice; the facts stay lead-specific and all hard rules still apply
+    seq_steps = (cfg.get("sequence") or {}).get("steps") or []
+    tmpl = (seq_steps[0].get("template") or "").strip() if seq_steps else ""
+    tmpl_block = (f"""
+TEMPLATE (mirror its structure, length, and voice — but replace every [bracketed placeholder]
+and example-specific detail with THIS lead's specifics; copying template examples verbatim is
+a hard failure; all rules above still apply):
+---
+{tmpl}
+---
+""" if tmpl else "")
     user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}
 
 {facts_line}
-
+{tmpl_block}
 OFFER: {offer.get('product')} — {offer.get('one_liner')}
 VALUE PROPS: {offer.get('value_props')}
 GOAL (what a reply should eventually lead toward — do NOT ask for it directly on this first touch; the ASK must stay a low-friction interest question): {offer.get('call_to_action')}
@@ -174,38 +186,51 @@ RULES: {voice.get('rules')}"""
     return draft, usage, spec.resolved_model()
 
 
-FOLLOWUP_SYSTEM = """You write the TWO follow-up emails for a cold outreach sequence. The lead
+FOLLOWUP_SYSTEM = """You write the follow-up emails for a cold outreach sequence. The lead
 already received the FIRST EMAIL below and did not reply. Same hard rules as the first email:
 plain text only, ONLY facts present in FACTS, invent nothing, no sign-off/signature (appended
 automatically), each ends with ONE low-friction interest question — never a meeting ask,
 calendar link, or time proposal.
 
-FOLLOW-UP 1 (sends ~3 days later) — a short, polite bump. 2-3 short sentences max:
-acknowledge you emailed ("wanted to float this back up"), restate the value in ONE fresh plain
-line (do NOT repeat the first email's opener fact or phrasing), end with a soft question.
-No guilt-tripping ("did you see my email?", "any thoughts?" alone is lazy — add one line of value).
+You'll be given one brief PER follow-up, in send order. Each brief either includes a TEMPLATE
+or says "(no template)":
+- With a TEMPLATE: mirror its structure, length, and voice — but replace every [bracketed
+  placeholder] and every example-specific detail with THIS lead's specifics from FACTS/OFFER.
+  Template examples belong to someone else; copying them verbatim is a hard failure.
+- Without a template, defaults by position: the first follow-up is a short, polite bump
+  (2-3 short sentences: "wanted to float this back up", ONE fresh value line that does not
+  repeat the first email's opener fact or phrasing, soft question; no guilt-tripping). Each
+  later follow-up takes a NEW ANGLE — lead with a different usable fact from FACTS, or a
+  different pain/outcome. The final one may read as a calm last note — no pressure, no
+  "final attempt" drama.
+Every follow-up must differ from the first email AND from each other — never reuse an opener
+fact or phrasing across steps.
 
-FOLLOW-UP 2 (sends ~1 week after that) — a NEW ANGLE, not a bump. If FACTS offers a different
-usable fact than the first email used, lead with THAT; otherwise lead with a different pain or
-outcome. 3-4 short sentences. Calm "last note" tone — no pressure, no "final attempt" drama.
-
-LAYOUT (hard rule, both follow-ups): ONE sentence per line with a BLANK line between each —
+LAYOUT (hard rule, all of them): ONE sentence per line with a BLANK line between each —
 read on a phone, never a dense block.
 
-Return STRICT JSON only: {"followup1_body": "...", "followup2_body": "..."}"""
+Return STRICT JSON only: {"followups": ["<body of follow-up 1>", "<body of follow-up 2>", ...]}
+— exactly one entry per brief, in order."""
 
 
 def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subject: str,
-                    first_body: str, variant: str = "signal"):
-    """The two follow-up bodies for sequence steps 2 & 3. Returns (body2, body3, usage, model).
+                    first_body: str, steps: list[dict], variant: str = "signal"):
+    """Bodies for every follow-up step (sequence steps 2..N), any count.
 
-    Subjects are derived deterministically ('Re: <first subject>') so the thread reads
-    continuous whether Apollo sends them as replies or new threads.
+    steps = [{'wait_days': int, 'template': str}] per follow-up, in send order — the
+    template ('' for none) steers that step's structure/voice while facts stay
+    lead-specific. Returns (bodies: list[str], usage, model). Subjects are derived
+    deterministically ('Re: <first subject>') so the thread reads continuous.
     """
     spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
     offer, voice = cfg["offer"], cfg["voice"]
-    facts = ("(control variant — no researched facts; keep both follow-ups role-based and generic)"
+    facts = ("(control variant — no researched facts; keep all follow-ups role-based and generic)"
              if variant == "plain" else (_facts_block(research) if research else "FACTS:\n(none)"))
+    briefs = []
+    for i, st in enumerate(steps):
+        tmpl = (st.get("template") or "").strip()
+        head = f"FOLLOW-UP {i + 1} of {len(steps)} (sends ~{st.get('wait_days') or 3} days after the previous email):"
+        briefs.append(f"{head}\nTEMPLATE:\n---\n{tmpl}\n---" if tmpl else f"{head} (no template)")
     user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}
 
 FIRST EMAIL (already sent, no reply)
@@ -214,6 +239,8 @@ Body:
 {first_body}
 
 {facts}
+
+{chr(10).join(briefs)}
 
 OFFER: {offer.get('product')} — {offer.get('one_liner')}
 VALUE PROPS: {offer.get('value_props')}
@@ -226,7 +253,9 @@ VOICE: tone={voice.get('tone')}, max_words={voice.get('max_words')}"""
         temperature=0.6,
     )
     data = llm.parse_json(text)
-    return data.get("followup1_body", ""), data.get("followup2_body", ""), usage, spec.resolved_model()
+    bodies = [str(b or "") for b in (data.get("followups") or [])]
+    bodies += [""] * (len(steps) - len(bodies))   # never shorter than asked
+    return bodies[:len(steps)], usage, spec.resolved_model()
 
 
 REFINE_SYSTEM = """You revise an existing first-touch cold email per the user's INSTRUCTION,

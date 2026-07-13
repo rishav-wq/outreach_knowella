@@ -15,9 +15,29 @@ export default function Leads({ campaign, onNavigate }) {
   const [limit, setLimit] = useState(25)
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
+  const [seeds, setSeeds] = useState([]) // lookalike seeds from the campaign config
 
   const load = () => api.getLeads(campaign).then(setLeads).catch(() => setLeads([]))
-  useEffect(() => { setLeads(null); setMsg(null); load() }, [campaign])
+  useEffect(() => {
+    setLeads(null); setMsg(null); load()
+    api.getCampaignConfig(campaign).then((cfg) => setSeeds((cfg.apollo || {}).lookalike_seeds || [])).catch(() => setSeeds([]))
+  }, [campaign])
+
+  // "More like this": seed Apollo's lookalike search with a proven lead, so the
+  // next pull finds similar people (same kind of role at the same kind of company).
+  const seedIds = new Set(seeds.map((s) => s.id))
+  const toggleSeed = async (l) => {
+    const on = !seedIds.has(l.apollo_id)
+    try {
+      const r = await api.setLookalike(campaign, l.key, on)
+      setSeeds(r.lookalike_seeds || [])
+      setMsg({ kind: 'ok', text: on
+        ? `${l.name} added as a lookalike seed — the next Apollo pull also looks for people like them.`
+        : `${l.name} removed from the lookalike seeds.` })
+    } catch (e) {
+      setMsg({ kind: 'err', text: `Could not update lookalike seeds: ${e.message || e}` })
+    }
+  }
 
   const pullApollo = async () => {
     setBusy('apollo'); setMsg(null)
@@ -113,7 +133,7 @@ export default function Leads({ campaign, onNavigate }) {
       <div className="table-wrap">
         <table className="table">
           <thead>
-            <tr><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th></tr>
+            <tr><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
           </thead>
           <motion.tbody variants={stagger} initial="hidden" animate="show">
             {filtered.map((l) => (
@@ -125,6 +145,15 @@ export default function Leads({ campaign, onNavigate }) {
                 <td className="muted">{l.email || '—'}</td>
                 <td>{l.source ? <span className="src-tag">{l.source}</span> : <span className="muted">—</span>}</td>
                 <td><span className={`badge s-${l.status}`}>{l.status}</span></td>
+                <td>{l.apollo_id && (
+                  <button type="button" className={`seed-btn ${seedIds.has(l.apollo_id) ? 'on' : ''}`}
+                    onClick={() => toggleSeed(l)}
+                    title={seedIds.has(l.apollo_id)
+                      ? 'Lookalike seed — the next Apollo pull also finds people like this lead. Click to remove.'
+                      : 'More like this: seed the next Apollo pull with people similar to this lead.'}>
+                    <Icon name="users" size={13} /> {seedIds.has(l.apollo_id) ? 'Seeded' : 'More like this'}
+                  </button>
+                )}</td>
               </motion.tr>
             ))}
           </motion.tbody>

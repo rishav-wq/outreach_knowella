@@ -310,6 +310,15 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .v-fallback { background: var(--caution-tint); color: var(--caution); }
 .src-tag { background: var(--ink); color: var(--ink-text); }
 .src { background: #eceee9; color: var(--muted); margin-left: 6px; vertical-align: middle; }
+/* "More like this" lookalike-seed toggle on lead rows */
+.seed-btn {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: #fff; color: var(--muted); cursor: pointer; white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.seed-btn:hover { border-color: var(--signal); color: var(--signal-deep); }
+.seed-btn.on { background: var(--signal-tint); border-color: var(--signal-line); color: var(--signal-deep); font-weight: 600; }
 
 .avatar {
   width: 30px; height: 30px; border-radius: 8px; background: var(--ink); color: var(--signal);
@@ -769,7 +778,16 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .field-input:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-tint); }
 .field-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+/* Live "N people match these filters" readout on the wizard's Audience step */
+.match-row { display: flex; align-items: baseline; gap: 7px; padding: 11px 14px; background: var(--signal-tint); border: 1px solid var(--signal-line); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+.match-num { font-weight: 700; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; transition: opacity 0.2s; }
+.match-num.dim { opacity: 0.45; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* Per-email editor in the wizard's sequence plan */
+.seq-step { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; }
+.seq-step-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; margin-bottom: 8px; flex-wrap: wrap; }
+.seq-step-head .muted { font-size: 12.5px; }
+.seq-days { width: 52px; margin: 0 6px; padding: 2px 6px; font: inherit; font-size: 12.5px; border: 1px solid var(--line-strong); border-radius: 6px; text-align: center; }
 .field-check { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-bottom: 12px; cursor: pointer; }
 .field-check input { width: 15px; height: 15px; accent-color: var(--signal); cursor: pointer; }
 

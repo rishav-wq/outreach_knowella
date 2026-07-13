@@ -71,7 +71,9 @@ class MongoStore:
             lead = Lead.model_validate(d["lead"])
             out.append({"key": d["_id"], "status": d["status"], "name": lead.full_name,
                         "company": lead.company, "title": lead.title, "email": lead.email,
-                        "source": lead.source})
+                        "source": lead.source,
+                        # Apollo person id — lets the UI offer "find more like this" (lookalike seed)
+                        "apollo_id": (lead.raw or {}).get("id") or ""})
         return out
 
     # --- research (cached by input_hash) ------------------------------------
@@ -164,22 +166,35 @@ class MongoStore:
         d = self.db.outbox.find_one({"_id": key})
         if not d:
             return None
-        return {"subject": d["subject"], "body": d["body"], "angle": d.get("angle", ""),
-                "verdict": d["verdict"], "edited": bool(d.get("edited", False)),
-                "variant": d.get("variant", "signal"),
-                "subject_2": d.get("subject_2", ""), "body_2": d.get("body_2", ""),
-                "subject_3": d.get("subject_3", ""), "body_3": d.get("body_3", ""),
-                "fu_hash": d.get("fu_hash", "")}
+        out = {"subject": d["subject"], "body": d["body"], "angle": d.get("angle", ""),
+               "verdict": d["verdict"], "edited": bool(d.get("edited", False)),
+               "variant": d.get("variant", "signal"), "fu_hash": d.get("fu_hash", "")}
+        # every follow-up step present (subject_2/body_2, subject_3/body_3, … any count)
+        for k, v in d.items():
+            if (k.startswith("subject_") or k.startswith("body_")) and k.rsplit("_", 1)[-1].isdigit():
+                out[k] = v or ""
+        return out
 
     def update_outbox(self, key: str, subject: str, body: str) -> None:
         self.db.outbox.update_one({"_id": key}, {"$set": {"subject": subject, "body": body, "edited": True}})
 
-    def save_followups(self, key: str, subject_2: str, body_2: str, subject_3: str, body_3: str, fu_hash: str) -> None:
-        """The two follow-up emails for this lead (sequence steps 2 & 3). fu_hash caches
-        against the first draft so follow-ups regenerate when the first email changes."""
-        self.db.outbox.update_one({"_id": key}, {"$set": {
-            "subject_2": subject_2, "body_2": body_2,
-            "subject_3": subject_3, "body_3": body_3, "fu_hash": fu_hash}})
+    def save_followups(self, key: str, followups: list[dict], fu_hash: str) -> None:
+        """The lead's follow-up emails (sequence steps 2..N, any count) — replaces the
+        whole set: followups = [{'subject','body'}] in step order. fu_hash caches against
+        the first draft + step templates so they regenerate when either changes. Steps
+        left over from a previously longer sequence are removed."""
+        doc = self.db.outbox.find_one({"_id": key}) or {}
+        new: dict = {"fu_hash": fu_hash}
+        for i, f in enumerate(followups, start=2):
+            new[f"subject_{i}"] = f.get("subject", "")
+            new[f"body_{i}"] = f.get("body", "")
+        stale = [k for k in doc
+                 if (k.startswith("subject_") or k.startswith("body_"))
+                 and k.rsplit("_", 1)[-1].isdigit() and int(k.rsplit("_", 1)[-1]) >= len(followups) + 2]
+        update: dict = {"$set": new}
+        if stale:
+            update["$unset"] = {k: "" for k in stale}
+        self.db.outbox.update_one({"_id": key}, update)
 
     def update_followup(self, key: str, step: int, subject: str, body: str) -> None:
         """Manual edit of one follow-up (step 2 or 3)."""

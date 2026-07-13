@@ -12,7 +12,38 @@ import Icon from './Icon'
 const STEPS = ['Offer', 'Audience', 'Send']
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean)
 
-import ChipSelect, { SearchSelect, TITLE_PRESETS, INDUSTRY_PRESETS, LOCATION_PRESETS, EXCLUDE_PRESETS, SIZE_RANGES, SIZE_MAP, SENIORITY_LEVELS, SENIORITY_MAP, HIRING_PRESETS, EXCLUDE_TITLE_PRESETS, LABEL_BY_RANGE, LABEL_BY_SENIORITY, sizesFromLegacy } from './ChipSelect'
+import ChipSelect, { SearchSelect, SchoolSelect, TITLE_PRESETS, INDUSTRY_PRESETS, LOCATION_PRESETS, EXCLUDE_PRESETS, SIZE_RANGES, SIZE_MAP, SENIORITY_LEVELS, SENIORITY_MAP, HIRING_PRESETS, EXCLUDE_TITLE_PRESETS, CODE_PRESETS, codesFromChips, chipsFromCodes, LABEL_BY_RANGE, LABEL_BY_SENIORITY, sizesFromLegacy, rangeFromLabel, labelFromRange } from './ChipSelect'
+
+// The audience filters exactly as the backend stores them — built in ONE place so
+// the live match-count preview and the saved campaign can never disagree.
+const targeting = (f) => {
+  const { naics, sic } = codesFromChips(f.codes)
+  return {
+    icp: { titles: f.titles, industries: f.industries, company_size: f.sizes.join(', '), geographies: f.geographies },
+    apollo: {
+      keywords: f.industries, exclude_keywords: f.exclude,
+      employee_ranges: f.sizes.map((l) => SIZE_MAP[l] || rangeFromLabel(l)).filter(Boolean),
+      seniorities: f.seniorities.map((l) => SENIORITY_MAP[l]).filter(Boolean),
+      exclude_titles: f.exclude_titles,
+      email_status: f.verified_only ? ['verified', 'likely to engage'] : [],
+      hiring_job_titles: f.hiring_titles,
+      naics_codes: naics, sic_codes: sic,
+      // seeds are added from the Leads page ("More like this"); carried through
+      // here so saving the wizard never wipes them, and the live count includes them
+      lookalike_seeds: f.lookalike_seeds,
+      schools: f.schools,
+    },
+  }
+}
+
+// Sequence shape exactly as the backend stores it: step 1 = first touch (always
+// immediate), later steps = follow-ups with their day gaps and optional templates.
+const sequenceOf = (f) => ({
+  steps: f.seq_steps.map((s, i) => ({
+    wait_days: i === 0 ? 0 : Math.max(1, Number(s.wait_days) || 3),
+    template: s.template || '',
+  })),
+})
 
 export default function NewCampaign({ onClose, onCreated, edit }) {
   const isEdit = !!edit
@@ -35,12 +66,13 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
     link: 'https://knowella.com',
     knowledge: 'Knowella serves EHS teams in manufacturing, construction, and logistics.',
     // Audience — Apollo pull filters (arrays, picked from chips)
-    titles: [], industries: [], geographies: ['United States'], sizes: [], exclude: [],
+    titles: [], industries: [], geographies: ['United States'], sizes: [], exclude: [], codes: [], lookalike_seeds: [], schools: [],
     seniorities: ['Director', 'VP', 'C-suite', 'Head', 'Owner'],   // decision-makers by default
     verified_only: true,
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
-    // Send
+    // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_id: '', daily_cap: 50, control_pct: 20,
+    seq_steps: [{ wait_days: 0, template: '' }, { wait_days: 3, template: '' }, { wait_days: 4, template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
     rules: 'Open with a researched, specific observation about THEIR company.\nNever assert a fact that isn’t in the lead’s research.\nEnd with ONE low-friction interest question — never a demo or meeting ask on the first touch.',
@@ -62,6 +94,25 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
     api.getSequences().then((d) => setSequences(d.sequences || [])).catch(() => {})
   }, [])
 
+  // Live audience size: the same total_entries Apollo's own People search shows
+  // for these filters, so the count can be verified against their UI. Searching
+  // is free — only revealing contacts costs credits. Debounced per keystroke;
+  // the stale flag drops out-of-order responses from rapid filter changes.
+  const [match, setMatch] = useState({ status: 'idle', total: null })
+  const targetKey = JSON.stringify(targeting(f))
+  useEffect(() => {
+    if (step !== 1) return
+    let stale = false
+    setMatch((m) => ({ status: 'loading', total: m.total }))
+    const t = setTimeout(() => {
+      const { icp, apollo } = JSON.parse(targetKey)
+      api.previewApollo(icp, apollo)
+        .then((d) => { if (!stale) setMatch({ status: 'ok', total: d.total }) })
+        .catch(() => { if (!stale) setMatch({ status: 'err', total: null }) })
+    }, 500)
+    return () => { stale = true; clearTimeout(t) }
+  }, [step, targetKey])
+
   // Edit mode: pre-fill the form from the campaign's saved config.
   useEffect(() => {
     if (!isEdit) return
@@ -78,15 +129,21 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
         titles: icp.titles || [], industries: icp.industries || [],
         geographies: icp.geographies || [],
         sizes: (ap.employee_ranges || []).length
-          ? (ap.employee_ranges || []).map((r) => LABEL_BY_RANGE[r] || r)
+          ? (ap.employee_ranges || []).map((r) => LABEL_BY_RANGE[r] || labelFromRange(r))
           : sizesFromLegacy(icp.company_size),
         exclude: ap.exclude_keywords || [],
+        codes: chipsFromCodes(ap.naics_codes || [], ap.sic_codes || []),
+        lookalike_seeds: ap.lookalike_seeds || [],
+        schools: ap.schools || [],
         seniorities: (ap.seniorities || []).map((v) => LABEL_BY_SENIORITY[v] || v),
         verified_only: (ap.email_status || []).length > 0,
         exclude_titles: ap.exclude_titles || [], hiring_titles: ap.hiring_job_titles || [],
         pull_limit: 0,   // editing shouldn't spend credits unless explicitly chosen
         sequence_id: send.sequence_id || '', mailbox_id: send.mailbox_id || '',
         daily_cap: send.daily_cap ?? 50,
+        seq_steps: ((cfg.sequence || {}).steps || []).length
+          ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), template: s.template || '' }))
+          : p.seq_steps,
         control_pct: (cfg.experiment || {}).enabled === false ? 0
           : Math.round(((cfg.experiment || {}).control_ratio ?? 0.2) * 100),
         tone: voice.tone || p.tone, max_words: voice.max_words || 75,
@@ -102,15 +159,8 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
   const create = async () => {
     setBusy(true); setError(''); setStatus(isEdit ? 'Saving changes…' : 'Creating campaign…')
     const payload = {
-      icp: { titles: f.titles, industries: f.industries, company_size: f.sizes.join(', '), geographies: f.geographies },
-      apollo: {
-        keywords: f.industries, exclude_keywords: f.exclude,
-        employee_ranges: f.sizes.map((l) => SIZE_MAP[l]).filter(Boolean),
-        seniorities: f.seniorities.map((l) => SENIORITY_MAP[l]).filter(Boolean),
-        exclude_titles: f.exclude_titles,
-        email_status: f.verified_only ? ['verified', 'likely to engage'] : [],
-        hiring_job_titles: f.hiring_titles,
-      },
+      ...targeting(f),
+      sequence: sequenceOf(f),
       offer: { product: f.product, one_liner: f.one_liner, value_props: lines(f.value_props), call_to_action: f.call_to_action, link: f.link },
       knowledge: lines(f.knowledge),
       voice: { tone: f.tone, max_words: Number(f.max_words) || 75, rules: lines(f.rules) },
@@ -133,7 +183,8 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
       let sequenceId = f.sequence_id
       if (sequenceId === '__new__') {
         setStatus('Creating the Apollo sequence…')
-        const seq = await api.createSequence(f.name)
+        const seq = await api.createSequence(f.name,
+          f.seq_steps.slice(1).map((s) => Math.max(1, Number(s.wait_days) || 3)))
         sequenceId = seq.id
       }
       if (isEdit) {
@@ -208,26 +259,59 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
         {field('Job titles', <SearchSelect presets={TITLE_PRESETS} value={f.titles} onChange={(v) => setKey('titles', v)} placeholder="Search titles, or type any + Enter" />, 'The roles you’re targeting — any title works, suggestions are shortcuts.')}
         {field('Seniority', <ChipSelect presets={SENIORITY_LEVELS.map(([l]) => l)} value={f.seniorities} onChange={(v) => setKey('seniorities', v)} allowCustom={false} />, 'Keeps the list to decision-makers — cuts juniors and assistants.')}
         {field('Industries / keywords', <SearchSelect presets={INDUSTRY_PRESETS} value={f.industries} onChange={(v) => setKey('industries', v)} placeholder="Search industries, or type any + Enter" />, 'Used to find companies in Apollo. Broad words (e.g. “manufacturing”) can match companies that merely mention them — keep it specific.')}
-        {field('Company size', <ChipSelect presets={SIZE_RANGES.map(([l]) => l)} value={f.sizes} onChange={(v) => setKey('sizes', v)} allowCustom={false} />, 'Employees. Pick one or more ranges — size strongly predicts reply rate.')}
+        {field('Industry codes (NAICS / SIC)', <SearchSelect presets={CODE_PRESETS} value={f.codes} onChange={(v) => setKey('codes', v)} placeholder="Search codes, or type any code + Enter" />, 'Official industry classifications — far more precise than keywords. Plain numbers are NAICS; prefix with “SIC” for SIC (e.g. SIC 4213). A short code covers everything under it: 484 = all trucking.')}
+        {field('Company size', <ChipSelect presets={SIZE_RANGES.map(([l]) => l)} value={f.sizes} onChange={(v) => setKey('sizes', v)}
+          placeholder="Custom range, e.g. 3-10 or 3000+, then Enter"
+          normalize={(t) => { const r = rangeFromLabel(t); return r ? labelFromRange(r) : null }} />,
+          'Employees. Pick ranges or type your own to slice finer than the presets — e.g. 3-10 skips the 1-2-person solo shops. Size strongly predicts reply rate.')}
         {field('Locations', <SearchSelect presets={LOCATION_PRESETS} value={f.geographies} onChange={(v) => setKey('geographies', v)} placeholder="Search, or type a state/city + Enter" />, 'Company HQ. Countries, or type a state/city (e.g. Texas, Chicago).')}
+        {field('Universities (alumni)', <SchoolSelect value={f.schools} onChange={(v) => setKey('schools', v)} />, 'Only people who attended these schools — perfect for alma-mater outreach (a shared school is a proven warm opener). Pick the exact school from the matches; multiple schools widen the pool (alumni of any of them).')}
         {check('verified_only', 'Only pull leads with verified email addresses (recommended — fewer bounces, fewer wasted credits)')}
         {disclosure(showTarget, setShowTarget, 'Advanced targeting (optional)')}
         {showTarget && (
           <>
             {field('Actively hiring for roles', <SearchSelect presets={HIRING_PRESETS} value={f.hiring_titles} onChange={(v) => setKey('hiring_titles', v)} placeholder="Search roles, or type any + Enter" />, 'Only companies with open job postings for these roles — a strong “they have this pain right now” signal.')}
             {field('Exclude job titles', <SearchSelect presets={EXCLUDE_TITLE_PRESETS} value={f.exclude_titles} onChange={(v) => setKey('exclude_titles', v)} />, 'People with these words in their title are skipped.')}
-            {field('Exclude company keywords', <SearchSelect presets={EXCLUDE_PRESETS} value={f.exclude} onChange={(v) => setKey('exclude', v)} />, 'Companies matching these are skipped.')}
+            {field('Exclude company keywords', <SearchSelect presets={EXCLUDE_PRESETS} value={f.exclude} onChange={(v) => setKey('exclude', v)} />, 'Companies matching these are skipped — matches company names too, so a competitor or customer name here keeps their whole company out.')}
+            {field('Lookalike seeds', f.lookalike_seeds.length
+              ? <div className="chip-row">
+                  {f.lookalike_seeds.map((s) => (
+                    <button key={s.id} type="button" className="chip on custom"
+                      onClick={() => setKey('lookalike_seeds', f.lookalike_seeds.filter((x) => x.id !== s.id))}>
+                      {s.label || s.id} <Icon name="x" size={11} />
+                    </button>
+                  ))}
+                </div>
+              : <div className="field-hint" style={{ marginTop: 0 }}>None yet — on the Leads page, click “More like this” on a lead that worked.</div>,
+              f.lookalike_seeds.length
+                ? 'Apollo also finds people similar to these leads (same kind of role at the same kind of company), combined with the filters above. Click a seed to remove it.'
+                : null)}
           </>
         )}
+        <div className="match-row" aria-live="polite">
+          {match.status === 'err'
+            ? <span className="muted">Live match count unavailable — check the Apollo API key in Settings.</span>
+            : <>
+                <span className={`match-num ${match.status === 'loading' ? 'dim' : ''}`}>
+                  {match.total == null ? '…' : match.total.toLocaleString()}
+                </span>
+                <span>people match these filters{match.status === 'loading' && match.total != null ? ' · updating…' : ''}</span>
+              </>}
+        </div>
+        <div className="field-hint" style={{ marginTop: -14, marginBottom: 18 }}>
+          Live from Apollo and free to check — the same total a People search with these filters shows in Apollo itself, so you can verify it there. Only revealing contacts costs credits.
+        </div>
         {field('How many leads to pull now',
           <select className="field-input" value={f.pull_limit} onChange={set('pull_limit')}>
             <option value={25}>25 leads</option>
             <option value={50}>50 leads</option>
             <option value={100}>100 leads</option>
             <option value={250}>250 leads</option>
+            <option value={500}>500 leads</option>
+            <option value={1000}>1000 leads</option>
             <option value={0}>Don’t pull yet</option>
           </select>,
-          'Revealing each lead’s full details uses Apollo credits. Start small.')}
+          'Pulls a batch of the matches above; each revealed lead costs ~1 Apollo credit. Start small — repeat pulls skip contacts you already have, so you can always pull the next batch later.')}
       </>
     )
     return (
@@ -239,14 +323,47 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
             </select>
           : input('mailbox_id', { placeholder: 'connect Apollo, or set later' }),
           'Which of your Apollo mailboxes sends this campaign’s emails.')}
+        {field('Emails in the sequence', (
+          <div>
+            <select className="field-input" style={{ maxWidth: 130 }} value={f.seq_steps.length}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                const next = f.seq_steps.slice(0, n)
+                while (next.length < n) next.push({ wait_days: next.length ? 3 : 0, template: '' })
+                setKey('seq_steps', next)
+              }}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n} {n === 1 ? 'email' : 'emails'}</option>)}
+            </select>
+            {f.seq_steps.map((s, i) => (
+              <div key={i} className="seq-step">
+                <div className="seq-step-head">
+                  <b>Email {i + 1}</b>
+                  {i === 0
+                    ? <span className="muted">first touch — sends as soon as the lead enters the sequence</span>
+                    : <span className="muted">sends
+                        <input className="seq-days" type="number" min={1} max={30} value={s.wait_days}
+                          onChange={(e) => setKey('seq_steps', f.seq_steps.map((x, j) => j === i ? { ...x, wait_days: e.target.value } : x))} />
+                        days after email {i} (only if still no reply)</span>}
+                </div>
+                <textarea className="field-input" rows={3} value={s.template}
+                  placeholder={i === 0
+                    ? 'Template (optional). Paste an email you like — the AI mirrors its structure and voice, filling it with each lead’s researched facts. Empty = the default researched first touch.'
+                    : (i === 1
+                      ? 'Template (optional). Empty = a short, polite bump with one fresh value line.'
+                      : 'Template (optional). Empty = a new angle from a different researched fact.')}
+                  onChange={(e) => setKey('seq_steps', f.seq_steps.map((x, j) => j === i ? { ...x, template: e.target.value } : x))} />
+              </div>
+            ))}
+          </div>
+        ), 'One email per step — anyone who replies stops getting the rest. Templates steer structure and voice; facts always come from each lead’s own research. Follow-ups generate 42% of replies, 4-7 touches is the sweet spot.')}
         {field('Apollo sequence', sequences.length
           ? <select className="field-input" value={f.sequence_id} onChange={set('sequence_id')}>
               <option value="">Set later</option>
-              <option value="__new__">＋ Create a new sequence (named after this campaign)</option>
+              <option value="__new__">＋ Create a new {f.seq_steps.length}-email sequence from the plan above (named after this campaign)</option>
               {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}{s.archived ? ' (archived)' : ''}</option>)}
             </select>
           : input('sequence_id', { placeholder: 'leave empty to set later' }),
-          'Where approved leads are added. Reuse an existing sequence, or pick “＋ Create” for a ready 3-step sequence (first touch, day-3, day-7, stop-on-reply) with clean per-campaign stats — you flip its Activate toggle in Apollo once before the first send.')}
+          `Where approved leads are added. “＋ Create” builds it in Apollo to match your ${f.seq_steps.length}-email plan above (stop-on-reply, per-campaign stats) — you flip its Activate toggle in Apollo once before the first send. An existing sequence only sends as many steps as it was created with, so prefer “＋ Create” when the plan changes.`)}
         {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), '0 = unlimited. Sends any time of day — the cap is the only throttle.')}
         {field('A/B experiment — control share', (
           <div className="slider-row">
