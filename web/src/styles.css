@@ -881,8 +881,11 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   background: linear-gradient(-45deg, #e2e0ff, #d0e8f0, #e6f8f4, #c8cef5); /* $login-gradient-bg */
   border: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow: var(--shadow-md);
-  display: grid; grid-template-columns: 0.92fr 1.08fr; align-items: center; gap: 32px 48px;
-  padding: 52px 52px 0;
+  display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0;
+  padding: 56px 52px 0;
+}
+/* centered grid items size to fit-content — cap them so text wraps on small screens */
+.lp-hero-panel > * { max-width: 100%; min-width: 0;
 }
 /* Soft light bloom in the panel's top-right corner — depth without noise. */
 .lp-hero-panel::before {
@@ -890,33 +893,45 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   inset: -30% -20% auto auto; width: 62%; height: 110%;
   background: radial-gradient(closest-side, rgba(255, 255, 255, 0.75), transparent 72%);
 }
-.lp-hero-text { position: relative; z-index: 1; text-align: left; display: flex; flex-direction: column; align-items: flex-start; }
-.lp-hero-text .lp-cta { justify-content: flex-start; }
-.lp-pill {
-  display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.09em; color: var(--signal-deep); background: var(--signal-tint);
-  border: 1px solid var(--signal-line); padding: 5px 12px 5px 10px; border-radius: 99px; margin-bottom: 24px;
-}
-.lp-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 0 rgba(14, 128, 152, 0.5); animation: pulse 2.4s ease-out infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(75, 64, 230, 0.45); } 70% { box-shadow: 0 0 0 7px rgba(75, 64, 230, 0); } 100% { box-shadow: 0 0 0 0 rgba(75, 64, 230, 0); } }
-.lp-hero h1 { font-family: var(--font-display); font-size: clamp(34px, 3.6vw, 48px); font-weight: 700; line-height: 1.08; letter-spacing: -0.03em; }
+/* Centered composition (the layout the team chose): eyebrow → headline → sub →
+   the traced draft with its sources flanking it → CTAs. Teal stays the voice of
+   verification (eyebrow, highlights, stamps); violet is the brand accent. */
+.lp-hero-text { position: relative; z-index: 1; text-align: center; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 760px; }
+.lp-eyebrow-hero { font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--verify); margin-bottom: 20px; }
+.lp-hero h1 { font-family: var(--font-display); font-size: clamp(34px, 3.6vw, 48px); font-weight: 750; line-height: 1.08; letter-spacing: -0.03em; color: var(--text); }
 /* Headline highlight in the two lead petal colors — purple into teal. */
 .lp-hero h1 .hl { background: linear-gradient(105deg, #6459ff 20%, #04b492 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
-.lp-hero p { font-size: 16px; line-height: 1.7; color: var(--text-2); margin: 18px 0 26px; max-width: 30em; }
-.lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.lp-hero p { font-size: 16px; line-height: 1.7; color: var(--text-2); margin: 18px auto 0; max-width: 34em; }
+.lp-cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.lp-cta-hero { position: relative; z-index: 1; justify-content: center; margin-top: 4px; padding-bottom: 8px; }
 .lp-trust { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
 .lp-trust span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .lp-trust svg { color: var(--verify); }
 
-/* Hero signature: a draft that verifies itself on load — claims highlight,
-   source tags stamp on, a scan sweeps through, header resolves to verified. */
-.receipt { position: relative; background: var(--panel); backdrop-filter: blur(16px) saturate(1.1); -webkit-backdrop-filter: blur(16px) saturate(1.1); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg), var(--edge); overflow: hidden; }
-.receipt-scan { position: absolute; left: 0; right: 0; top: 0; height: 40%; z-index: 3; pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(24, 120, 72, 0.16), transparent); }
+/* Hero signature: the TRACE — footnoted claims joined to flanking source notes by
+   measured hairline leader lines; hover either end and the pair lights up. */
+.trace {
+  position: relative; z-index: 1; display: grid;
+  grid-template-columns: 208px minmax(0, 1fr) 208px; gap: 0 30px; align-items: start;
+  width: min(1060px, 100%); margin: 40px auto 34px;
+}
+.trace-side { padding-top: 36px; }
+.trace-side.right { padding-top: 130px; }
+.trace-side.left .trace-note { transform: rotate(-2deg); }
+.trace-side.right .trace-note { transform: rotate(2deg); }
+/* the two source cards carry different accent bands for contrast: teal left, petal-yellow right */
+.trace-side.right .trace-note,
+.trace-side.right .trace-note.on { border-left-color: #f5cd00; }
+.trace-side .trace-note.on { transform: rotate(0deg) translateY(-2px); }
+.trace-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
+.trace-svg path { fill: none; stroke: var(--line-strong); stroke-width: 1.25; transition: stroke 0.15s; }
+.trace-svg path.on { stroke: var(--verify); stroke-width: 1.5; }
+
+.receipt { position: relative; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
 .receipt-head {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--muted); background: var(--signal-tint); border-bottom: 1px solid var(--signal-line); padding: 12px 18px;
+  color: var(--muted); background: #fbfcfc; border-bottom: 1px solid var(--line); padding: 12px 18px;
 }
 .receipt-head b { color: var(--text); font-weight: 600; }
 .receipt-status { display: inline-grid; }
@@ -927,17 +942,37 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .rs-done { color: var(--verify); font-weight: 600; }
 .receipt-body { padding: 22px; font-size: 13.5px; line-height: 1.8; color: var(--text-2); }
 .receipt-subject { font-weight: 600; color: var(--text); font-size: 15px; margin-bottom: 14px; }
-.ev2 { white-space: normal; }
-.ev2 mark { background: transparent; color: var(--text); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.ev-tag {
-  display: inline-block; font-family: var(--font-mono); font-size: 9px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.05em; background: var(--verify); color: #fff; border-radius: 4px;
-  padding: 1px 5px; margin-left: 5px; position: relative; top: -1px; white-space: nowrap;
+.ev2 { white-space: normal; cursor: default; }
+.ev2 mark {
+  color: var(--text); border-radius: 3px; padding: 1px 3px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  background-color: transparent; background-image: linear-gradient(#d9f0e8, #d9f0e8);
+  background-repeat: no-repeat; background-size: 100% 100%; transition: background-image 0.15s;
 }
+.ev2 mark.on { background-image: linear-gradient(#bfe6d8, #bfe6d8); }
+.ev2 .fn { font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; color: var(--verify); margin-left: 2px; }
 .receipt-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 14px 18px; background: var(--panel); }
 .receipt-foot .facts { font-family: var(--font-mono); font-size: 11px; color: var(--verify); }
 .receipt-foot .actions { display: flex; gap: 8px; }
 .receipt-foot .btn { padding: 6px 12px; font-size: 12.5px; }
+
+/* margin notes: the sources, docked beside the draft like citations in a reviewed document */
+.trace-rail { display: flex; flex-direction: column; gap: 18px; padding-top: 34px; }
+.trace-note {
+  background: var(--panel); border: 1px solid var(--line-strong); border-left: 3px solid var(--verify);
+  border-radius: 10px; padding: 12px 14px 12px 15px; box-shadow: var(--shadow-sm); cursor: default;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.trace-note.on { border-color: var(--verify); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.tn-head { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.tn-head i { font-style: normal; color: var(--verify); }
+.tn-stamp {
+  margin-left: auto; font-family: var(--font-mono); font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--verify); border: 1px solid color-mix(in srgb, var(--verify) 55%, transparent);
+  border-radius: 3px; padding: 1px 5px;
+}
+.tn-quote { font-size: 12px; line-height: 1.5; color: var(--text); margin: 8px 0 6px; }
+.tn-meta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
 
 .lp-section { padding: 96px 0; }
 .lp-section.alt { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -984,36 +1019,27 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-band h2 { font-family: var(--font-display); font-size: clamp(28px, 3.6vw, 37px); font-weight: 700; letter-spacing: -0.02em; }
 .lp-band p { font-size: 16px; color: var(--ink-muted); margin: 16px 0 30px; }
 
-/* hero centerpiece: the product as a floating app window */
-.lp-window {
-  position: relative; z-index: 1; width: min(1040px, 100%);
-  background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); overflow: hidden;
+/* Below ~1100px the margin-note rail can't sit beside the draft: stack the notes
+   under it (two-up), keep the footnote numbers carrying the mapping, drop the lines. */
+/* Narrow screens: draft first, then the two source notes stacked beneath it —
+   footnote numbers keep the mapping once the leader lines are gone. */
+@media (max-width: 1100px) {
+  .trace { grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 28px auto 26px; }
+  .trace-svg { display: none; }
+  .trace > .receipt { order: -1; }
+  .trace-side { padding-top: 0; }
+  .trace-side .trace-note { transform: none; }
 }
-.lpw-chrome { display: flex; align-items: center; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: #fbfbfe; }
-.lpw-chrome span { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
-.lpw-chrome em { margin-left: 10px; font-style: normal; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--muted); }
-/* In the split hero the window sits in a half column: the receipt + evidence
-   rail carry the story, so the mock nav is dropped to give them the room. */
-.lpw-grid { display: grid; grid-template-columns: minmax(0, 1fr) 208px; }
-.lpw-side { display: none; background: var(--ink); padding: 14px 10px; flex-direction: column; gap: 3px; }
-.lpw-brand { margin: 0 0 12px 4px; }
-.lpw-brand .logo { width: 26px; height: 26px; font-size: 13px; }
-.lpw-nav { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; color: var(--ink-muted); font-size: 12.5px; font-weight: 500; }
-.lpw-nav i { font-style: normal; font-family: var(--font-mono); font-size: 9px; }
-.lpw-nav.on { background: var(--ink-2); color: #fff; box-shadow: inset 2px 0 0 var(--signal); }
-.lpw-nav.on i { color: var(--signal); }
-.receipt.in-window { border: none; border-radius: 0; box-shadow: none; }
-.lpw-ev { border-left: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fbfbfe; }
-.lpw-ev-label { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
-.lpw-ev .ev-card { box-shadow: none; }
-@media (max-width: 860px) { .lpw-grid { grid-template-columns: 1fr; } .lpw-side, .lpw-ev { display: none; } }
+@media (max-width: 560px) {
+  .receipt-head { flex-wrap: wrap; row-gap: 4px; }
+}
 
 /* metric strip under the window (the reference's logo-strip slot) */
 /* Metrics: a frosted strip bleeding to the panel's edges — part of the hero,
    not four cards floating in dead space. */
 .lp-metrics {
-  position: relative; z-index: 1; grid-column: 1 / -1; display: flex; flex-wrap: wrap;
+  position: relative; z-index: 1; grid-column: 1 / -1; justify-self: stretch; display: flex; flex-wrap: wrap;
+  max-width: none;   /* exempt from the panel child cap so it bleeds edge-to-edge */
   margin: 26px -52px 0; padding: 20px 40px;
   background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.9);
@@ -1057,7 +1083,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 @media (max-width: 880px) {
   .lp-hero { padding: 12px 12px 0; }
-  .lp-hero-panel { grid-template-columns: 1fr; padding: 36px 24px 0; gap: 32px; }
+  .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 36px 24px 0; gap: 32px; }
   .lp-metrics { margin: 18px -24px 0; padding: 16px 12px; }
   .lp-metrics > div + div { border-left: none; }
   .lp-steps { grid-template-columns: 1fr; }

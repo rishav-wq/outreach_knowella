@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
 import Logo from './Logo'
@@ -14,94 +15,151 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// Signature: a draft that verifies itself on load — each claim highlights, its
-// source tag stamps on, and the header resolves to "quote-verified".
-function VerifyReceipt() {
+// The two cited claims: highlighted phrase in the draft, footnote number, and
+// the margin note (source card) it traces to. One place, so mark/note/line agree.
+const CLAIMS = [
+  {
+    text: 'opened a second distribution hub in Dayton last month',
+    tag: 'news',
+    quote: '“Meridian Logistics opens second Dayton distribution hub.”',
+    meta: 'local news · last month',
+  },
+  {
+    text: 'hiring two operations coordinators there',
+    tag: 'hiring',
+    quote: '“Operations Coordinator (2 openings) — Dayton, OH.”',
+    meta: 'careers page · 11 days ago',
+  },
+]
+
+// Hero signature: the TRACE. A draft whose claims carry footnote markers, with
+// each source docked as a margin note and a hairline leader line drawn from
+// claim to note — the page doing literally what the eyebrow says. Lines are
+// measured from the real DOM (so they survive resize/font-load) and drawn with
+// a pathLength animation; hovering a claim lights its source and vice versa.
+function TracedDraft() {
   const reduce = useReducedMotion()
   const on = (from) => (reduce ? false : from)
-  const claim = (delay) => ({
-    initial: on({ backgroundColor: 'rgba(231,246,240,0)' }),
-    animate: { backgroundColor: 'rgba(231,246,240,1)' },
-    transition: { delay, duration: 0.45, ease: EASE },
-  })
-  const stamp = (delay) => ({
-    initial: on({ opacity: 0, scale: 0.5, rotate: -8 }),
-    animate: { opacity: 1, scale: 1, rotate: 0 },
-    transition: { delay, type: 'spring', stiffness: 520, damping: 17 },
-  })
-  return (
-    <div className="receipt in-window">
-      {!reduce && (
-        <motion.div className="receipt-scan"
-          initial={{ y: '-100%', opacity: 0.9 }} animate={{ y: '400%', opacity: 0 }}
-          transition={{ delay: 0.8, duration: 1.5, ease: 'easeInOut' }} />
-      )}
-      <div className="receipt-head">
-        <b>Draft · Meridian Logistics</b>
-        <span className="receipt-status">
-          <motion.span className="rs-working" initial={on({ opacity: 1 })} animate={{ opacity: 0 }} transition={{ delay: 2.4, duration: 0.3 }}>
-            verifying<span className="rs-dots">…</span>
-          </motion.span>
-          <motion.span className="rs-done" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 2.6, duration: 0.3 }}>
-            <Icon name="check" size={12} /> quote-verified
-          </motion.span>
-        </span>
-      </div>
-      <div className="receipt-body">
-        <div className="receipt-subject">Your new Dayton hub</div>
-        <p style={{ margin: 0 }}>
-          Hi Maria — saw that Meridian{' '}
-          <span className="ev2">
-            <motion.mark {...claim(1.0)}>opened a second distribution hub in Dayton last month</motion.mark>
-            <motion.span className="ev-tag" {...stamp(1.4)}>news</motion.span>
-          </span>{' '}
-          and is{' '}
-          <span className="ev2">
-            <motion.mark {...claim(1.6)}>hiring two operations coordinators there</motion.mark>
-            <motion.span className="ev-tag" {...stamp(2.0)}>hiring</motion.span>
-          </span>.
-          Standing up a second site usually means processes split across spreadsheets —
-          that&apos;s the exact gap we close…
-        </p>
-      </div>
-      <div className="receipt-foot">
-        <motion.span className="facts" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 2.6, duration: 0.4 }}>
-          7 facts · 3 sources
-        </motion.span>
-        <div className="actions">
-          <span className="btn">Edit</span>
-          <span className="btn approve"><Icon name="check" size={13} /> Approve</span>
-        </div>
-      </div>
-    </div>
-  )
-}
+  const wrap = useRef(null)
+  const markRefs = [useRef(null), useRef(null)]
+  const noteRefs = [useRef(null), useRef(null)]
+  const [paths, setPaths] = useState([])
+  const [hot, setHot] = useState(0)   // 0 = none, 1/2 = linked pair highlighted
 
-// The hero centerpiece: the product itself, framed as a floating app window —
-// mini lifecycle sidebar, the self-verifying draft, and the evidence rail.
-function AppWindow() {
-  const reduce = useReducedMotion()
+  useLayoutEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const measure = () => {
+      const c = el.getBoundingClientRect()
+      setPaths(markRefs.map((m, i) => {
+        const a = m.current?.getBoundingClientRect()
+        const b = noteRefs[i].current?.getBoundingClientRect()
+        if (!a || !b) return null
+        // note 1 sits LEFT of the draft, note 2 RIGHT — line runs note-edge to claim-edge
+        const left = i === 0
+        if (left ? a.left <= b.right : b.left <= a.right) return null   // stacked layout: no lines
+        const x1 = (left ? b.right : b.left) - c.left + (left ? 3 : -3)
+        const y1 = b.top + 20 - c.top
+        const x2 = (left ? a.left : a.right) - c.left + (left ? -3 : 3)
+        const y2 = a.top + a.height / 2 - c.top
+        const mx = (x1 + x2) / 2
+        return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`
+      }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (document.fonts?.ready) document.fonts.ready.then(measure).catch(() => {})
+    return () => ro.disconnect()
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // load sequence: claim sweeps → line draws → note lands, one trace at a time
+  const T = (i) => ({ claim: 0.9 + i * 0.9, line: 1.15 + i * 0.9, note: 1.3 + i * 0.9 })
+  const link = (i) => ({
+    onMouseEnter: () => setHot(i + 1), onMouseLeave: () => setHot(0),
+  })
+
+  const claimSpan = (i) => (
+    <span className="ev2" {...link(i)}>
+      <motion.mark ref={markRefs[i]} className={hot === i + 1 ? 'on' : ''}
+        initial={on({ backgroundSize: '0% 100%' })} animate={{ backgroundSize: '100% 100%' }}
+        transition={{ delay: T(i).claim, duration: 0.5, ease: EASE }}>
+        {CLAIMS[i].text}
+      </motion.mark>
+      <sup className="fn">{i + 1}</sup>
+    </span>
+  )
+
   return (
-    <motion.div className="lp-window"
-      initial={reduce ? false : { opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }}
+    <motion.div className="trace" ref={wrap}
+      initial={on({ opacity: 0, y: 26 })} animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15, duration: 0.6, ease: EASE }}>
-      <div className="lpw-chrome"><span /><span /><span /><em>knowella outreach — review</em></div>
-      <div className="lpw-grid">
-        <div className="lpw-side">
-          <div className="lpw-brand"><span className="logo"><Logo /></span></div>
-          {[['01', 'Overview'], ['02', 'Leads'], ['03', 'Review'], ['04', 'Inbox']].map(([n, t]) => (
-            <div key={n} className={`lpw-nav ${t === 'Review' ? 'on' : ''}`}><i>{n}</i>{t}</div>
-          ))}
+      <div className="trace-side left">{note(0)}</div>
+      <div className="receipt">
+        <div className="receipt-head">
+          <b>Draft · Meridian Logistics</b>
+          <span className="receipt-status">
+            <motion.span className="rs-working" initial={on({ opacity: 1 })} animate={{ opacity: 0 }} transition={{ delay: 3.1, duration: 0.3 }}>
+              verifying<span className="rs-dots">…</span>
+            </motion.span>
+            <motion.span className="rs-done" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 3.2, duration: 0.3 }}>
+              <Icon name="check" size={12} /> quote-verified
+            </motion.span>
+          </span>
         </div>
-        <VerifyReceipt />
-        <div className="lpw-ev">
-          <div className="lpw-ev-label">Grounded in 7 verified facts</div>
-          <div className="ev-card"><div className="ev-claim">Opened a second distribution hub in Dayton, announced last month.</div><div className="ev-meta"><span className="src">news</span></div></div>
-          <div className="ev-card"><div className="ev-claim">Hiring two operations coordinators in Dayton, posted 11 days ago.</div><div className="ev-meta"><span className="src">hiring</span></div></div>
+        <div className="receipt-body">
+          <div className="receipt-subject">Your new Dayton hub</div>
+          <p style={{ margin: 0 }}>
+            Hi Maria — saw that Meridian {claimSpan(0)} and is {claimSpan(1)}.
+            Standing up a second site usually means processes split across spreadsheets —
+            that&apos;s the exact gap we close…
+          </p>
+        </div>
+        <div className="receipt-foot">
+          <motion.span className="facts" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 3.2, duration: 0.4 }}>
+            7 facts · 3 sources
+          </motion.span>
+          <div className="actions">
+            <span className="btn">Edit</span>
+            <span className="btn approve"><Icon name="check" size={13} /> Approve</span>
+          </div>
         </div>
       </div>
+
+      <div className="trace-side right">{note(1)}</div>
+      <svg className="trace-svg" aria-hidden="true">
+        {paths.map((d, i) => (d &&
+          <motion.path key={i} d={d} className={hot === i + 1 ? 'on' : ''}
+            initial={on({ pathLength: 0 })} animate={{ pathLength: 1 }}
+            transition={{ delay: T(i).line, duration: 0.45, ease: EASE }} />
+        ))}
+      </svg>
     </motion.div>
   )
+
+  function note(i) {
+    const cl = CLAIMS[i]
+    // entrance animates an outer wrapper so the note's CSS tilt + hover lift
+    // (inline transforms would clash with framer's) stay on the card itself
+    return (
+      <motion.div key={cl.tag}
+        initial={on({ opacity: 0, x: i === 0 ? -10 : 10 })} animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: T(i).note, duration: 0.4, ease: EASE }}>
+        <div ref={noteRefs[i]} {...link(i)} className={`trace-note ${hot === i + 1 ? 'on' : ''}`}>
+          <div className="tn-head">
+            <i>[{i + 1}]</i> {cl.tag}
+            <motion.span className="tn-stamp"
+              initial={on({ opacity: 0, scale: 0.5, rotate: -10 })} animate={{ opacity: 1, scale: 1, rotate: -3 }}
+              transition={{ delay: T(i).note + 0.15, type: 'spring', stiffness: 520, damping: 17 }}>
+              verified
+            </motion.span>
+          </div>
+          <div className="tn-quote">{cl.quote}</div>
+          <div className="tn-meta">{cl.meta}</div>
+        </div>
+      </motion.div>
+    )
+  }
 }
 
 export default function Landing({ onLaunch }) {
@@ -131,16 +189,17 @@ export default function Landing({ onLaunch }) {
       <header className="lp-hero">
         <div className="lp-hero-panel">
           <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-text">
-            <div className="lp-pill"><span className="lp-pill-dot" /> AI-researched outreach for B2B teams</div>
-            <h1>Cold outreach that&apos;s <span className="hl">researched, not&nbsp;guessed</span>.</h1>
+            <div className="lp-eyebrow-hero">Every claim traced to a real source</div>
+            <h1>Cold outreach that&apos;s researched, <span className="hl">not&nbsp;guessed</span>.</h1>
             <p>Every lead researched against real sources. Every claim quote-verified. Every send approved by you — then followed up automatically until they reply.</p>
-            <div className="lp-cta">
-              <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
-              <a className="btn lg" href="#how">See how it works</a>
-            </div>
           </motion.div>
 
-          <AppWindow />
+          <TracedDraft />
+
+          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.45, duration: 0.5, ease: EASE } })} className="lp-cta lp-cta-hero">
+            <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
+            <a className="btn lg" href="#how">See how it works →</a>
+          </motion.div>
 
           <motion.div {...fade} className="lp-metrics">
             <div><b>12+</b><span>verified facts per lead</span></div>
