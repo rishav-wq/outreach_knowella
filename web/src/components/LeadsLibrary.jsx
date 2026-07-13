@@ -7,10 +7,11 @@ import { stagger } from './anim'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
-// The leads library: the BENCH of leads removed from campaigns ("Not a fit"), kept
-// for reuse rather than deleted. Active leads stay in their campaign's Leads tab —
-// only removed ones collect here, so this never duplicates the working set. Grouped
-// by persona bucket (from title) and topic (from the campaign they came in on).
+// The master leads library: every lead we've EVER pulled, across all campaigns —
+// kept forever (excluding a lead from a campaign never deletes it, just marks it
+// "not a fit"), grouped by persona bucket (from title) and topic (from the campaign
+// it came in on) so the whole pool is reusable for future marketing. The per-campaign
+// Leads tab shows one campaign's working set; this shows everything.
 export default function LeadsLibrary() {
   const [data, setData] = useState(null)   // { leads, function_labels }
   const [q, setQ] = useState('')
@@ -56,8 +57,8 @@ export default function LeadsLibrary() {
       <div className="lib-head">
         <div>
           <div className="dash-eyebrow">Leads library</div>
-          <div className="lib-title">{leads.length.toLocaleString()} <small>removed {leads.length === 1 ? 'lead' : 'leads'} kept for reuse</small></div>
-          <p className="dash-sub">Leads you marked “Not a fit” and pulled from a campaign — saved here, grouped by role and topic, so you can reuse them in future marketing. Nothing you pull is ever deleted.</p>
+          <div className="lib-title">{leads.length.toLocaleString()} <small>leads across {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}</small></div>
+          <p className="dash-sub">Every lead you’ve ever pulled, across all campaigns — grouped by role and topic so the whole pool is reusable for future marketing. Removing a lead from a campaign marks it “not a fit” but never drops it from here.</p>
         </div>
       </div>
 
@@ -85,13 +86,13 @@ export default function LeadsLibrary() {
 
       {shown.length === 0 ? (
         <div className="empty" style={{ marginTop: 20 }}>
-          <p className="muted">{leads.length === 0 ? 'No removed leads yet — when you mark a lead “Not a fit” in Review, it lands here for future use.' : 'No leads match these filters.'}</p>
+          <p className="muted">{leads.length === 0 ? 'No leads yet — pull some from a campaign and they’ll collect here.' : 'No leads match these filters.'}</p>
         </div>
       ) : (
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th></th><th>Name</th><th>Title</th><th>Company</th><th>Role</th><th>Topics</th><th>Removed from</th></tr>
+              <tr><th></th><th>Name</th><th>Title</th><th>Company</th><th>Role</th><th>Topics</th><th>Campaign</th><th>Status</th></tr>
             </thead>
             <motion.tbody variants={stagger} initial="hidden" animate="show">
               {shown.map((l) => (
@@ -108,6 +109,7 @@ export default function LeadsLibrary() {
                     </div>
                   </td>
                   <td className="muted">{l.campaign || '—'}</td>
+                  <td>{l.status === 'excluded' ? <span className="badge s-dropped">not a fit</span> : <span className={`badge s-${l.status}`}>{l.status}</span>}</td>
                 </motion.tr>
               ))}
             </motion.tbody>

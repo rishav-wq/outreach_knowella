@@ -742,10 +742,10 @@ def exclude_lead(r: ExcludeReq):
 
 @app.get("/api/leads/all")
 def all_leads():
-    """The leads library: the bench of leads REMOVED from campaigns (status=excluded)
-    but kept for reuse — with each one's persona bucket (from title) and topic tags
-    (from the campaign it came in on). Active leads live in their campaign's Leads tab;
-    only removed ones collect here, so the library never duplicates that working set."""
+    """The master leads library: every lead ever pulled, across ALL campaigns, with its
+    persona bucket (from title) and topic tags (from the campaign it came in on). Leads
+    are never deleted — excluding one from a campaign only clears its drafts and marks it
+    'not a fit', but it stays here. The Leads tab is per-campaign; this is the whole pool."""
     store = open_store()
     _topic_cache: dict[str, list] = {}   # campaign slug -> topics, so we read each config once
 
@@ -759,7 +759,7 @@ def all_leads():
                 _topic_cache[campaign] = []
         return _topic_cache[campaign]
 
-    rows = store.all_leads("excluded")
+    rows = store.all_leads()
     for row in rows:
         row["function"] = tagging.function_of(row.get("title", ""))
         row["topics"] = topics_for(row.get("campaign", ""), row.get("topics") or [])
