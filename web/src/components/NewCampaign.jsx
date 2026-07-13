@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
@@ -84,11 +84,26 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
   }
   const setKey = (k, v) => setF((p) => ({ ...p, [k]: v }))
 
+  // Unsaved-changes guard: snapshot the form once it's settled (on mount for new
+  // campaigns, after the config loads for edits) and require a confirm before any
+  // close path — Escape, scrim click, ✕ — discards edits. A stray click outside
+  // the modal must never eat typed-in work.
+  const baseline = useRef(null)
+  const [confirmClose, setConfirmClose] = useState(false)
+  useEffect(() => { if (!isEdit) baseline.current = JSON.stringify(f) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const requestClose = () => {
+    if (busy) return                    // mid-save: never abandon silently
+    if (confirmClose) { setConfirmClose(false); return }
+    if (baseline.current !== null && JSON.stringify(f) !== baseline.current) setConfirmClose(true)
+    else onClose()
+  }
+  const requestCloseRef = useRef(requestClose)
+  requestCloseRef.current = requestClose
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e) => { if (e.key === 'Escape') requestCloseRef.current() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
   useEffect(() => {
     api.getMailboxes().then((d) => setMailboxes(d.mailboxes || [])).catch(() => {})
     api.getSequences().then((d) => setSequences(d.sequences || [])).catch(() => {})
@@ -119,7 +134,10 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
     api.getCampaignConfig(edit).then((cfg) => {
       const icp = cfg.icp || {}, ap = cfg.apollo || {}, offer = cfg.offer || {}
       const voice = cfg.voice || {}, verify = cfg.verify || {}, send = cfg.sending || {}
-      setF((p) => ({
+      setF((p) => next(p))
+      // snapshot AFTER the prefill so the loaded values are the clean state
+      setF((p) => { baseline.current = JSON.stringify(p); return p })
+      function next(p) { return ({
         ...p,
         name: cfg.name || edit,
         product: offer.product || '', one_liner: offer.one_liner || '',
@@ -150,7 +168,7 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
         rules: (voice.rules || []).join('\n') || p.rules,
         block_risky: !!verify.block_risky, require_deliverable: !!verify.require_deliverable,
         max_facts: (cfg.research || {}).max_facts || 12,
-      }))
+      }) }
     }).catch(() => setError('Could not load this campaign’s settings.'))
   }, [isEdit, edit])
 
@@ -396,14 +414,26 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
     : (Number(f.pull_limit) > 0 ? `Create & pull ${f.pull_limit}` : 'Create campaign')
 
   return (
-    <motion.div className="modal-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.div className="modal-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={requestClose}>
       <motion.div className="wizard" role="dialog" aria-label="New campaign" onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
         transition={{ type: 'spring', stiffness: 380, damping: 34 }}>
         <div className="wizard-head">
           <div className="wizard-title">{isEdit ? `Edit campaign · ${edit}` : 'New campaign'}</div>
-          <button className="icon-btn wizard-close" onClick={onClose} aria-label="Close"><Icon name="x" size={18} /></button>
+          <button className="icon-btn wizard-close" onClick={requestClose} aria-label="Close"><Icon name="x" size={18} /></button>
         </div>
+        {confirmClose && (
+          <div className="confirm-scrim" onClick={() => setConfirmClose(false)}>
+            <div className="confirm-box" role="alertdialog" aria-label="Unsaved changes" onClick={(e) => e.stopPropagation()}>
+              <div className="confirm-title">Discard unsaved changes?</div>
+              <p className="confirm-text">You’ve made changes since opening this {isEdit ? 'campaign' : 'form'}. Closing now throws them away.</p>
+              <div className="confirm-actions">
+                <button className="btn primary" autoFocus onClick={() => setConfirmClose(false)}>Keep editing</button>
+                <button className="btn confirm-discard" onClick={onClose}>Discard changes</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="wizard-steps">
           {STEPS.map((s, i) => (
             <button key={s} className={`wizard-step ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`}
