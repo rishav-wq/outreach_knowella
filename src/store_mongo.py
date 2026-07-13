@@ -26,12 +26,42 @@ class MongoStore:
         self.db = self.client[db_name]
 
     # --- leads ---------------------------------------------------------------
-    def upsert_lead(self, lead: Lead, campaign: str) -> None:
+    def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None) -> None:
         self.db.leads.update_one(
             {"_id": lead.key},
-            {"$setOnInsert": {"campaign": campaign, "status": "new", "lead": lead.model_dump()}},
+            {"$setOnInsert": {"campaign": campaign, "status": "new", "lead": lead.model_dump(),
+                              "topics": topics or []}},
             upsert=True,
         )
+
+    def all_leads(self, status: str | None = None) -> list[dict]:
+        """Lead summaries across all campaigns, optionally filtered by status.
+
+        The library passes status='excluded' — the bench of leads removed from
+        campaigns (never deleted, only flipped to 'excluded' with drafts cleared),
+        kept for reuse. Returns raw rows; the API adds function bucket + topics.
+        """
+        q = {"status": status} if status else {}
+        out = []
+        for d in self.db.leads.find(q):
+            lead = Lead.model_validate(d["lead"])
+            out.append({"key": d["_id"], "campaign": d.get("campaign", ""),
+                        "status": d.get("status", ""), "topics": d.get("topics") or [],
+                        "name": lead.full_name, "title": lead.title, "company": lead.company,
+                        "email": lead.email, "source": lead.source})
+        return out
+
+    def exclude_lead(self, key: str) -> None:
+        """Drop a lead from its campaign's pipeline without losing the lead.
+
+        Clears the campaign-specific generated work (drafts/follow-ups in the
+        outbox + the review decision) and flips status to 'excluded' so it leaves
+        Review and is skipped by the pipeline — but the lead row and its cached
+        research stay, so it remains in the library for future marketing.
+        """
+        self.db.leads.update_one({"_id": key}, {"$set": {"status": "excluded"}})
+        self.db.outbox.delete_one({"_id": key})
+        self.db.reviews.delete_one({"_id": key})
 
     def set_status(self, key: str, status: str) -> None:
         self.db.leads.update_one({"_id": key}, {"$set": {"status": status}})

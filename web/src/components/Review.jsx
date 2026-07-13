@@ -113,6 +113,18 @@ export default function Review({ campaign }) {
     try { await api.decide(campaign, key, decision) } catch { load() }
   }, [current, items, campaign])
 
+  const [excluding, setExcluding] = useState(false)   // key pending exclude-confirm
+
+  // remove a not-a-fit lead from the campaign entirely (drafts cleared), keeping
+  // it in the master library. Distinct from Reject, which keeps it in-campaign.
+  const doExclude = async () => {
+    const key = current.key
+    setExcluding(false)
+    setItems((prev) => prev.filter((it) => it.key !== key))   // drop from the queue
+    setI((idx) => Math.max(0, Math.min(idx, (items?.length || 1) - 2)))
+    try { await api.excludeLead(campaign, key) } catch { load() }
+  }
+
   const saveEdit = async () => {
     const key = current.key
     await api.editEmail(campaign, key, eSubject, eBody)
@@ -165,7 +177,7 @@ export default function Review({ campaign }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [view, current, total, editing, decide])
 
-  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr(''); setRefineText(''); setRefineErr('') }, [i])
+  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr(''); setRefineText(''); setRefineErr(''); setExcluding(false) }, [i])
 
   const sendApproved = async () => {
     if (!window.confirm(`Send ${approvedCount} approved ${approvedCount === 1 ? 'email' : 'emails'} through Apollo? This is the real send.`)) return
@@ -367,10 +379,23 @@ export default function Review({ campaign }) {
                 {refineErr && <div className="ready-err">{refineErr}</div>}
                 <div className="rq-actions">
                   <span className="rq-keys">A approve · R reject · E edit · J/K move</span>
+                  <button className="btn exclude-btn" onClick={() => setExcluding(true)}
+                    title="Not a fit — remove from this campaign (kept in the leads library)">Not a fit</button>
                   <button className="btn" onClick={startEdit}>Edit</button>
                   <button className="btn reject" onClick={() => decide('reject')}><Icon name="x" size={15} /> Reject</button>
                   <button className="btn approve stamp" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
                 </div>
+                {excluding && (
+                  <div className="exclude-confirm">
+                    <div className="exclude-confirm-text">
+                      Remove <b>{current.name}</b> from <b>{campaign}</b>? Its draft and follow-ups are deleted and it won’t be emailed in this campaign — but the lead stays in your leads library for future use.
+                    </div>
+                    <div className="exclude-confirm-actions">
+                      <button className="btn" onClick={() => setExcluding(false)}>Keep in campaign</button>
+                      <button className="btn reject" onClick={doExclude}><Icon name="x" size={14} /> Remove lead</button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </main>

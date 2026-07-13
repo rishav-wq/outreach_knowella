@@ -138,6 +138,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .nav-item .nav-count { background: var(--ink-3); color: var(--ink-text); }
 .nav-item .nav-count.hot { background: var(--signal); color: #fff; }
 .nav-op { margin-top: 14px; border-top: 1px solid var(--ink-2); border-radius: 0; padding-top: 14px; }
+/* consecutive operational items (Library, Settings) share ONE divider, not stacked ones */
+.nav-op + .nav-op { margin-top: 0; border-top: none; padding-top: 2px; }
 
 /* topbar instrument register: live send state, always visible */
 .register { display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
@@ -319,6 +321,25 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .seed-btn:hover { border-color: var(--signal); color: var(--signal-deep); }
 .seed-btn.on { background: var(--signal-tint); border-color: var(--signal-line); color: var(--signal-deep); font-weight: 600; }
+
+/* ---------- master leads library ---------- */
+.lib-head { margin-bottom: 20px; }
+.lib-title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.lib-title small { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.lib-filters { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.lib-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.lib-chips .chip { display: inline-flex; align-items: center; gap: 7px; }
+.chip-n { font-family: var(--font-mono); font-size: 10.5px; background: rgba(0, 0, 0, 0.06); border-radius: 999px; padding: 1px 6px; }
+.chip.on .chip-n { background: rgba(255, 255, 255, 0.5); }
+.lib-filters-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lib-topics { display: flex; gap: 5px; flex-wrap: wrap; }
+.topic-tag { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); background: #f0f1ec; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+/* persona buckets: teal=safety (our core), purple=supply chain, blue=ops, grey=other */
+.fn-tag { display: inline-block; font-family: var(--font-mono); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.fn-safety { background: var(--verify-tint); color: var(--verify); }
+.fn-supply_chain { background: var(--signal-tint); color: var(--signal-deep); }
+.fn-operations { background: var(--info-tint); color: var(--info); }
+.fn-other { background: #eceee9; color: var(--muted); }
 
 .avatar {
   width: 30px; height: 30px; border-radius: 8px; background: var(--ink); color: var(--signal);
@@ -525,6 +546,12 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .ai-tweak-input::placeholder { color: var(--muted); }
 .rq-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 6px; }
 .rq-keys { margin-right: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.03em; }
+/* "Not a fit" — quieter than Reject; it removes the lead from the campaign entirely */
+.btn.exclude-btn { color: var(--muted); border-style: dashed; }
+.btn.exclude-btn:hover { color: var(--alert); border-color: var(--alert); background: var(--alert-tint); border-style: solid; }
+.exclude-confirm { margin-top: 12px; padding: 14px 15px; border: 1px solid #e3b6b1; background: var(--alert-tint); border-radius: var(--radius-sm); }
+.exclude-confirm-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.exclude-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
 .rq-evidence { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 18px 18px 4px; overflow-y: auto; }
 .rq-noev { font-size: 13px; line-height: 1.55; }

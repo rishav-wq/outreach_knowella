@@ -6,6 +6,7 @@ import Logo from './components/Logo'
 import Dashboard from './components/Dashboard'
 import Review from './components/Review'
 import Leads from './components/Leads'
+import LeadsLibrary from './components/LeadsLibrary'
 import Inbox from './components/Inbox'
 import Settings from './components/Settings'
 import NewCampaign from './components/NewCampaign'
@@ -20,6 +21,8 @@ const NAV = [
   { id: 'Leads', slug: 'leads', icon: 'users', step: '02' },
   { id: 'Review', slug: 'review', icon: 'check', step: '03' },
   { id: 'Inbox', slug: 'inbox', icon: 'inbox', step: '04' },
+  // Library + Settings sit outside the per-campaign lifecycle — cross-campaign / operational, unnumbered.
+  { id: 'Library', slug: 'library', icon: 'list' },
   { id: 'Settings', slug: 'settings', icon: 'gear' },
 ]
 const slugToId = (slug) => (NAV.find((n) => n.slug === slug) || NAV[0]).id
@@ -76,6 +79,7 @@ export default function App({ onHome }) {
     if (tab === 'Leads') return <Leads campaign={campaign} onNavigate={setTab} />
     if (tab === 'Review') return <Review campaign={campaign} />
     if (tab === 'Inbox') return <Inbox campaign={campaign} />
+    if (tab === 'Library') return <LeadsLibrary />
     if (tab === 'Settings') return <Settings campaign={campaign} />
     return null
   }

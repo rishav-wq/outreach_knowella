@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, config, pipeline
+from . import auth, config, pipeline, tagging
 from .engine import classify, personalize
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich
 from .store import open_store
@@ -722,6 +722,50 @@ def decide(d: Decision):
     return {"key": d.key, "decision": val}
 
 
+class ExcludeReq(BaseModel):
+    campaign: str
+    key: str
+
+
+@app.post("/api/review/exclude")
+def exclude_lead(r: ExcludeReq):
+    """Drop a not-a-fit lead from this campaign: clears its drafts + review state and
+    removes it from the pipeline, but KEEPS the lead (and its research) in the master
+    library for future marketing. Not the same as reject, which keeps it in-campaign."""
+    _load(r.campaign)
+    store = open_store()
+    if not store.get_lead(r.key):
+        raise HTTPException(404, "lead not found")
+    store.exclude_lead(r.key)
+    return {"key": r.key, "status": "excluded"}
+
+
+@app.get("/api/leads/all")
+def all_leads():
+    """The leads library: the bench of leads REMOVED from campaigns (status=excluded)
+    but kept for reuse — with each one's persona bucket (from title) and topic tags
+    (from the campaign it came in on). Active leads live in their campaign's Leads tab;
+    only removed ones collect here, so the library never duplicates that working set."""
+    store = open_store()
+    _topic_cache: dict[str, list] = {}   # campaign slug -> topics, so we read each config once
+
+    def topics_for(campaign: str, stored: list) -> list:
+        if stored:
+            return stored
+        if campaign not in _topic_cache:
+            try:
+                _topic_cache[campaign] = tagging.topics_of(_load(campaign))
+            except Exception:
+                _topic_cache[campaign] = []
+        return _topic_cache[campaign]
+
+    rows = store.all_leads("excluded")
+    for row in rows:
+        row["function"] = tagging.function_of(row.get("title", ""))
+        row["topics"] = topics_for(row.get("campaign", ""), row.get("topics") or [])
+    return {"leads": rows, "function_labels": tagging.FUNCTION_LABELS}
+
+
 class LeadEmail(BaseModel):
     campaign: str
     key: str
@@ -811,6 +855,7 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
     with open(tmp, "wb") as f:
         f.write(data)
     leads_in = csv_source.from_csv(tmp)
+    topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
     skipped = 0
     for lead in leads_in:
         lead.source = source
@@ -821,7 +866,7 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
-        store.upsert_lead(lead, cfg["name"])
+        store.upsert_lead(lead, cfg["name"], topics)
     return {"pulled": len(leads_in) - skipped, "suppressed": skipped, "counts": store.counts(cfg["name"])}
 
 
@@ -915,6 +960,7 @@ def pull_apollo(r: ApolloPull):
         leads_in, credits = apollo.fetch_leads(cfg, limit=min(max(r.limit, 1), 2000), known_ids=known_ids)
     except Exception as e:
         raise HTTPException(400, str(e))
+    topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
     skipped = 0
     for lead in leads_in:
         lead.source = "apollo"
@@ -925,7 +971,7 @@ def pull_apollo(r: ApolloPull):
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
-        store.upsert_lead(lead, cfg["name"])
+        store.upsert_lead(lead, cfg["name"], topics)
     return {"pulled": len(leads_in) - skipped, "suppressed": skipped,
             "credits_used": credits, "counts": store.counts(cfg["name"])}
 

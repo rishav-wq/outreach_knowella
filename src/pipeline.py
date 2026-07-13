@@ -245,6 +245,9 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
         # back to the head of the list (cheap cached re-run) if none are new.
         fresh = store.leads(cfg["name"], "new")
         leads = (fresh or leads)[:limit]
+    # leads excluded in review are kept for the library but never re-processed/sent
+    excluded = {l.key for l in store.leads(cfg["name"], "excluded")}
+    leads = [l for l in leads if l.key not in excluded]
     results = []
     for lead in leads:
         try:

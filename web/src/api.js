@@ -48,6 +48,10 @@ export const createSequence = (name, waits) => apiSend('/api/sequences/create', 
 export const setMailbox = (campaign, mailbox_id) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_id })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
+// exclude a not-a-fit lead: clears its drafts + drops it from the campaign, but keeps it in the library
+export const excludeLead = (campaign, key) => apiSend('/api/review/exclude', 'POST', { campaign, key })
+// master leads library: every lead across all campaigns, with function bucket + topic tags
+export const getAllLeads = () => apiGet('/api/leads/all')
 export const setLeadEmail = (campaign, key, email) => apiSend('/api/lead/email', 'POST', { campaign, key, email })
 export const editEmail = (campaign, key, subject, body) => apiSend('/api/review/edit', 'POST', { campaign, key, subject, body })
 export const refineEmail = (campaign, key, instruction) => apiSend('/api/review/refine', 'POST', { campaign, key, instruction })
