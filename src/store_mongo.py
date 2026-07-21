@@ -25,6 +25,29 @@ class MongoStore:
             raise RuntimeError(f"Could not connect to MongoDB: {e}") from e
         self.db = self.client[db_name]
 
+    # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
+    # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.
+    # This replaces the old config/*.yaml files, which were baked into the image
+    # and lost on every `--build` redeploy.
+    def campaign_names(self) -> list[str]:
+        return sorted(d["_id"] for d in self.db.campaigns.find({}, {"_id": 1}))
+
+    def get_campaign(self, slug: str) -> dict | None:
+        d = self.db.campaigns.find_one({"_id": slug})
+        return d["cfg"] if d else None
+
+    def save_campaign(self, slug: str, cfg: dict) -> None:
+        self.db.campaigns.replace_one({"_id": slug}, {"_id": slug, "cfg": cfg}, upsert=True)
+
+    def delete_campaign(self, slug: str) -> None:
+        self.db.campaigns.delete_one({"_id": slug})
+
+    def campaign_exists(self, slug: str) -> bool:
+        return self.db.campaigns.count_documents({"_id": slug}, limit=1) > 0
+
+    def has_any_campaign(self) -> bool:
+        return self.db.campaigns.count_documents({}, limit=1) > 0
+
     # --- leads ---------------------------------------------------------------
     def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None) -> None:
         self.db.leads.update_one(

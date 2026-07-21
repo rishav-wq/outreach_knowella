@@ -45,6 +45,8 @@ export const renameCampaign = (campaign, new_name) => apiSend('/api/campaign/ren
 export const getMailboxes = (c) => apiGet(`/api/mailboxes${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
 export const getSequences = (c) => apiGet(`/api/sequences${c ? `?campaign=${encodeURIComponent(c)}` : ''}`)
 export const createSequence = (name, waits) => apiSend('/api/sequences/create', 'POST', { name, waits })
+// delete a campaign's config (its leads stay in the DB / Library)
+export const deleteCampaign = (campaign) => apiSend('/api/campaign/delete', 'POST', { campaign })
 export const setMailbox = (campaign, mailbox_id) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_id })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })

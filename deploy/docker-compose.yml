@@ -9,6 +9,12 @@ services:
     restart: unless-stopped
     expose:
       - "7860"
+    # Campaigns are written as config/*.yaml at runtime. Without this volume a
+    # `--build` redeploy discards the container layer and resets campaigns to only
+    # the ones committed in the repo. The named volume seeds from the image's
+    # /app/config on first create, then PERSISTS every campaign across redeploys.
+    volumes:
+      - config_data:/app/config
 
   # Caddy terminates HTTPS with an automatic Let's Encrypt cert.
   # Point your domain's A record at this VM, set DOMAIN below (or in the shell).
@@ -30,3 +36,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  config_data:     # campaign YAMLs — survives redeploys (see app.volumes above)

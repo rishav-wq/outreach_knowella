@@ -45,8 +45,9 @@ const sequenceOf = (f) => ({
   })),
 })
 
-export default function NewCampaign({ onClose, onCreated, edit }) {
+export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
   const isEdit = !!edit
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
@@ -448,6 +449,10 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
         </div>
         <div className="wizard-foot">
           {step > 0 && <button className="btn" onClick={() => setStep(step - 1)} disabled={busy}>Back</button>}
+          {isEdit && step === 0 && (
+            <button className="btn wizard-delete" disabled={busy} onClick={() => setConfirmDelete(true)}
+              title="Delete this campaign (its leads stay in the Library)">Delete campaign</button>
+          )}
           <span style={{ flex: 1 }} />
           {busy && status && <span className="muted" style={{ marginRight: 10 }}>{status}</span>}
           {!isLast
@@ -456,6 +461,21 @@ export default function NewCampaign({ onClose, onCreated, edit }) {
                 {busy ? <><span className="spinner" /> Working…</> : createLabel}
               </button>}
         </div>
+        {confirmDelete && (
+          <div className="confirm-scrim" onClick={() => setConfirmDelete(false)}>
+            <div className="confirm-box" role="alertdialog" onClick={(e) => e.stopPropagation()}>
+              <div className="confirm-title">Delete “{edit}”?</div>
+              <p className="confirm-text">The campaign and its settings are removed. Its leads are <b>not</b> deleted — they stay in your Library and can be reused. This can’t be undone.</p>
+              <div className="confirm-actions">
+                <button className="btn" onClick={() => setConfirmDelete(false)}>Keep campaign</button>
+                <button className="btn confirm-discard" onClick={async () => {
+                  try { await api.deleteCampaign(edit); setConfirmDelete(false); onDeleted?.(edit) }
+                  catch (e) { setError(`Could not delete: ${e.message || e}`); setConfirmDelete(false) }
+                }}>Delete campaign</button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   )

@@ -175,6 +175,17 @@ export default function App({ onHome }) {
           <NewCampaign
             edit={wizard === 'edit' ? campaign : undefined}
             onClose={() => setWizard(false)}
+            onDeleted={(slug) => {
+              setWizard(false)
+              // drop it from the list and select another campaign
+              setCampaigns((cs) => {
+                const rest = (cs || []).filter((c) => c !== slug)
+                setCampaign(rest[0] || '')
+                return rest
+              })
+              api.getCampaigns().then(setCampaigns).catch(() => {})
+              setTab('Overview')
+            }}
             onCreated={(slug) => {
               const wasEdit = wizard === 'edit'
               setWizard(false)

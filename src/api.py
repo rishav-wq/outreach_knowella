@@ -43,20 +43,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONFIG_DIR = "config"
+CONFIG_DIR = "config"   # legacy seed source (committed campaigns + the CLI); runtime campaigns now live in Mongo
 _runs: dict = {}  # campaign -> {running, error, summary}
+_seeded = False   # one-time file→Mongo migration guard (per process)
+REQUIRED_KEYS = ("name", "icp", "offer", "voice")
 
 
-def _campaign_path(name: str) -> str:
-    path = os.path.join(CONFIG_DIR, f"{name}.yaml")
-    if not os.path.exists(path):
-        raise HTTPException(404, f"campaign '{name}' not found")
-    return path
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+
+
+def _seed_campaigns_once(store) -> None:
+    """One-time migration: if Mongo has NO campaigns yet, import any committed
+    config/*.yaml so an existing deployment doesn't come up empty. Runs at most
+    once per process and never overwrites — afterward Mongo is the source of truth
+    (deletes stick; new files are not auto-imported)."""
+    global _seeded
+    if _seeded:
+        return
+    _seeded = True
+    try:
+        if store.has_any_campaign():
+            return
+        for f in sorted(glob.glob(os.path.join(CONFIG_DIR, "*.yaml"))):
+            slug = os.path.splitext(os.path.basename(f))[0]
+            if slug.endswith(".example"):
+                continue
+            with open(f, encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh) or {}
+            cfg.setdefault("name", slug)
+            store.save_campaign(slug, cfg)
+    except Exception:
+        pass   # seeding is best-effort; never block the app on it
 
 
 def _load(name: str) -> dict:
-    config.load_env()
-    return config.load_campaign(_campaign_path(name))
+    """The campaign config, from Mongo (durable), validated + defaulted."""
+    store = open_store()
+    _seed_campaigns_once(store)
+    cfg = store.get_campaign(name)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{name}' not found")
+    missing = [k for k in REQUIRED_KEYS if k not in cfg]
+    if missing:
+        raise HTTPException(500, f"campaign '{name}' is missing required keys: {missing}")
+    for k, default in (("knowledge", []), ("models", {}), ("sending", {}),
+                       ("research", {}), ("verify", {}), ("apollo", {}), ("experiment", {})):
+        cfg.setdefault(k, default)
+    return cfg
+
+
+def _require_campaign(name: str) -> None:
+    """404 if the campaign doesn't exist — for endpoints that don't need the cfg."""
+    if not open_store().campaign_exists(name):
+        raise HTTPException(404, f"campaign '{name}' not found")
 
 
 @app.get("/api/health")
@@ -66,10 +106,9 @@ def health():
 
 @app.get("/api/campaigns")
 def campaigns():
-    # *.example.yaml is a documented template, not a runnable campaign — hide it.
-    files = glob.glob(os.path.join(CONFIG_DIR, "*.yaml"))
-    names = [os.path.splitext(os.path.basename(f))[0] for f in sorted(files)]
-    return [n for n in names if not n.endswith(".example")]
+    store = open_store()
+    _seed_campaigns_once(store)
+    return store.campaign_names()
 
 
 class CampaignCreate(BaseModel):
@@ -89,11 +128,11 @@ class CampaignCreate(BaseModel):
 @app.post("/api/campaigns")
 def create_campaign(c: CampaignCreate):
     """Create a campaign config from the wizard. The slug is both filename and store key."""
-    slug = re.sub(r"[^a-z0-9]+", "-", c.name.lower()).strip("-")
+    slug = _slug(c.name)
     if not slug:
         raise HTTPException(400, "campaign name must contain letters or numbers")
-    path = os.path.join(CONFIG_DIR, f"{slug}.yaml")
-    if os.path.exists(path):
+    store = open_store()
+    if store.campaign_exists(slug):
         raise HTTPException(409, f"campaign '{slug}' already exists")
     cfg = {
         "name": slug,
@@ -120,9 +159,7 @@ def create_campaign(c: CampaignCreate):
         "signature": "Sid Singh\nFounder & CEO\n+1.604.970.8236\nsid@knowella.com\nKnowella AI Inc.",
         "opt_out_line": 'If this isn\'t relevant, reply "no thanks" and I won\'t email again.',
     }
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
+    store.save_campaign(slug, cfg)
     return {"created": slug}
 
 
@@ -153,24 +190,24 @@ class CampaignRename(BaseModel):
 
 @app.post("/api/campaign/rename")
 def rename_campaign(r: CampaignRename):
-    """Rename a campaign safely: the slug keys both the config file and every lead
-    record, so this migrates the file AND re-keys the leads in one action."""
-    old_path = _campaign_path(r.campaign)
-    slug = re.sub(r"[^a-z0-9]+", "-", r.new_name.lower()).strip("-")
+    """Rename a campaign safely: the slug keys both the campaign config and every
+    lead record, so this re-saves the config under the new slug AND re-keys the
+    leads in one action, then removes the old campaign doc."""
+    store = open_store()
+    cfg = store.get_campaign(r.campaign)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    slug = _slug(r.new_name)
     if not slug:
         raise HTTPException(400, "campaign name must contain letters or numbers")
     if slug == r.campaign:
         return {"renamed": slug, "leads_moved": 0}
-    new_path = os.path.join(CONFIG_DIR, f"{slug}.yaml")
-    if os.path.exists(new_path):
+    if store.campaign_exists(slug):
         raise HTTPException(409, f"campaign '{slug}' already exists")
-    with open(old_path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
     cfg["name"] = slug
-    with open(new_path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
-    moved = open_store().rename_campaign(r.campaign, slug)
-    os.remove(old_path)
+    store.save_campaign(slug, cfg)
+    moved = store.rename_campaign(r.campaign, slug)   # re-keys the leads
+    store.delete_campaign(r.campaign)
     _runs.pop(r.campaign, None)
     return {"renamed": slug, "leads_moved": moved}
 
@@ -178,9 +215,10 @@ def rename_campaign(r: CampaignRename):
 @app.post("/api/campaign/update")
 def update_campaign(u: CampaignUpdate):
     """Edit a campaign from the Settings screen. Sections replace; sending merges."""
-    path = _campaign_path(u.campaign)
-    with open(path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
+    store = open_store()
+    cfg = store.get_campaign(u.campaign)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{u.campaign}' not found")
     for k in ("icp", "apollo", "offer", "voice", "research", "experiment", "verify", "sequence"):
         v = getattr(u, k)
         if v is not None:
@@ -189,9 +227,25 @@ def update_campaign(u: CampaignUpdate):
         cfg["knowledge"] = u.knowledge
     if u.sending is not None:
         cfg.setdefault("sending", {}).update(u.sending)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
+    store.save_campaign(u.campaign, cfg)
     return cfg
+
+
+class CampaignDelete(BaseModel):
+    campaign: str
+
+
+@app.post("/api/campaign/delete")
+def delete_campaign(r: CampaignDelete):
+    """Delete a campaign's config. Its leads are NOT touched — they stay in the
+    database (visible in the Library) so nothing is lost; only the campaign
+    definition is removed."""
+    store = open_store()
+    if not store.campaign_exists(r.campaign):
+        raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    store.delete_campaign(r.campaign)
+    _runs.pop(r.campaign, None)
+    return {"deleted": r.campaign}
 
 
 # --- sending health: DNS auth (SPF/DKIM/DMARC) + Apollo mailbox scorecards ----
@@ -329,26 +383,19 @@ class MailboxSet(BaseModel):
 
 
 def _set_config_mailbox(name: str, mailbox_id: str, email: str) -> None:
-    """Write sending.mailbox_id into the campaign YAML, preserving the file's
-    layout and comments; the inline comment is refreshed to the new address."""
-    path = _campaign_path(name)
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    comment = f"     # {email}" if email else ""
-    new, n = re.subn(r"(?m)^(\s*)mailbox_id:.*$",
-                     lambda m: f"{m.group(1)}mailbox_id: {mailbox_id}{comment}", text)
-    if n == 0:  # no existing key — fall back to a structured write under sending
-        cfg = yaml.safe_load(text) or {}
-        cfg.setdefault("sending", {})["mailbox_id"] = mailbox_id
-        new = yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(new)
+    """Set sending.mailbox_id on the campaign (in Mongo)."""
+    store = open_store()
+    cfg = store.get_campaign(name)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{name}' not found")
+    cfg.setdefault("sending", {})["mailbox_id"] = mailbox_id
+    store.save_campaign(name, cfg)
 
 
 @app.post("/api/campaign/mailbox")
 def set_campaign_mailbox(m: MailboxSet):
     """Choose which Apollo mailbox this campaign sends from."""
-    _campaign_path(m.campaign)  # 404s if the campaign doesn't exist
+    _require_campaign(m.campaign)  # 404s if the campaign doesn't exist
     match = next((b for b in apollo_send.list_mailboxes() if b["id"] == m.mailbox_id), None)
     if not match:
         raise HTTPException(400, "that mailbox is not one of your Apollo email accounts")
@@ -942,24 +989,23 @@ def toggle_lookalike(r: LookalikeReq):
     Safety-Director-at-a-trucking-co seed returns other trucking safety directors).
     Seeds AND with the campaign's other filters. Stored as {id, label} in the
     config's apollo block; only Apollo-sourced leads carry a person id to seed from."""
-    cfg = _load(r.campaign)
-    lead = open_store().get_lead(r.key)
+    store = open_store()
+    cfg = store.get_campaign(r.campaign)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    lead = store.get_lead(r.key)
     if not lead:
         raise HTTPException(404, "lead not found")
     pid = (lead.raw or {}).get("id")
     if not pid:
         raise HTTPException(400, "this lead has no Apollo person id (only Apollo-pulled leads can seed lookalikes)")
-    path = _campaign_path(r.campaign)
-    with open(path, encoding="utf-8") as f:
-        raw_cfg = yaml.safe_load(f) or {}
-    ap = raw_cfg.setdefault("apollo", {})
+    ap = cfg.setdefault("apollo", {})
     seeds = [s for s in (ap.get("lookalike_seeds") or []) if s.get("id") != pid]
     if r.on:
         label = " · ".join(x for x in (lead.full_name, lead.company) if x) or pid
         seeds.append({"id": pid, "label": label})
     ap["lookalike_seeds"] = seeds
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(raw_cfg, f, sort_keys=False, allow_unicode=True)
+    store.save_campaign(r.campaign, cfg)
     return {"lookalike_seeds": seeds}
 
 
