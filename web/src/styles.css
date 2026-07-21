@@ -354,6 +354,17 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .btn.is-busy { pointer-events: none; opacity: 0.8; }
 .table-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .table-bar .count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+/* bulk-select action bar (Leads grid) */
+.bulk-bar { display: flex; align-items: center; gap: 10px; }
+.bulk-count { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--signal-deep); }
+.bulk-bar .btn { padding: 6px 12px; font-size: 12.5px; }
+.chk-col { width: 34px; text-align: center; }
+.chk-col input { width: 15px; height: 15px; accent-color: var(--signal); cursor: pointer; }
+.table tbody tr.row-sel { background: var(--signal-tint); }
+.bulk-confirm { margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--signal-line); background: var(--signal-tint); border-radius: var(--radius-sm); }
+.bulk-confirm.danger { border-color: #e3b6b1; background: var(--alert-tint); }
+.bulk-confirm-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.bulk-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 .table { width: 100%; border-collapse: collapse; }
 .table th {

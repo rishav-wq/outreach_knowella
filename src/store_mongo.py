@@ -63,6 +63,33 @@ class MongoStore:
         self.db.outbox.delete_one({"_id": key})
         self.db.reviews.delete_one({"_id": key})
 
+    def exclude_leads(self, keys: list[str]) -> int:
+        """Bulk exclude — same as exclude_lead for each key (kept in the library).
+        Returns how many leads were affected."""
+        if not keys:
+            return 0
+        self.db.leads.update_many({"_id": {"$in": keys}}, {"$set": {"status": "excluded"}})
+        self.db.outbox.delete_many({"_id": {"$in": keys}})
+        self.db.reviews.delete_many({"_id": {"$in": keys}})
+        return len(keys)
+
+    def delete_leads(self, keys: list[str]) -> int:
+        """Permanently delete leads and ALL their per-lead data — gone everywhere,
+        including the library. For junk pulls with no reuse value. The global
+        do-not-contact list is NOT touched (compliance outlives any single lead);
+        the email-keyed verify cache is left alone (shared, not per-lead).
+        Returns how many lead rows were removed."""
+        if not keys:
+            return 0
+        q = {"_id": {"$in": keys}}
+        res = self.db.leads.delete_many(q)
+        # all per-lead stage data is keyed by the lead key as _id …
+        for coll in (self.db.outbox, self.db.reviews, self.db.research, self.db.drafts,
+                     self.db.gate, self.db.sends, self.db.meetings, self.db.replies):
+            coll.delete_many(q)
+        self.db.llm_calls.delete_many({"key": {"$in": keys}})   # … except llm_calls, keyed by a `key` field
+        return res.deleted_count
+
     def set_status(self, key: str, status: str) -> None:
         self.db.leads.update_one({"_id": key}, {"$set": {"status": status}})
 

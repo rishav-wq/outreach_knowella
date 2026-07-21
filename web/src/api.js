@@ -52,6 +52,9 @@ export const decide = (campaign, key, decision) => apiSend('/api/review/decision
 export const excludeLead = (campaign, key) => apiSend('/api/review/exclude', 'POST', { campaign, key })
 // master leads library: every lead across all campaigns, with function bucket + topic tags
 export const getAllLeads = () => apiGet('/api/leads/all')
+// bulk: remove selected leads from a campaign (kept in the library) or delete them permanently
+export const bulkExcludeLeads = (campaign, keys) => apiSend('/api/leads/exclude', 'POST', { campaign, keys })
+export const bulkDeleteLeads = (campaign, keys) => apiSend('/api/leads/delete', 'POST', { campaign, keys })
 export const setLeadEmail = (campaign, key, email) => apiSend('/api/lead/email', 'POST', { campaign, key, email })
 export const editEmail = (campaign, key, subject, body) => apiSend('/api/review/edit', 'POST', { campaign, key, subject, body })
 export const refineEmail = (campaign, key, instruction) => apiSend('/api/review/refine', 'POST', { campaign, key, instruction })

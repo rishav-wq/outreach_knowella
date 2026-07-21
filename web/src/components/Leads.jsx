@@ -16,10 +16,13 @@ export default function Leads({ campaign, onNavigate }) {
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
   const [seeds, setSeeds] = useState([]) // lookalike seeds from the campaign config
+  const [sel, setSel] = useState(() => new Set())  // selected lead keys for bulk actions
+  const [confirm, setConfirm] = useState(null)      // 'exclude' | 'delete' | null
+  const [working, setWorking] = useState(false)
 
   const load = () => api.getLeads(campaign).then(setLeads).catch(() => setLeads([]))
   useEffect(() => {
-    setLeads(null); setMsg(null); load()
+    setLeads(null); setMsg(null); setSel(new Set()); setConfirm(null); load()
     api.getCampaignConfig(campaign).then((cfg) => setSeeds((cfg.apollo || {}).lookalike_seeds || [])).catch(() => setSeeds([]))
   }, [campaign])
 
@@ -37,6 +40,35 @@ export default function Leads({ campaign, onNavigate }) {
     } catch (e) {
       setMsg({ kind: 'err', text: `Could not update lookalike seeds: ${e.message || e}` })
     }
+  }
+
+  // multi-select for bulk actions on a pull
+  const toggleSel = (key) => setSel((prev) => {
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
+  const clearSel = () => setSel(new Set())
+
+  // Run a bulk action on the selected leads: 'exclude' keeps them in the library,
+  // 'delete' wipes them everywhere. Both confirm first (delete is irreversible).
+  const runBulk = async (kind) => {
+    const keys = [...sel]
+    setWorking(true); setMsg(null); setConfirm(null)
+    try {
+      if (kind === 'delete') {
+        const r = await api.bulkDeleteLeads(campaign, keys)
+        setMsg({ kind: 'ok', text: `Permanently deleted ${r.deleted} ${r.deleted === 1 ? 'lead' : 'leads'}.` })
+      } else {
+        const r = await api.bulkExcludeLeads(campaign, keys)
+        setMsg({ kind: 'ok', text: `Removed ${r.excluded} ${r.excluded === 1 ? 'lead' : 'leads'} from this campaign — saved to the Library for future marketing.` })
+      }
+      clearSel()
+      await load()
+    } catch (e) {
+      setMsg({ kind: 'err', text: `Bulk action failed: ${e.message || e}` })
+    }
+    setWorking(false)
   }
 
   const pullApollo = async () => {
@@ -121,6 +153,13 @@ export default function Leads({ campaign, onNavigate }) {
   }
 
   const filtered = leads.filter((l) => `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()))
+  const allSelected = filtered.length > 0 && filtered.every((l) => sel.has(l.key))
+  const toggleAll = () => setSel((prev) => {
+    const next = new Set(prev)
+    if (filtered.every((l) => prev.has(l.key))) filtered.forEach((l) => next.delete(l.key))
+    else filtered.forEach((l) => next.add(l.key))
+    return next
+  })
 
   return (
     <div>
@@ -128,16 +167,41 @@ export default function Leads({ campaign, onNavigate }) {
       {msg && <div className={`banner ${msg.kind === 'err' ? 'error' : ''}`}>{msg.text}</div>}
       <div className="table-bar">
         <input className="search" type="search" placeholder="Search name, company, or email" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="count">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
+        {sel.size > 0 ? (
+          <div className="bulk-bar">
+            <span className="bulk-count">{sel.size} selected</span>
+            <button className="btn" disabled={working} onClick={() => setConfirm('exclude')}>Remove from campaign</button>
+            <button className="btn reject" disabled={working} onClick={() => setConfirm('delete')}><Icon name="x" size={14} /> Delete permanently</button>
+            <button className="linklike" onClick={clearSel}>clear</button>
+          </div>
+        ) : (
+          <span className="count">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
+        )}
       </div>
+      {confirm && (
+        <div className={`bulk-confirm ${confirm === 'delete' ? 'danger' : ''}`}>
+          <div className="bulk-confirm-text">
+            {confirm === 'delete'
+              ? <>Permanently delete <b>{sel.size}</b> {sel.size === 1 ? 'lead' : 'leads'}? This removes them everywhere — <b>including the Library</b> — and can’t be undone. Use this only for junk you’ll never market to.</>
+              : <>Remove <b>{sel.size}</b> {sel.size === 1 ? 'lead' : 'leads'} from <b>{campaign}</b>? Their drafts are cleared and they won’t be emailed here — but they’re saved to the Library for future marketing.</>}
+          </div>
+          <div className="bulk-confirm-actions">
+            <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
+            <button className={`btn ${confirm === 'delete' ? 'reject' : 'primary'}`} disabled={working} onClick={() => runBulk(confirm)}>
+              {working ? <><span className="spinner spinner-dark" /> working…</> : (confirm === 'delete' ? 'Delete permanently' : 'Remove from campaign')}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
-            <tr><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
+            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
           </thead>
           <motion.tbody variants={stagger} initial="hidden" animate="show">
             {filtered.map((l) => (
-              <motion.tr key={l.key} variants={rowVar}>
+              <motion.tr key={l.key} variants={rowVar} className={sel.has(l.key) ? 'row-sel' : ''}>
+                <td className="chk-col"><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggleSel(l.key)} /></td>
                 <td><div className="avatar sm">{(l.name || '?').slice(0, 1)}</div></td>
                 <td>{l.name}</td>
                 <td className="muted">{l.title || '—'}</td>

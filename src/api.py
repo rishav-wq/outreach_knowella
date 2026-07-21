@@ -740,6 +740,29 @@ def exclude_lead(r: ExcludeReq):
     return {"key": r.key, "status": "excluded"}
 
 
+class BulkLeadReq(BaseModel):
+    campaign: str
+    keys: list[str]
+
+
+@app.post("/api/leads/exclude")
+def bulk_exclude(r: BulkLeadReq):
+    """Bulk 'not a fit': remove the selected leads from the campaign (drafts cleared,
+    dropped from the pipeline) but KEEP them in the marketing library for reuse."""
+    _load(r.campaign)
+    n = open_store().exclude_leads(r.keys)
+    return {"excluded": n}
+
+
+@app.post("/api/leads/delete")
+def bulk_delete(r: BulkLeadReq):
+    """Permanently delete the selected leads and all their data — gone everywhere,
+    library included. For junk pulls we'll never use, even for marketing. Irreversible."""
+    _load(r.campaign)
+    n = open_store().delete_leads(r.keys)
+    return {"deleted": n}
+
+
 @app.get("/api/leads/all")
 def all_leads():
     """The master leads library: every lead ever pulled, across ALL campaigns, with its
