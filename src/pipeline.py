@@ -8,6 +8,8 @@ crash-safe: unchanged inputs return the stored output without re-paying for it.
 """
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from .engine import personalize, quality_gate
@@ -242,8 +244,16 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     return {"lead": lead, "verdict": "sent", "reason": "pushed", "draft": send_draft}
 
 
+def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool) -> dict:
+    try:
+        return advance(store, lead, cfg, dry_run, require_review)
+    except Exception as e:  # one bad lead must not kill the whole run
+        store.set_status(lead.key, "error")
+        return {"lead": lead, "verdict": "error", "reason": str(e), "draft": None}
+
+
 def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
-        require_review: bool = True) -> list[dict]:
+        require_review: bool = True, max_workers: int | None = None) -> list[dict]:
     leads = store.leads(cfg["name"])
     if limit:
         # Advance a BATCH of not-yet-processed leads first, so "run 25" drafts 25
@@ -254,11 +264,16 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
     # leads excluded in review are kept for the library but never re-processed/sent
     excluded = {l.key for l in store.leads(cfg["name"], "excluded")}
     leads = [l for l in leads if l.key not in excluded]
-    results = []
-    for lead in leads:
-        try:
-            results.append(advance(store, lead, cfg, dry_run, require_review))
-        except Exception as e:  # one bad lead must not kill the whole run
-            store.set_status(lead.key, "error")
-            results.append({"lead": lead, "verdict": "error", "reason": str(e), "draft": None})
-    return results
+
+    # Each lead's research/draft/gate is a chain of LLM + web calls — almost all
+    # WAITING on external APIs, not CPU. So process leads concurrently: threads
+    # overlap the waiting (pymongo + the OpenAI client with max_retries are both
+    # thread-safe). Only the DRAFTING run is parallelized; the SEND path stays
+    # sequential (sends are fast/cached and the daily cap must not race across
+    # threads). PIPELINE_WORKERS tunes the pool; 1 disables concurrency.
+    workers = max_workers or int(os.environ.get("PIPELINE_WORKERS", "8"))
+    if dry_run and workers > 1 and len(leads) > 1:
+        with ThreadPoolExecutor(max_workers=min(workers, len(leads))) as ex:
+            futures = [ex.submit(_advance_safe, store, lead, cfg, dry_run, require_review) for lead in leads]
+            return [f.result() for f in futures]   # submission order preserved
+    return [_advance_safe(store, lead, cfg, dry_run, require_review) for lead in leads]
