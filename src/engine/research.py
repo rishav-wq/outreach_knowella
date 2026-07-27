@@ -35,6 +35,19 @@ def _clean_domain(lead: Lead) -> str:
     return (lead.company_domain or "").strip().replace("https://", "").replace("http://", "").strip("/")
 
 
+# Generic corporate/industry words that don't identify a specific company on their own.
+_NAME_STOP = {"inc", "llc", "ltd", "corp", "co", "company", "group", "the", "and",
+              "llp", "plc", "holdings", "services", "solutions", "systems"}
+
+
+def _name_tokens(company: str) -> list[str]:
+    """Distinctive tokens of a company name (>=4 chars, not a generic suffix). Empty
+    when the name is a placeholder like 'ABC' — the signal we use to decide a company
+    can't be identified well enough to trust web/news facts about it."""
+    return [t for t in re.findall(r"[a-z0-9]+", (company or "").lower())
+            if len(t) >= 4 and t not in _NAME_STOP]
+
+
 def _gather(lead: Lead, log: list[str]) -> list[SourceDoc]:
     docs: list[SourceDoc] = []
 
@@ -46,8 +59,10 @@ def _gather(lead: Lead, log: list[str]) -> list[SourceDoc]:
             if text:
                 docs.append(SourceDoc(text=text, url=f"https://{domain}{path}", source_type=stype))
 
-    # 2) Tavily web + news — skips if no key
-    if tavily.has_key():
+    # 2) Tavily web + news — by company NAME, so skip when the name can't identify a
+    #    real company (placeholder like 'ABC'/'XYZ'). Otherwise a name-only web search
+    #    returns generic industry news that gets misattributed as facts about the lead.
+    if tavily.has_key() and _name_tokens(lead.company):
         company = lead.company
         for query, topic, stype, days in [
             (f"{company} company overview products operations", "general", "web", None),
@@ -63,8 +78,12 @@ def _gather(lead: Lead, log: list[str]) -> list[SourceDoc]:
                 if r.get("content"):
                     docs.append(SourceDoc(text=r["content"], url=r.get("url", ""),
                                           source_type=stype, published=r.get("published")))
-    else:
+    elif not tavily.has_key():
         log.append("tavily skipped: no TAVILY_API_KEY (homepage-only research)")
+    else:
+        log.append(f"web research skipped: '{lead.company}' isn't identifiable enough to research "
+                   "by name (placeholder/too generic) — grounding on own-site only, to avoid "
+                   "misattributing generic web results")
 
     log.append(f"gathered {len(docs)} source docs "
                f"({sum(1 for d in docs if d.source_type in ('homepage', 'careers'))} own-site, "

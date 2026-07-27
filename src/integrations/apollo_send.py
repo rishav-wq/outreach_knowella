@@ -22,6 +22,7 @@ call actually starts sending, so validate with a single test contact first.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 
 import httpx
@@ -254,13 +255,17 @@ def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None =
         raise RuntimeError("APOLLO_API_KEY not set")
     send = campaign.get("sending") or {}
     seq_id = send.get("sequence_id")
-    mailbox_id = send.get("mailbox_id")
+    # rotate across the campaign's mailboxes (spreads volume for deliverability); the
+    # pick is deterministic per lead, so a lead always sends from the same inbox.
+    mailbox_ids = send.get("mailbox_ids") or ([send["mailbox_id"]] if send.get("mailbox_id") else [])
     subject_name = send.get("subject_field") or "email_subject"
     body_name = send.get("body_field") or "email_body"
-    if not seq_id or not mailbox_id:
-        raise RuntimeError("Apollo sending needs sending.sequence_id and sending.mailbox_id in the campaign config")
+    if not seq_id or not mailbox_ids:
+        raise RuntimeError("Apollo sending needs sending.sequence_id and at least one sending.mailbox_ids in the campaign config")
     if not lead.email:
         raise RuntimeError(f"lead {lead.full_name} has no email — cannot send")
+    idx = int(hashlib.md5(lead.key.encode()).hexdigest(), 16) % len(mailbox_ids)
+    mailbox_id = mailbox_ids[idx]
 
     fu = followups or {}
     steps = sorted(int(k.rsplit("_", 1)[-1]) for k in fu

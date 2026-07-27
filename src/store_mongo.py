@@ -49,13 +49,54 @@ class MongoStore:
         return self.db.campaigns.count_documents({}, limit=1) > 0
 
     # --- leads ---------------------------------------------------------------
+    @staticmethod
+    def _base_key(lead: Lead) -> str:
+        """The lead's identity WITHOUT any campaign prefix — email, else name|domain.
+        Deliberately ignores stored_key so re-upserting a loaded (already-scoped) lead
+        never double-prefixes."""
+        return (lead.email or f"{lead.full_name}|{lead.company_domain}").strip().lower()
+
+    @staticmethod
+    def _scoped(campaign: str, base: str) -> str:
+        return f"{campaign}::{base}"
+
     def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None) -> None:
+        # _id is campaign-scoped so the SAME person can live in multiple campaigns as
+        # independent rows (own research/draft/status). Re-importing into the SAME
+        # campaign still dedups (same _id, $setOnInsert no-ops).
+        sid = self._scoped(campaign, self._base_key(lead))
         self.db.leads.update_one(
-            {"_id": lead.key},
+            {"_id": sid},
             {"$setOnInsert": {"campaign": campaign, "status": "new", "lead": lead.model_dump(),
                               "topics": topics or []}},
             upsert=True,
         )
+
+    def migrate_lead_keys(self) -> int:
+        """One-time: re-key legacy leads (_id = base email) to campaign-scoped ids
+        (_id = 'campaign::base'), moving each lead's per-lead stage data with it, so
+        the same person can live in multiple campaigns. Idempotent — already-scoped
+        docs (id contains '::') are skipped, so it's safe to run on every startup."""
+        moved = 0
+        for d in list(self.db.leads.find({"_id": {"$not": {"$regex": "::"}}})):
+            old = d["_id"]
+            campaign = d.get("campaign") or ""
+            new = self._scoped(campaign, old)
+            if new == old or self.db.leads.find_one({"_id": new}):
+                continue
+            self.db.leads.insert_one({**d, "_id": new})
+            # per-lead stage data keyed by _id → copy under the new id, drop the old
+            for coll in (self.db.research, self.db.drafts, self.db.gate, self.db.outbox,
+                         self.db.reviews, self.db.sends, self.db.meetings, self.db.replies):
+                sd = coll.find_one({"_id": old})
+                if sd:
+                    if not coll.find_one({"_id": new}):
+                        coll.insert_one({**sd, "_id": new})
+                    coll.delete_one({"_id": old})
+            self.db.llm_calls.update_many({"key": old}, {"$set": {"key": new}})   # keyed by a `key` field
+            self.db.leads.delete_one({"_id": old})
+            moved += 1
+        return moved
 
     def all_leads(self, status: str | None = None) -> list[dict]:
         """Lead summaries across all campaigns, optionally filtered by status.

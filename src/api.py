@@ -46,7 +46,23 @@ app.add_middleware(
 CONFIG_DIR = "config"   # legacy seed source (committed campaigns + the CLI); runtime campaigns now live in Mongo
 _runs: dict = {}  # campaign -> {running, error, summary}
 _seeded = False   # one-time file→Mongo migration guard (per process)
+_leads_migrated = False   # one-time lead-key re-scoping guard (per process)
 REQUIRED_KEYS = ("name", "icp", "offer", "voice")
+
+
+def _migrate_leads_once(store) -> None:
+    """Re-scope legacy lead keys to campaign-scoped ids, once per process. Runs at the
+    _load choke point so it completes before any lead read/write in a fresh process."""
+    global _leads_migrated
+    if _leads_migrated:
+        return
+    _leads_migrated = True
+    try:
+        n = store.migrate_lead_keys()
+        if n:
+            print(f"[migrate] re-scoped {n} legacy lead(s) to campaign-scoped keys")
+    except Exception as e:
+        print(f"[migrate] lead re-key skipped: {e}")
 
 
 def _slug(name: str) -> str:
@@ -81,6 +97,7 @@ def _load(name: str) -> dict:
     """The campaign config, from Mongo (durable), validated + defaulted."""
     store = open_store()
     _seed_campaigns_once(store)
+    _migrate_leads_once(store)
     cfg = store.get_campaign(name)
     if cfg is None:
         raise HTTPException(404, f"campaign '{name}' not found")
@@ -339,13 +356,21 @@ def suppression_remove(r: SuppressReq):
     return {"ok": True, "items": store.list_suppressed()}
 
 
+def _mailbox_ids(send_cfg: dict) -> list[str]:
+    """A campaign's send-from mailbox ids as a list (back-compat with the old single
+    sending.mailbox_id)."""
+    return send_cfg.get("mailbox_ids") or ([send_cfg["mailbox_id"]] if send_cfg.get("mailbox_id") else [])
+
+
 @app.get("/api/mailboxes")
 def mailboxes(campaign: str | None = None):
-    """The Apollo mailboxes you can send from, plus which one this campaign uses."""
-    current = None
+    """The Apollo mailboxes you can send from, plus which ones this campaign uses.
+    `current_ids` is the full set (campaigns can rotate across several); `current`
+    is the first, kept for older callers."""
+    ids = []
     if campaign:
-        current = (_load(campaign).get("sending") or {}).get("mailbox_id")
-    return {"mailboxes": apollo_send.list_mailboxes(), "current": current}
+        ids = _mailbox_ids(_load(campaign).get("sending") or {})
+    return {"mailboxes": apollo_send.list_mailboxes(), "current_ids": ids, "current": ids[0] if ids else None}
 
 
 @app.get("/api/sequences")
@@ -379,28 +404,27 @@ def sequence_create(r: SequenceCreate):
 
 class MailboxSet(BaseModel):
     campaign: str
-    mailbox_id: str
-
-
-def _set_config_mailbox(name: str, mailbox_id: str, email: str) -> None:
-    """Set sending.mailbox_id on the campaign (in Mongo)."""
-    store = open_store()
-    cfg = store.get_campaign(name)
-    if cfg is None:
-        raise HTTPException(404, f"campaign '{name}' not found")
-    cfg.setdefault("sending", {})["mailbox_id"] = mailbox_id
-    store.save_campaign(name, cfg)
+    mailbox_ids: list[str] = []
 
 
 @app.post("/api/campaign/mailbox")
 def set_campaign_mailbox(m: MailboxSet):
-    """Choose which Apollo mailbox this campaign sends from."""
-    _require_campaign(m.campaign)  # 404s if the campaign doesn't exist
-    match = next((b for b in apollo_send.list_mailboxes() if b["id"] == m.mailbox_id), None)
-    if not match:
-        raise HTTPException(400, "that mailbox is not one of your Apollo email accounts")
-    _set_config_mailbox(m.campaign, m.mailbox_id, match["email"])
-    return {"mailbox_id": m.mailbox_id, "email": match["email"]}
+    """Choose which Apollo mailbox(es) this campaign sends from — a list, since sends
+    rotate across them for deliverability. mailbox_id (singular) is kept as the first,
+    for older callers."""
+    store = open_store()
+    cfg = store.get_campaign(m.campaign)
+    if cfg is None:
+        raise HTTPException(404, f"campaign '{m.campaign}' not found")
+    valid = {b["id"] for b in apollo_send.list_mailboxes()}
+    ids = [i for i in m.mailbox_ids if i in valid]
+    if len(ids) != len(m.mailbox_ids):
+        raise HTTPException(400, "one or more mailboxes aren’t among your Apollo email accounts")
+    send = cfg.setdefault("sending", {})
+    send["mailbox_ids"] = ids
+    send["mailbox_id"] = ids[0] if ids else ""   # back-compat primary
+    store.save_campaign(m.campaign, cfg)
+    return {"mailbox_ids": ids}
 
 
 @app.get("/api/status")
@@ -409,13 +433,24 @@ def status(campaign: str):
     store = open_store()
     send_cfg = cfg.get("sending") or {}
     # Sending goes through Apollo sequences: needs the key + a sequence + a mailbox.
-    sendable = (bool(os.environ.get("APOLLO_API_KEY"))
-                and bool(send_cfg.get("sequence_id")) and bool(send_cfg.get("mailbox_id")))
+    # send_block names the FIRST missing piece so the UI can say exactly why send is off.
+    mailbox_ids = _mailbox_ids(send_cfg)
+    if not os.environ.get("APOLLO_API_KEY"):
+        send_block = "Apollo isn’t connected — no API key on the server."
+    elif not send_cfg.get("sequence_id"):
+        send_block = "No Apollo sequence wired — set one in this campaign’s Settings › Send step."
+    elif not mailbox_ids:
+        send_block = "No sending mailbox chosen — pick one above or in Settings › Send."
+    else:
+        send_block = ""
+    sendable = not send_block
     return {
         "counts": store.counts(cfg["name"]),
         "tokens": store.token_totals(cfg["name"]),
         "sendable": sendable,
-        "mailbox_id": send_cfg.get("mailbox_id") or "",
+        "send_block": send_block,
+        "mailbox_id": mailbox_ids[0] if mailbox_ids else "",
+        "mailbox_ids": mailbox_ids,
         "guardrails": {
             "daily_cap": int(send_cfg.get("daily_cap") or 0),
             "sent_today": store.sent_today(cfg["name"]),
@@ -913,7 +948,29 @@ def refine(r: RefineReq):
         lead, res, cfg, ob.get("subject", ""), ob.get("body", ""), r.instruction)
     store.update_outbox(r.key, draft.subject, draft.body)  # marks edited=True; preserved on re-runs
     store.log_llm(r.key, "refine", model, usage)
-    return {"subject": draft.subject, "body": draft.body}
+
+    # Follow-ups are written FROM the first email, so a revise must regenerate them
+    # too — otherwise they'd still reference the pre-revise draft. (update_outbox set
+    # edited=True, so the pipeline won't regenerate them; we do it here.)
+    variant = ob.get("variant", "signal")
+    fu_steps = pipeline.followup_steps(cfg)
+    followups = []
+    if fu_steps:
+        bodies, fu_usage, fu_model = personalize.write_followups(
+            lead, res, cfg, draft.subject, draft.body, fu_steps, variant)
+        if all(bodies):
+            fuh = pipeline.hash_inputs("fu-rev3", draft.subject, draft.body, variant,
+                                       [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
+            store.save_followups(
+                r.key, [{"subject": s["subject"] or f"Re: {draft.subject}", "body": b}
+                        for s, b in zip(fu_steps, bodies)], fuh)
+            store.log_llm(r.key, "followups", fu_model, fu_usage)
+    ob2 = store.get_outbox(r.key) or {}
+    followups = [{"step": n, "subject": ob2.get(f"subject_{n}", ""), "body": ob2.get(f"body_{n}", "")}
+                 for n in sorted(int(k.rsplit("_", 1)[-1]) for k in ob2
+                                 if k.startswith("body_") and k.rsplit("_", 1)[-1].isdigit())
+                 if ob2.get(f"body_{n}")]
+    return {"subject": draft.subject, "body": draft.body, "followups": followups}
 
 
 @app.post("/api/pull")

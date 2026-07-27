@@ -61,38 +61,44 @@ export default function Review({ campaign }) {
   const [eEmail, setEEmail] = useState('')
   const [emailErr, setEmailErr] = useState('')
   const [sendable, setSendable] = useState(false)
+  const [sendBlock, setSendBlock] = useState('')
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
   const [boxes, setBoxes] = useState([])          // all Apollo mailboxes
-  const [mailboxId, setMailboxId] = useState('')  // which one this campaign sends from
+  const [mailboxIds, setMailboxIds] = useState([])// which ones this campaign sends from (rotates)
+  const [mboxOpen, setMboxOpen] = useState(false)
   const [refineText, setRefineText] = useState('')
   const [refining, setRefining] = useState(false)
   const [refineErr, setRefineErr] = useState('')
   const poll = useRef(null)
 
   const loadStatus = () =>
-    api.getStatus(campaign).then((s) => { setSendable(!!s.sendable); setGuard(s.guardrails || null) }).catch(() => {})
+    api.getStatus(campaign).then((s) => { setSendable(!!s.sendable); setSendBlock(s.send_block || ''); setGuard(s.guardrails || null) }).catch(() => {})
   const load = () => api.getReview(campaign)
     .then((d) => { setItems(d); setI((prev) => Math.min(prev, Math.max(0, d.length - 1))) })
     .catch(() => setItems([]))
 
   useEffect(() => {
-    setItems(null); setI(0); setEditing(false); setBoxes([]); setMailboxId('')
+    setItems(null); setI(0); setEditing(false); setBoxes([]); setMailboxIds([]); setMboxOpen(false)
     load(); loadStatus()
     api.getMailboxes(campaign).then((d) => {
       setBoxes(d.mailboxes || [])
-      setMailboxId(d.current || '')
+      setMailboxIds(d.current_ids || [])
     }).catch(() => {})
     return () => clearInterval(poll.current)
   }, [campaign])
 
-  const sendFrom = (boxes.find((b) => b.id === mailboxId) || {}).email || ''
+  const emailOf = (id) => (boxes.find((b) => b.id === id) || {}).email || ''
+  const sendFrom = mailboxIds.length === 0 ? ''
+    : mailboxIds.length === 1 ? emailOf(mailboxIds[0])
+    : `${emailOf(mailboxIds[0])} + ${mailboxIds.length - 1} more (rotating)`
 
-  // switch which mailbox this campaign sends from, right where you review
-  const changeMailbox = async (id) => {
-    const prev = mailboxId
-    setMailboxId(id)
-    try { await api.setMailbox(campaign, id) } catch { setMailboxId(prev) }
+  // toggle which mailboxes this campaign rotates through, right where you review
+  const toggleMailbox = async (id) => {
+    const prev = mailboxIds
+    const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    setMailboxIds(next)
+    try { await api.setMailbox(campaign, next) } catch { setMailboxIds(prev) }
   }
 
   const current = items && items[i]
@@ -140,7 +146,9 @@ export default function Review({ campaign }) {
     setRefining(true); setRefineErr('')
     try {
       const r = await api.refineEmail(campaign, key, instruction)
-      patch(key, { subject: r.subject, body: r.body, edited: true })
+      // the revise also regenerates the follow-ups (they're written from the first
+      // email), so refresh them here too, not just the main draft
+      patch(key, { subject: r.subject, body: r.body, edited: true, ...(r.followups ? { followups: r.followups } : {}) })
       setRefineText('')
     } catch (e) {
       setRefineErr(`Couldn’t tweak: ${e.message || e}`)
@@ -222,15 +230,33 @@ export default function Review({ campaign }) {
           <button className={view === 'board' ? 'on' : ''} onClick={() => setView('board')}><Icon name="columns" size={14} /> Board</button>
         </div>
         {boxes.length > 0 && (
-          <select className="src-select" value={mailboxId} onChange={(e) => changeMailbox(e.target.value)}
-            title="Which Apollo mailbox this campaign's approved emails send from — switch any time">
-            {!mailboxId && <option value="">choose mailbox…</option>}
-            {boxes.map((b) => <option key={b.id} value={b.id} disabled={!b.active}>{b.email}{b.active ? '' : ' (inactive)'}</option>)}
-          </select>
+          <div className="mbox-select">
+            <button className="src-select mbox-btn" onClick={() => setMboxOpen((o) => !o)}
+              title="Which Apollo mailboxes this campaign sends from — sends rotate across them">
+              {mailboxIds.length === 0 ? 'choose mailboxes…'
+                : mailboxIds.length === 1 ? emailOf(mailboxIds[0])
+                : `${mailboxIds.length} mailboxes`}
+              <Icon name="chevron" size={13} />
+            </button>
+            {mboxOpen && (
+              <>
+                <div className="drawer-backdrop" style={{ background: 'transparent', zIndex: 39 }} onClick={() => setMboxOpen(false)} />
+                <div className="mbox-menu">
+                  {boxes.map((b) => (
+                    <label key={b.id} className="mbox-opt">
+                      <input type="checkbox" checked={mailboxIds.includes(b.id)} disabled={!b.active} onChange={() => toggleMailbox(b.id)} />
+                      {b.email}{b.active ? '' : ' (inactive)'}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
         {guardLabel() && <span className="guard-note">{guardLabel()}</span>}
+        {!sendable && sendBlock && <span className="send-block" title={sendBlock}>{sendBlock}</span>}
         <button className="btn primary" disabled={!sendable || !approvedCount || sending}
-          title={!sendable ? 'Connect Apollo (sequence + mailbox) to enable sending' : ''} onClick={sendApproved}>
+          title={!sendable ? sendBlock : ''} onClick={sendApproved}>
           {sending ? <><span className="spinner" /> Sending…</> : `Send ${approvedCount} approved`}
         </button>
       </div>
@@ -365,11 +391,22 @@ export default function Review({ campaign }) {
             )}
 
             {!editing && (
-              <>
+              <div className="rq-footer">
+                {excluding && (
+                  <div className="exclude-confirm">
+                    <div className="exclude-confirm-text">
+                      Remove <b>{current.name}</b> from <b>{campaign}</b>? Its draft and follow-ups are deleted and it won’t be emailed in this campaign — but the lead stays in your leads library for future use.
+                    </div>
+                    <div className="exclude-confirm-actions">
+                      <button className="btn" onClick={() => setExcluding(false)}>Keep in campaign</button>
+                      <button className="btn reject" onClick={doExclude}><Icon name="x" size={14} /> Remove lead</button>
+                    </div>
+                  </div>
+                )}
                 <div className="ai-tweak">
-                  <span className="ai-tweak-k">Revise</span>
+                  <span className="ai-tweak-k"><Icon name="refresh" size={13} /> Revise</span>
                   <input className="ai-tweak-input" value={refineText} disabled={refining}
-                    placeholder="ask for a change — “make it shorter”, “lead with their hiring”, “warmer tone”"
+                    placeholder="ask AI for a change — “make it shorter”, “lead with their hiring”, “warmer tone” (updates the follow-ups too)"
                     onChange={(e) => setRefineText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
                   <button className="btn" onClick={doRefine} disabled={refining || !refineText.trim()}>
@@ -385,18 +422,7 @@ export default function Review({ campaign }) {
                   <button className="btn reject" onClick={() => decide('reject')}><Icon name="x" size={15} /> Reject</button>
                   <button className="btn approve stamp" onClick={() => decide('approve')}><Icon name="check" size={15} /> Approve</button>
                 </div>
-                {excluding && (
-                  <div className="exclude-confirm">
-                    <div className="exclude-confirm-text">
-                      Remove <b>{current.name}</b> from <b>{campaign}</b>? Its draft and follow-ups are deleted and it won’t be emailed in this campaign — but the lead stays in your leads library for future use.
-                    </div>
-                    <div className="exclude-confirm-actions">
-                      <button className="btn" onClick={() => setExcluding(false)}>Keep in campaign</button>
-                      <button className="btn reject" onClick={doExclude}><Icon name="x" size={14} /> Remove lead</button>
-                    </div>
-                  </div>
-                )}
-              </>
+              </div>
             )}
           </main>
 

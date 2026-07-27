@@ -550,12 +550,22 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .rq-who-name { font-family: var(--font-display); font-weight: 600; font-size: 16px; }
 .rq-who-sub { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
 .rq-email { margin: 0; }
-.ai-tweak { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
-.ai-tweak-k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); flex: none; }
-.ai-tweak-input { flex: 1; border: none; background: none; font: inherit; font-size: 13px; color: var(--text); padding: 6px 2px; outline: none; border-bottom: 1px solid transparent; }
-.ai-tweak-input:focus { border-bottom-color: var(--signal); }
+/* Draft-pane footer — Revise + the decision buttons pinned to the bottom of the
+   scrolling pane, so they never get buried below long follow-ups. */
+.rq-footer {
+  position: sticky; bottom: 0; z-index: 2; margin: 2px -22px -20px; padding: 12px 22px 16px;
+  background: var(--panel); border-top: 1px solid var(--line);
+  box-shadow: 0 -10px 18px -14px rgba(36, 42, 50, 0.22);
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* Revise as a clear, boxed AI field (was a faint underline that read as decoration) */
+.ai-tweak { display: flex; align-items: center; gap: 8px; background: #f7f8f4; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 4px 6px 4px 12px; }
+.ai-tweak:focus-within { border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-tint); }
+.ai-tweak-k { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--signal-deep); flex: none; }
+.ai-tweak-input { flex: 1; min-width: 0; border: none; background: none; font: inherit; font-size: 13px; color: var(--text); padding: 7px 2px; outline: none; }
 .ai-tweak-input::placeholder { color: var(--muted); }
-.rq-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 6px; }
+.ai-tweak .btn { flex: none; }
+.rq-actions { display: flex; align-items: center; gap: 8px; }
 .rq-keys { margin-right: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.03em; }
 /* "Not a fit" — quieter than Reject; it removes the lead from the campaign entirely */
 .btn.exclude-btn { color: var(--muted); border-style: dashed; }
@@ -858,6 +868,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 .board-send { display: flex; align-items: center; gap: 14px; }
 .guard-note { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+/* why the Send button is locked — shown inline so it isn't hidden in a tooltip */
+.send-block { font-size: 12px; color: var(--caution); max-width: 300px; line-height: 1.35; text-align: right; }
 
 .edit-form { display: flex; flex-direction: column; gap: 12px; }
 .edit-subject, .edit-body { font: inherit; width: 100%; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; color: var(--text); transition: border-color 0.12s ease; }

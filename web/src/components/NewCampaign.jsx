@@ -73,7 +73,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     verified_only: true,
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
-    sequence_id: '', mailbox_id: '', daily_cap: 50, control_pct: 20,
+    sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
     seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
@@ -159,7 +159,8 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         verified_only: (ap.email_status || []).length > 0,
         exclude_titles: ap.exclude_titles || [], hiring_titles: ap.hiring_job_titles || [],
         pull_limit: 0,   // editing shouldn't spend credits unless explicitly chosen
-        sequence_id: send.sequence_id || '', mailbox_id: send.mailbox_id || '',
+        sequence_id: send.sequence_id || '',
+        mailbox_ids: send.mailbox_ids || (send.mailbox_id ? [send.mailbox_id] : []),
         daily_cap: send.daily_cap ?? 50,
         seq_steps: ((cfg.sequence || {}).steps || []).length
           ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
@@ -211,14 +212,14 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         // sending merges server-side, so platform/field ids in the config are preserved
         await api.updateCampaign(slug, {
           ...payload,
-          sending: { sequence_id: sequenceId, mailbox_id: f.mailbox_id, daily_cap: Number(f.daily_cap) || 0 },
+          sending: { sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '', daily_cap: Number(f.daily_cap) || 0 },
         })
       } else {
         // No send window — sends any time; the daily cap is the only throttle.
         const r = await api.createCampaign({
           name: f.name, ...payload,
           sending: {
-            platform: 'apollo', sequence_id: sequenceId, mailbox_id: f.mailbox_id,
+            platform: 'apollo', sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '',
             subject_field: 'email_subject', body_field: 'email_body', daily_cap: Number(f.daily_cap) || 0,
           },
         })
@@ -336,13 +337,21 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     )
     return (
       <>
-        {field('Send from mailbox', mailboxes.length
-          ? <select className="field-input" value={f.mailbox_id} onChange={set('mailbox_id')}>
-              <option value="">Choose a mailbox…</option>
-              {mailboxes.map((b) => <option key={b.id} value={b.id} disabled={!b.active}>{b.email}{b.active ? '' : ' (inactive)'}</option>)}
-            </select>
-          : input('mailbox_id', { placeholder: 'connect Apollo, or set later' }),
-          'Which of your Apollo mailboxes sends this campaign’s emails.')}
+        {field('Send from mailboxes', mailboxes.length
+          ? <div className="chip-row">
+              {mailboxes.map((b) => {
+                const on = f.mailbox_ids.includes(b.id)
+                return (
+                  <button key={b.id} type="button" disabled={!b.active}
+                    className={`chip ${on ? 'on' : ''}`}
+                    onClick={() => setKey('mailbox_ids', on ? f.mailbox_ids.filter((x) => x !== b.id) : [...f.mailbox_ids, b.id])}>
+                    {b.email}{b.active ? '' : ' (inactive)'}
+                  </button>
+                )
+              })}
+            </div>
+          : <div className="field-hint" style={{ marginTop: 0 }}>Connect Apollo to choose sending mailboxes.</div>,
+          'Pick one or more Apollo mailboxes. Sends rotate across them — each lead always from the same one — to spread volume and protect deliverability.')}
         {field('Emails in the sequence', (
           <div>
             <select className="field-input" style={{ maxWidth: 130 }} value={f.seq_steps.length}
@@ -399,6 +408,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         ), Number(f.control_pct) === 0
           ? 'Every email uses the lead’s researched facts — but you’ll never learn whether that lifts replies.'
           : `About 1 in ${Math.max(2, Math.round(100 / Number(f.control_pct)))} emails goes out as a plain (no researched facts) control, so the campaign measures whether fact-led openers earn more replies.`)}
+        {field('Facts per lead', input('max_facts', { type: 'number', min: 3, max: 30 }), 'How many verified facts to research per lead — the pool the fact-led emails draw from (the A/B test above measures whether using them lifts replies).')}
         {disclosure(showAdv, setShowAdv, 'Advanced settings (optional)')}
         {showAdv && (
           <>
@@ -408,7 +418,6 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             {field('Known product truths', area('knowledge', 2), 'One per line. The only product claims the writer may rely on.')}
             {check('block_risky', 'Drop risky / catch-all addresses during research')}
             {check('require_deliverable', 'Only send to positively verified addresses')}
-            {field('Max research facts per lead', input('max_facts', { type: 'number', min: 3, max: 30 }))}
           </>
         )}
       </>
