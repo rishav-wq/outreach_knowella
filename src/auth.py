@@ -19,7 +19,7 @@ from fastapi import HTTPException, Request
 _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 
 # The health check stays open even when auth is on (for platform probes).
-_OPEN_API_PATHS = {"/api/health"}
+_OPEN_API_PATHS = {"/api/health", "/api/unsubscribe"}   # public: health check + one-click unsubscribe
 
 
 def _issuer() -> str | None:

@@ -6,8 +6,31 @@ afterward — this stage just produces the best grounded draft it can.
 """
 from __future__ import annotations
 
+import re
+
 from .. import llm
 from ..models import Draft, Lead, Research
+
+
+# --- deterministic style enforcement -----------------------------------------
+# LLMs won't reliably follow "no em-dashes" or a subject-length rule no matter how
+# the prompt is worded (and our own prompt is full of em-dashes, which primes them).
+# So we GUARANTEE these mechanical rules in code, on every generated draft/follow-up.
+def clean_dashes(text: str) -> str:
+    """Replace em/en dashes with a plain hyphen — kills the #1 'this is AI' tell and
+    honors 'no long hyphens'. Safe for number ranges (10–20 → 10-20)."""
+    if not text:
+        return text
+    return text.replace("—", "-").replace("–", "-").replace(" - ", " - ")
+
+
+def clean_subject(subject: str, max_chars: int = 52) -> str:
+    """Dash-clean + hard length cap (trim to the last whole word) so subjects stay
+    short even when the model ignores the 'under ~40 chars' instruction."""
+    s = clean_dashes(subject or "").strip().strip(".")
+    if len(s) > max_chars:
+        s = s[:max_chars].rsplit(" ", 1)[0].rstrip(" ,-")
+    return s
 
 SYSTEM = """You write ONE plain-text, first-touch cold email built to earn a REPLY (not an open).
 Write it TIGHT: 3-4 short sentences, ONE idea per sentence, no run-ons, no paragraph walls.
@@ -54,6 +77,7 @@ Format rules:
 - State ONLY lead-specific facts present in FACTS. Pain stays a hypothesis. Invent nothing.
 - Subject: 2-5 words, under ~40 characters, specific to THEM (their company/situation),
   lowercase fine. No first name in the subject, no clickbait, no question mark.
+- No em-dashes or en-dashes anywhere; use a comma or a short hyphen instead.
 - Peer-to-peer, plain conversational English. At most one link, and never a calendar link.
 
 Return STRICT JSON only:
@@ -78,34 +102,42 @@ Write it TIGHT: 3-4 short sentences, ONE idea per sentence, no run-ons. Every wo
    meeting/time request, calendar link, or specific time.
    BANNED: "book a demo", "N-minute meeting/call", "hop on a call", any calendar link.
 
-Format: SHORT and skimmable — short sentences, one idea each, under the voice max_words; plain
+Format: SHORT and skimmable, short sentences, one idea each, under the voice max_words; plain
 text (no markdown/HTML/bullets). LAYOUT (hard rule): ONE sentence per line with a BLANK line
-between each — never a dense block. Subject: 2-5 words, under ~40 chars, no first name, no question
-mark. At most one link (never a calendar link). Invent nothing; any product claim must be in KNOWLEDGE.
+between each, never a dense block. Subject: 2-5 words, under ~40 chars, no first name, no question
+mark. No em-dashes or en-dashes anywhere; use a comma or a short hyphen. At most one link (never a
+calendar link). Invent nothing; any product claim must be in KNOWLEDGE.
 Return STRICT JSON only:
 {"subject": "...", "body": "...", "angle": "control (no signal opener)", "used_facts": []}"""
 
 
-def signature_text(cfg: dict) -> str:
+def signature_text(cfg: dict, lead: Lead | None = None) -> str:
     """The email sign-off + sender footer, built deterministically from config.
 
     Kept OUT of the LLM body (so it never hallucinates a name/title/phone and stays
     identical on every send). Appended for display in Review and at send time.
-    Returns '' when no sender.name is configured.
+    Returns '' when no sender.name is configured. When `lead` (with an email) is given,
+    the opt-out becomes a ONE-CLICK unsubscribe LINK; otherwise (e.g. Review preview)
+    a placeholder notes the link is added at send.
     """
+    from ..unsubscribe import link as unsub_link
     s = cfg.get("sender") or {}
     closing = (s.get("closing") or "").strip()
-    # compliance: a low-key opt-out line after the sign-off. Honoring it is enforced
-    # by the do-not-contact list (suppression) at pull/pipeline/send.
-    opt_out = (s.get("opt_out_line") or "").strip()
-    tail = f"\n\n{opt_out}" if opt_out else ""
+    # compliance: a one-click unsubscribe after the sign-off (lower friction than
+    # "reply no thanks", and what mailbox providers now expect). Honoring it is
+    # enforced by the do-not-contact list (suppression) at pull/pipeline/send.
+    if lead and lead.email:
+        opt_out = f"Not the right fit? Unsubscribe: {unsub_link(lead.email)}"
+    else:
+        opt_out = "Not the right fit? Unsubscribe: [one-click link added when sent]"
+    tail = f"\n\n{opt_out}"
     # a verbatim signature block wins — lets you paste your exact plain-text sign-off
     raw = (s.get("signature") or "").strip()
     if raw:
         return (f"{closing}\n{raw}" if closing else raw) + tail
     name = (s.get("name") or "").strip()
     if not name:
-        return ""
+        return opt_out   # no sender block, but still include the unsubscribe line
     lines = [(closing or "Best,"), name]
     role = " · ".join(x for x in [(s.get("title") or "").strip(), (s.get("company") or "").strip()] if x)
     if role:
@@ -118,9 +150,9 @@ def signature_text(cfg: dict) -> str:
     return "\n".join(lines) + tail
 
 
-def with_signature(body: str, cfg: dict) -> str:
-    """Body with the sender footer appended (once). No-op if no sender configured."""
-    sig = signature_text(cfg)
+def with_signature(body: str, cfg: dict, lead: Lead | None = None) -> str:
+    """Body with the sender footer + per-lead unsubscribe link appended (once)."""
+    sig = signature_text(cfg, lead)
     return f"{body.rstrip()}\n\n{sig}" if sig else body
 
 
@@ -135,11 +167,42 @@ def _facts_block(research: Research) -> str:
     return f"FACTS:\n{facts}\n\nPAIN HYPOTHESES:\n{pains}"
 
 
+VERBATIM_SYSTEM = """The user wrote the TEMPLATE below and wants it sent almost exactly as-is —
+keep AT LEAST 90% of their wording, sentences, and order. Reproduce it faithfully.
+
+Your ONLY edits:
+- Replace placeholders (e.g. [first name], {first_name}, [company], {company}, [role]) with this
+  lead's real details. If a placeholder has no value, remove it cleanly.
+- Fix only broken grammar or spacing.
+
+Do NOT rewrite, reorder, shorten, add, or remove sentences. Do NOT add facts, claims, or a
+signature. Plain text only. No em-dashes or en-dashes.
+Return STRICT JSON only: {"subject": "...", "body": "...", "angle": "verbatim template", "used_facts": []}"""
+
+
+def _write_verbatim(lead: Lead, cfg: dict, template: str, subject: str, spec):
+    """'Use AI' is OFF: send the user's template near-verbatim, just filling placeholders.
+    Low temperature so it stays faithful to their copy."""
+    user = (f"LEAD: {lead.full_name}, {lead.title} at {lead.company}\n\n"
+            f"TEMPLATE (reproduce this):\n{template}\n\n"
+            f"SUBJECT: {subject or '(none given — write a short 2-5 word subject that fits)'}")
+    text, usage = llm.complete(
+        [{"role": "system", "content": VERBATIM_SYSTEM}, {"role": "user", "content": user}],
+        spec, temperature=0.15)
+    data = llm.parse_json(text)
+    draft = Draft(body=clean_dashes(data.get("body", "")),
+                  subject=clean_dashes(subject) if subject else clean_subject(data.get("subject", "")),
+                  angle="verbatim template", used_facts=[])
+    return draft, usage, spec.resolved_model()
+
+
 def write_email(lead: Lead, research: Research, cfg: dict, variant: str = "signal"):
     """Returns (Draft, usage_dict, model_name).
 
     variant='signal' (default) = grounded, signal-led opener. variant='plain' = A/B
     control with no researched signal, to measure whether the signal opener lifts replies.
+    When the campaign's sequence has use_ai=False and step 1 has a template, the user's
+    copy is reproduced near-verbatim instead (see _write_verbatim).
     """
     spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
     offer, voice = cfg["offer"], cfg["voice"]
@@ -150,6 +213,9 @@ def write_email(lead: Lead, research: Research, cfg: dict, variant: str = "signa
     # structure/length/voice; the facts stay lead-specific and all hard rules still apply
     seq_steps = (cfg.get("sequence") or {}).get("steps") or []
     tmpl = (seq_steps[0].get("template") or "").strip() if seq_steps else ""
+    # "Use AI" OFF + a template supplied → reproduce the user's copy near-verbatim.
+    if not (cfg.get("sequence") or {}).get("use_ai", True) and tmpl:
+        return _write_verbatim(lead, cfg, tmpl, (seq_steps[0].get("subject") or "").strip(), spec)
     tmpl_block = (f"""
 TEMPLATE (mirror its structure, length, and voice — but replace every [bracketed placeholder]
 and example-specific detail with THIS lead's specifics; copying template examples verbatim is
@@ -186,8 +252,10 @@ RULES: {voice.get('rules')}"""
     # a user-set subject for step 1 wins verbatim over the AI's — the campaign
     # owner controls the subject line when they choose to (empty = AI writes it).
     fixed_subject = (seq_steps[0].get("subject") or "").strip() if seq_steps else ""
-    if fixed_subject:
-        draft.subject = fixed_subject
+    # deterministic style: strip em/en dashes everywhere; cap AI subject length
+    # (a user-set subject is respected as-is, only dash-cleaned).
+    draft.body = clean_dashes(draft.body)
+    draft.subject = clean_dashes(fixed_subject) if fixed_subject else clean_subject(draft.subject)
     return draft, usage, spec.resolved_model()
 
 
@@ -229,6 +297,7 @@ def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subj
     """
     spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
     offer, voice = cfg["offer"], cfg["voice"]
+    use_ai = (cfg.get("sequence") or {}).get("use_ai", True)
     facts = ("(control variant — no researched facts; keep all follow-ups role-based and generic)"
              if variant == "plain" else (_facts_block(research) if research else "FACTS:\n(none)"))
     briefs = []
@@ -236,7 +305,11 @@ def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subj
         tmpl = (st.get("template") or "").strip()
         head = f"FOLLOW-UP {i + 1} of {len(steps)} (sends ~{st.get('wait_days') or 3} days after the previous email):"
         briefs.append(f"{head}\nTEMPLATE:\n---\n{tmpl}\n---" if tmpl else f"{head} (no template)")
-    user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}
+    # "Use AI" OFF: reproduce any templated follow-up near-verbatim (fill placeholders only).
+    verbatim_note = ("" if use_ai else
+                     "\nIMPORTANT — 'Use AI' is OFF: for any follow-up that HAS a template, reproduce it "
+                     "near-verbatim (keep at least 90% of the wording, only fill placeholders, do not rewrite).\n")
+    user = f"""LEAD: {lead.full_name}, {lead.title} at {lead.company}{verbatim_note}
 
 FIRST EMAIL (already sent, no reply)
 Subject: {first_subject}
@@ -258,7 +331,7 @@ VOICE: tone={voice.get('tone')}, max_words={voice.get('max_words')}"""
         temperature=0.6,
     )
     data = llm.parse_json(text)
-    bodies = [str(b or "") for b in (data.get("followups") or [])]
+    bodies = [clean_dashes(str(b or "")) for b in (data.get("followups") or [])]
     bodies += [""] * (len(steps) - len(bodies))   # never shorter than asked
     return bodies[:len(steps)], usage, spec.resolved_model()
 
@@ -307,8 +380,8 @@ INSTRUCTION FROM THE USER: {instruction}"""
     )
     data = llm.parse_json(text)
     draft = Draft(
-        subject=data.get("subject") or subject,
-        body=data.get("body") or body,
+        subject=clean_subject(data.get("subject") or subject),
+        body=clean_dashes(data.get("body") or body),
         angle=f"refined: {instruction[:80]}",
         used_facts=[],
     )

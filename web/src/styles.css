@@ -855,6 +855,11 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .seq-step-head .muted { font-size: 12.5px; }
 .seq-days { width: 52px; margin: 0 6px; padding: 2px 6px; font: inherit; font-size: 12.5px; border: 1px solid var(--line-strong); border-radius: 6px; text-align: center; }
 .seq-subject { margin-bottom: 8px; font-weight: 600; }
+/* "Use AI to generate" toggle at the top of the sequence plan */
+.use-ai-toggle { display: flex; align-items: flex-start; gap: 9px; margin: 12px 0 4px; padding: 11px 13px; border: 1px solid var(--signal-line); background: var(--signal-tint); border-radius: var(--radius-sm); cursor: pointer; }
+.use-ai-toggle input { width: 15px; height: 15px; margin-top: 2px; accent-color: var(--signal); flex: none; cursor: pointer; }
+.use-ai-toggle b { font-size: 13px; }
+.use-ai-toggle .muted { font-size: 12.5px; line-height: 1.5; }
 .field-check { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-bottom: 12px; cursor: pointer; }
 .field-check input { width: 15px; height: 15px; accent-color: var(--signal); cursor: pointer; }
 

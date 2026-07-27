@@ -39,6 +39,7 @@ const targeting = (f) => {
 // Sequence shape exactly as the backend stores it: step 1 = first touch (always
 // immediate), later steps = follow-ups with their day gaps and optional templates.
 const sequenceOf = (f) => ({
+  use_ai: f.use_ai !== false,
   steps: f.seq_steps.map((s, i) => ({
     wait_days: i === 0 ? 0 : Math.max(1, Number(s.wait_days) || 3),
     subject: (s.subject || '').trim(),
@@ -74,6 +75,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
+    use_ai: true,
     seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
@@ -162,6 +164,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         sequence_id: send.sequence_id || '',
         mailbox_ids: send.mailbox_ids || (send.mailbox_id ? [send.mailbox_id] : []),
         daily_cap: send.daily_cap ?? 50,
+        use_ai: (cfg.sequence || {}).use_ai !== false,
         seq_steps: ((cfg.sequence || {}).steps || []).length
           ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
           : p.seq_steps,
@@ -363,6 +366,15 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
               }}>
               {[1, 2, 3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n} {n === 1 ? 'email' : 'emails'}</option>)}
             </select>
+            <label className="use-ai-toggle">
+              <input type="checkbox" checked={f.use_ai} onChange={(e) => setKey('use_ai', e.target.checked)} />
+              <span>
+                <b>Use AI to generate the emails</b>
+                <span className="muted">{f.use_ai
+                  ? ' — the AI writes each email, using your templates below as a guide and grounding it in the lead’s research.'
+                  : ' — off: your templates below are sent almost exactly as written (only the lead’s name/company filled in). Turn on later to give the AI more liberty.'}</span>
+              </span>
+            </label>
             {f.seq_steps.map((s, i) => (
               <div key={i} className="seq-step">
                 <div className="seq-step-head">

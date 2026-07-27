@@ -10,6 +10,7 @@ import re
 
 from .. import llm
 from ..models import Draft, GateResult, Lead, Research
+from .personalize import clean_dashes, clean_subject
 
 VERIFY_SYSTEM = """You fact-check a cold sales email for ONE failure mode: does it
 invent a specific claim ABOUT THE RECIPIENT'S company/role/situation that the
@@ -46,9 +47,9 @@ def _deterministic(draft: Draft, voice: dict) -> str | None:
 def _fallback(lead: Lead, cfg: dict) -> Draft:
     offer = cfg["offer"]
     return Draft(
-        subject=f"{offer.get('product')} for {lead.company}".strip(),
-        body=(
-            f"Hi {lead.first_name or 'there'} — {offer.get('one_liner')} "
+        subject=clean_subject(f"{offer.get('product')} for {lead.company}".strip()),
+        body=clean_dashes(
+            f"Hi {lead.first_name or 'there'}, {offer.get('one_liner')} "
             f"Worth a quick look? {offer.get('link')}"
         ),
         angle="generic fallback (no/weak research)",

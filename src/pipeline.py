@@ -66,6 +66,7 @@ def draft_hash(research: Research, cfg: dict, variant: str = "signal") -> str:
         (cfg.get("models") or {}).get("personalize"),
         (seq_steps[0].get("template") or "") if seq_steps else "",  # first-email template steers the draft
         (seq_steps[0].get("subject") or "") if seq_steps else "",    # a user-set subject changes the draft
+        (cfg.get("sequence") or {}).get("use_ai", True),             # AI-generate vs verbatim template
     )
 
 
@@ -172,6 +173,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     ob = store.get_outbox(lead.key) or {}
     fu_steps = followup_steps(cfg)
     fuh = hash_inputs("fu-rev3", final.subject, final.body, variant,
+                      (cfg.get("sequence") or {}).get("use_ai", True),
                       [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
     if fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
         bodies, usage, model = personalize.write_followups(

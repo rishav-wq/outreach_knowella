@@ -274,11 +274,11 @@ def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None =
     for n in steps:
         names += [f"{subject_name}_{n}", f"{body_name}_{n}"]
     fields = _resolve_field_ids(names, key)
-    body = personalize.with_signature(draft.body, campaign)   # append the sender footer
+    body = personalize.with_signature(draft.body, campaign, lead)   # footer + per-lead unsubscribe link
     custom = {fields[subject_name]: draft.subject, fields[body_name]: body}
     for n in steps:
         custom[fields[f"{subject_name}_{n}"]] = fu.get(f"subject_{n}") or f"Re: {draft.subject}"
-        custom[fields[f"{body_name}_{n}"]] = personalize.with_signature(fu[f"body_{n}"], campaign)
+        custom[fields[f"{body_name}_{n}"]] = personalize.with_signature(fu[f"body_{n}"], campaign, lead)
 
     # 1) upsert the contact with the copy in its custom fields
     cid = _find_contact_id(lead.email, key)

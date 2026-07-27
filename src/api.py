@@ -14,11 +14,11 @@ import threading
 import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, config, pipeline, tagging
+from . import auth, config, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich
 from .store import open_store
@@ -119,6 +119,27 @@ def _require_campaign(name: str) -> None:
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/unsubscribe")
+def unsubscribe_link(t: str = ""):
+    """Public one-click unsubscribe (linked from every email footer). Verifies the
+    token, adds the address to the global do-not-contact list, and shows a plain
+    confirmation page. No auth (see auth._OPEN_API_PATHS)."""
+    email = unsubscribe.email_from_token(t)
+    if email:
+        open_store().suppress(email, reason="unsubscribed via email link")
+    msg = ("You’ve been unsubscribed. You won’t receive any more emails from us."
+           if email else "This unsubscribe link is invalid or expired.")
+    page = f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unsubscribe</title></head>
+<body style="font-family:system-ui,sans-serif;background:#f6fafa;color:#242a32;
+display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">
+<div style="max-width:420px;padding:32px;text-align:center">
+<h2 style="margin:0 0 10px">{'Unsubscribed' if email else 'Invalid link'}</h2>
+<p style="color:#64707c;line-height:1.6">{msg}</p></div></body></html>"""
+    return HTMLResponse(page)
 
 
 @app.get("/api/campaigns")
