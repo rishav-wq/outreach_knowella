@@ -183,6 +183,11 @@ RULES: {voice.get('rules')}"""
         angle=data.get("angle", ""),
         used_facts=data.get("used_facts") or [],
     )
+    # a user-set subject for step 1 wins verbatim over the AI's — the campaign
+    # owner controls the subject line when they choose to (empty = AI writes it).
+    fixed_subject = (seq_steps[0].get("subject") or "").strip() if seq_steps else ""
+    if fixed_subject:
+        draft.subject = fixed_subject
     return draft, usage, spec.resolved_model()
 
 

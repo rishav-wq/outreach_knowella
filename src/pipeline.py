@@ -65,6 +65,7 @@ def draft_hash(research: Research, cfg: dict, variant: str = "signal") -> str:
         cfg.get("voice"),
         (cfg.get("models") or {}).get("personalize"),
         (seq_steps[0].get("template") or "") if seq_steps else "",  # first-email template steers the draft
+        (seq_steps[0].get("subject") or "") if seq_steps else "",    # a user-set subject changes the draft
     )
 
 
@@ -76,9 +77,10 @@ def followup_steps(cfg: dict) -> list[dict]:
     """
     steps = (cfg.get("sequence") or {}).get("steps") or []
     if steps:
-        return [{"wait_days": int(s.get("wait_days") or 3), "template": s.get("template") or ""}
+        return [{"wait_days": int(s.get("wait_days") or 3), "template": s.get("template") or "",
+                 "subject": (s.get("subject") or "").strip()}
                 for s in steps[1:]]
-    return [{"wait_days": 3, "template": ""}, {"wait_days": 4, "template": ""}]
+    return [{"wait_days": 3, "template": "", "subject": ""}, {"wait_days": 4, "template": "", "subject": ""}]
 
 
 def ensure_verified(store: Store, lead: Lead, cfg: dict) -> str:
@@ -170,13 +172,15 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     ob = store.get_outbox(lead.key) or {}
     fu_steps = followup_steps(cfg)
     fuh = hash_inputs("fu-rev3", final.subject, final.body, variant,
-                      [(s["wait_days"], s["template"]) for s in fu_steps])
+                      [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
     if fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
         bodies, usage, model = personalize.write_followups(
             lead, res, cfg, final.subject, final.body, fu_steps, variant)
         if all(bodies):
+            # a user-set subject for a follow-up wins; empty threads it as "Re: <first subject>"
             store.save_followups(
-                lead.key, [{"subject": f"Re: {final.subject}", "body": b} for b in bodies], fuh)
+                lead.key, [{"subject": s["subject"] or f"Re: {final.subject}", "body": b}
+                           for s, b in zip(fu_steps, bodies)], fuh)
             store.log_llm(lead.key, "followups", model, usage)
     elif not fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
         store.save_followups(lead.key, [], fuh)   # single-email sequence: clear stale follow-ups

@@ -41,6 +41,7 @@ const targeting = (f) => {
 const sequenceOf = (f) => ({
   steps: f.seq_steps.map((s, i) => ({
     wait_days: i === 0 ? 0 : Math.max(1, Number(s.wait_days) || 3),
+    subject: (s.subject || '').trim(),
     template: s.template || '',
   })),
 })
@@ -73,7 +74,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_id: '', daily_cap: 50, control_pct: 20,
-    seq_steps: [{ wait_days: 0, template: '' }, { wait_days: 3, template: '' }, { wait_days: 4, template: '' }],
+    seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
     rules: 'Open with a researched, specific observation about THEIR company.\nNever assert a fact that isn’t in the lead’s research.\nEnd with ONE low-friction interest question — never a demo or meeting ask on the first touch.',
@@ -161,7 +162,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         sequence_id: send.sequence_id || '', mailbox_id: send.mailbox_id || '',
         daily_cap: send.daily_cap ?? 50,
         seq_steps: ((cfg.sequence || {}).steps || []).length
-          ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), template: s.template || '' }))
+          ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
           : p.seq_steps,
         control_pct: (cfg.experiment || {}).enabled === false ? 0
           : Math.round(((cfg.experiment || {}).control_ratio ?? 0.2) * 100),
@@ -364,6 +365,11 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
                           onChange={(e) => setKey('seq_steps', f.seq_steps.map((x, j) => j === i ? { ...x, wait_days: e.target.value } : x))} />
                         days after email {i} (only if still no reply)</span>}
                 </div>
+                <input className="field-input seq-subject" value={s.subject}
+                  placeholder={i === 0
+                    ? 'Subject line (optional). Empty = the AI writes one per lead.'
+                    : 'Subject line (optional). Empty = threads as “Re: <first subject>”.'}
+                  onChange={(e) => setKey('seq_steps', f.seq_steps.map((x, j) => j === i ? { ...x, subject: e.target.value } : x))} />
                 <textarea className="field-input" rows={3} value={s.template}
                   placeholder={i === 0
                     ? 'Template (optional). Paste an email you like — the AI mirrors its structure and voice, filling it with each lead’s researched facts. Empty = the default researched first touch.'
