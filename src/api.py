@@ -159,7 +159,8 @@ h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
 p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
 .foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
 @media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
-.card{background:#161d1a;border-color:#28322d}p{color:#9aa5ac}.mark.bad{background:#222b27}}
+.card{background:#161d1a;border-color:#28322d;box-shadow:0 12px 40px -14px rgba(0,0,0,.6)}
+p{color:#9aa5ac}.mark.bad{background:#222b27}}
 </style></head><body><div class="card">
 <div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
 <div class="mark __BAD__">__ICON__</div>
