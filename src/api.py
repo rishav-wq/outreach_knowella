@@ -121,25 +121,64 @@ def health():
     return {"ok": True}
 
 
+# Knowella pinwheel mark (verbatim from web/src/components/Logo.jsx) for the
+# standalone unsubscribe page, which the React app / its assets don't reach.
+_PINWHEEL = (
+    '<svg viewBox="0 0 32 32" width="30" height="30" aria-label="Knowella">'
+    '<path fill="#87DD75" d="M13.2,16c0-4.5-2-8.4-5.3-10.7c-1.3-0.9-2.7-1.4-4-1.6c-0.5-0.1-0.9-0.1-1.4,0C2,3.8,1.6,4,1.2,4.3 C0.9,4.6,0.6,5,0.4,5.4C0.2,5.9,0.1,6.3,0.1,6.8c0,0.7,0.3,1.5,0.7,2c0.5,0.6,1.1,1,1.8,1.1c0.8,0.2,1.4,0.4,1.9,0.6 c0,0,3.4,1.4,3.5,5.2C8,15.9,8,16,8,16c0,0.1,0,0.1,0,0.2c-0.1,3.7-3.3,5.2-3.3,5.2S4,21.8,2.6,22.2c-0.7,0.1-1.3,0.5-1.8,1.1 c-0.5,0.6-0.7,1.3-0.7,2c0,0.5,0.1,0.9,0.3,1.4c0.2,0.4,0.5,0.8,0.9,1.1C1.6,28,2,28.2,2.5,28.3c0.5,0.1,0.9,0.1,1.4,0 c1.8-0.4,3.5-1.2,4.9-2.3C11.6,23.8,13.2,20.1,13.2,16z"/>'
+    '<path fill="#6459FF" d="M16,18.8c-4.5,0-8.4,2-10.7,5.3c-0.9,1.3-1.3,2.7-1.6,4c-0.1,0.5-0.1,0.9,0,1.4c0.1,0.5,0.3,0.9,0.6,1.3 c0.3,0.4,0.7,0.7,1.1,0.9C5.9,31.9,6.4,32,6.9,32c0.7,0,1.4-0.3,2-0.7s1-1.1,1.1-1.8c0.2-0.8,0.4-1.5,0.6-2c0,0,1.4-3.4,5.2-3.5H16 c0.1,0,0.1,0,0.2,0c3.7,0.1,5.2,3.3,5.2,3.3s0.5,0.7,0.8,2.2c0.1,0.7,0.5,1.3,1.1,1.8c0.6,0.5,1.3,0.7,2,0.7l0,0 c0.5,0,0.9-0.1,1.4-0.3c0.4-0.2,0.8-0.5,1.1-0.9c0.3-0.4,0.5-0.8,0.6-1.3c0.1-0.5,0.1-0.9,0-1.4c-0.4-1.8-1.2-3.5-2.3-4.9 C23.8,20.4,20.1,18.8,16,18.8z"/>'
+    '<path fill="#FFD600" d="M18.8,16c0,4.5,2,8.4,5.3,10.7c1.3,0.9,2.7,1.4,4,1.6c0.5,0.1,0.9,0.1,1.4,0c0.5-0.1,0.9-0.3,1.3-0.6 c0.4-0.3,0.7-0.7,0.9-1.1c0.2-0.4,0.3-0.9,0.3-1.4c0-0.7-0.3-1.5-0.7-2c-0.5-0.6-1.1-1-1.8-1.1c-0.8-0.2-1.4-0.4-1.9-0.6 c0,0-3.4-1.4-3.5-5.2c0-0.1,0-0.1,0-0.2c0-0.1,0-0.1,0-0.2c0.1-3.7,3.3-5.2,3.3-5.2s0.7-0.5,2.2-0.8c0.7-0.1,1.3-0.5,1.8-1.1 c0.5-0.6,0.7-1.3,0.7-2c0-0.5-0.1-0.9-0.3-1.4c-0.2-0.4-0.5-0.8-0.9-1.1C30.4,4,30,3.8,29.5,3.7s-0.9-0.1-1.4,0 c-1.8,0.4-3.5,1.2-4.9,2.3C20.4,8.2,18.8,11.9,18.8,16z"/>'
+    '<path fill="#04B492" d="M16,13.2c4.5,0,8.4-2,10.7-5.3c0.9-1.3,1.3-2.7,1.6-4c0.1-0.5,0.1-0.9,0-1.4c-0.1-0.5-0.3-0.9-0.6-1.3 c-0.3-0.4-0.7-0.7-1.1-0.9C26.1,0.1,25.6,0,25.1,0c-0.7,0-1.4,0.3-2,0.7c-0.6,0.5-1,1.1-1.1,1.8c-0.2,0.8-0.4,1.5-0.6,2 c0,0-1.4,3.4-5.2,3.5C16.1,8,16,8,16,8c-0.1,0-0.1,0-0.2,0c-3.7-0.1-5.2-3.3-5.2-3.3S10.2,4,9.9,2.5C9.7,1.8,9.3,1.2,8.8,0.7 C8.2,0.3,7.5,0,6.8,0l0,0C6.3,0,5.9,0.1,5.4,0.3C5,0.5,4.6,0.8,4.3,1.2C4,1.6,3.8,2,3.7,2.4c-0.1,0.5-0.1,0.9,0,1.4 C4.1,5.6,4.9,7.3,6,8.7C8.2,11.6,11.9,13.2,16,13.2z"/></svg>')
+
+_CHECK = ('<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+          'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>')
+_CROSS = ('<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+          'stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>')
+
+
+def _unsubscribe_page(ok: bool) -> str:
+    heading = "You’re unsubscribed" if ok else "Link not valid"
+    msg = ("You won’t receive any more emails from us. Sorry for the interruption."
+           if ok else
+           "This unsubscribe link couldn’t be verified — it may be old or altered. If you’re "
+           "still getting emails, reply “unsubscribe” to one and we’ll remove you.")
+    return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe · Knowella</title>
+<style>
+:root{color-scheme:light dark}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+background:#f6fafa;color:#242a32;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
+.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;box-shadow:0 10px 34px -14px rgba(36,42,50,.2);
+padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
+.brand{display:flex;justify-content:center;align-items:center;gap:9px;margin-bottom:22px}
+.brand b{font-size:16px;font-weight:600;letter-spacing:-.01em}
+.brand i{font-style:normal;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#96a1af;font-weight:600}
+.mark{width:54px;height:54px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;background:#e6f8f4;color:#04b492}
+.mark.bad{background:#f0f1ec;color:#96a1af}
+h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
+p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
+.foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
+@media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
+.card{background:#161d1a;border-color:#28322d}p{color:#9aa5ac}.mark.bad{background:#222b27}}
+</style></head><body><div class="card">
+<div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
+<div class="mark __BAD__">__ICON__</div>
+<h1>__HEADING__</h1><p>__MSG__</p>
+<div class="foot">Knowella AI Inc.</div>
+</div></body></html>""".replace("__PINWHEEL__", _PINWHEEL)
+        .replace("__BAD__", "" if ok else "bad").replace("__ICON__", _CHECK if ok else _CROSS)
+        .replace("__HEADING__", heading).replace("__MSG__", msg))
+
+
 @app.get("/api/unsubscribe")
 def unsubscribe_link(t: str = ""):
     """Public one-click unsubscribe (linked from every email footer). Verifies the
-    token, adds the address to the global do-not-contact list, and shows a plain
+    token, adds the address to the global do-not-contact list, and shows a branded
     confirmation page. No auth (see auth._OPEN_API_PATHS)."""
     email = unsubscribe.email_from_token(t)
     if email:
         open_store().suppress(email, reason="unsubscribed via email link")
-    msg = ("You’ve been unsubscribed. You won’t receive any more emails from us."
-           if email else "This unsubscribe link is invalid or expired.")
-    page = f"""<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Unsubscribe</title></head>
-<body style="font-family:system-ui,sans-serif;background:#f6fafa;color:#242a32;
-display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">
-<div style="max-width:420px;padding:32px;text-align:center">
-<h2 style="margin:0 0 10px">{'Unsubscribed' if email else 'Invalid link'}</h2>
-<p style="color:#64707c;line-height:1.6">{msg}</p></div></body></html>"""
-    return HTMLResponse(page)
+    return HTMLResponse(_unsubscribe_page(bool(email)))
 
 
 @app.get("/api/campaigns")
