@@ -245,6 +245,12 @@ def research_lead(lead: Lead, cfg: dict) -> tuple[Research, dict, str]:
     spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("research"))
     total = {"prompt_tokens": 0, "completion_tokens": 0}
 
+    # facts-per-lead = 0 means "don't research" — skip all gathering/extraction so a
+    # plain campaign spends nothing on research. Drafting then has no facts to use.
+    if int((cfg.get("research") or {}).get("max_facts", 12)) <= 0:
+        print("  [research] skipped: facts per lead is 0 (plain campaign)")
+        return Research(facts=[], pain_points=[], summary=""), total, spec.resolved_model()
+
     def _add(u: dict) -> None:
         total["prompt_tokens"] += u.get("prompt_tokens", 0)
         total["completion_tokens"] += u.get("completion_tokens", 0)

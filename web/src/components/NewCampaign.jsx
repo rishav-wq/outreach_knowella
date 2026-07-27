@@ -170,7 +170,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         tone: voice.tone || p.tone, max_words: voice.max_words || 75,
         rules: (voice.rules || []).join('\n') || p.rules,
         block_risky: !!verify.block_risky, require_deliverable: !!verify.require_deliverable,
-        max_facts: (cfg.research || {}).max_facts || 12,
+        max_facts: (cfg.research || {}).max_facts ?? 12,
       }) }
     }).catch(() => setError('Could not load this campaign’s settings.'))
   }, [isEdit, edit])
@@ -185,7 +185,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
       offer: { product: f.product, one_liner: f.one_liner, value_props: lines(f.value_props), call_to_action: f.call_to_action, link: f.link },
       knowledge: lines(f.knowledge),
       voice: { tone: f.tone, max_words: Number(f.max_words) || 75, rules: lines(f.rules) },
-      research: { max_facts: Number(f.max_facts) || 12 },
+      research: { max_facts: f.max_facts === '' ? 12 : Math.max(0, Number(f.max_facts) || 0) },
       experiment: { enabled: Number(f.control_pct) > 0, control_ratio: Number(f.control_pct) / 100 },
       verify: { block_risky: f.block_risky, require_deliverable: f.require_deliverable },
     }
@@ -401,14 +401,16 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), '0 = unlimited. Sends any time of day — the cap is the only throttle.')}
         {field('A/B experiment — control share', (
           <div className="slider-row">
-            <input type="range" min={0} max={50} step={5} value={f.control_pct}
+            <input type="range" min={0} max={100} step={5} value={f.control_pct}
               onChange={(e) => setKey('control_pct', Number(e.target.value))} />
             <span className="slider-val">{Number(f.control_pct) === 0 ? 'off' : `${f.control_pct}%`}</span>
           </div>
         ), Number(f.control_pct) === 0
           ? 'Every email uses the lead’s researched facts — but you’ll never learn whether that lifts replies.'
-          : `About 1 in ${Math.max(2, Math.round(100 / Number(f.control_pct)))} emails goes out as a plain (no researched facts) control, so the campaign measures whether fact-led openers earn more replies.`)}
-        {field('Facts per lead', input('max_facts', { type: 'number', min: 3, max: 30 }), 'How many verified facts to research per lead — the pool the fact-led emails draw from (the A/B test above measures whether using them lifts replies).')}
+          : Number(f.control_pct) === 100
+            ? 'Every email goes out plain (no researched facts) — no fact-led emails are sent at all.'
+            : `About 1 in ${Math.max(2, Math.round(100 / Number(f.control_pct)))} emails goes out as a plain (no researched facts) control, so the campaign measures whether fact-led openers earn more replies.`)}
+        {field('Facts per lead', input('max_facts', { type: 'number', min: 0, max: 30 }), 'How many verified facts to research per lead — the pool the fact-led emails draw from (the A/B test above measures whether using them lifts replies). 0 = skip research and send plain emails.')}
         {disclosure(showAdv, setShowAdv, 'Advanced settings (optional)')}
         {showAdv && (
           <>
