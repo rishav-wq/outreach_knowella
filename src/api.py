@@ -148,7 +148,7 @@ def _unsubscribe_page(ok: bool) -> str:
 :root{color-scheme:light dark}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
 background:#f6fafa;color:#242a32;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
-.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;box-shadow:0 10px 34px -14px rgba(36,42,50,.2);
+.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;
 padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
 .brand{display:flex;justify-content:center;align-items:center;gap:9px;margin-bottom:22px}
 .brand b{font-size:16px;font-weight:600;letter-spacing:-.01em}
@@ -159,7 +159,7 @@ h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
 p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
 .foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
 @media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
-.card{background:#161d1a;border-color:#28322d;box-shadow:0 12px 40px -14px rgba(0,0,0,.6)}
+.card{background:#161d1a;border-color:#28322d}
 p{color:#9aa5ac}.mark.bad{background:#222b27}}
 </style></head><body><div class="card">
 <div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
