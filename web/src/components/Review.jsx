@@ -131,6 +131,19 @@ export default function Review({ campaign }) {
     try { await api.excludeLead(campaign, key) } catch { load() }
   }
 
+  // permanently delete a lead — gone from this campaign AND the leads library, for
+  // junk rows you want cleared, not kept. Distinct from "Not a fit" (which excludes
+  // but keeps the lead in the library). Any row can be deleted, not just the current.
+  const doDelete = async (key, name) => {
+    if (!window.confirm(`Delete ${name || 'this lead'} permanently? It’s removed from this campaign and your leads library and can’t be recovered.`)) return
+    const list = items || []
+    const delIdx = list.findIndex((it) => it.key === key)
+    const next = list.filter((it) => it.key !== key)
+    setItems(next)
+    setI((cur) => Math.max(0, Math.min(delIdx !== -1 && delIdx < cur ? cur - 1 : cur, next.length - 1)))
+    try { await api.bulkDeleteLeads(campaign, [key]) } catch { load() }
+  }
+
   const saveEdit = async () => {
     const key = current.key
     await api.editEmail(campaign, key, eSubject, eBody)
@@ -303,17 +316,24 @@ export default function Review({ campaign }) {
             {items.map((it, idx) => {
               const r = readiness(it)
               return (
-                <button key={it.key} className={`rq-item ${idx === i ? 'on' : ''} ${it.decision || ''}`} onClick={() => setI(idx)}>
-                  <div className="rq-mark">
-                    {it.decision === 'approved' ? <Icon name="check" size={13} />
-                      : it.decision === 'rejected' ? <Icon name="x" size={13} />
-                      : <span className={`dot ${r.kind === 'ok' ? 'd-ok' : 'd-held'}`} />}
-                  </div>
-                  <div className="rq-id">
-                    <div className="rq-name">{it.name}</div>
-                    <div className="rq-sub">{it.company}</div>
-                  </div>
-                </button>
+                <div key={it.key} className="rq-item-wrap">
+                  <button className={`rq-item ${idx === i ? 'on' : ''} ${it.decision || ''}`} onClick={() => setI(idx)}>
+                    <div className="rq-mark">
+                      {it.decision === 'approved' ? <Icon name="check" size={13} />
+                        : it.decision === 'rejected' ? <Icon name="x" size={13} />
+                        : <span className={`dot ${r.kind === 'ok' ? 'd-ok' : 'd-held'}`} />}
+                    </div>
+                    <div className="rq-id">
+                      <div className="rq-name">{it.name}</div>
+                      <div className="rq-sub">{it.company}</div>
+                    </div>
+                  </button>
+                  <button className="rq-del" aria-label={`Delete ${it.name}`}
+                    title="Delete this lead — removes it from the campaign and your leads library"
+                    onClick={() => doDelete(it.key, it.name)}>
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
               )
             })}
           </aside>

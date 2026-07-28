@@ -535,6 +535,19 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .rq-item:hover { background: #f8f9f5; }
 .rq-item.on { background: var(--signal-tint); box-shadow: inset 3px 0 0 var(--signal); }
 .rq-item.approved, .rq-item.rejected { opacity: 0.55; }
+/* per-row delete — hover a row to reveal a trash button, to clean up the queue */
+.rq-item-wrap { position: relative; }
+.rq-item-wrap .rq-item { padding-right: 38px; }
+.rq-del {
+  position: absolute; top: 50%; right: 7px; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 27px; height: 27px; padding: 0; border: none; border-radius: 6px;
+  background: none; color: var(--muted); cursor: pointer; opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.rq-item-wrap:hover .rq-del, .rq-del:focus-visible { opacity: 1; }
+.rq-del:hover { background: #fdecec; color: var(--alert); }
+
 .rq-mark { flex-shrink: 0; width: 18px; display: flex; justify-content: center; padding-top: 3px; color: var(--muted); }
 .rq-item.approved .rq-mark { color: var(--verify); }
 .rq-item.rejected .rq-mark { color: var(--alert); }
