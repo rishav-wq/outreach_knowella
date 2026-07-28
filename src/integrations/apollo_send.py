@@ -107,12 +107,15 @@ def create_sequence(name: str, waits: list[int] | None = None) -> dict:
     waits = days between each follow-up and the previous email, one entry per
     follow-up — so [3, 4] is the classic first touch + day-3 + day-7 (the default),
     [] is a single-email sequence, and [2, 3, 5, 7] is a 5-email sequence. Each
-    step's template references the contact merge fields (email_body_N); follow-up
-    templates keep an empty subject so Apollo threads them as replies. 24/7
+    step's template references the contact merge fields (email_body_N). EVERY step —
+    follow-ups included — gets a subject merge tag (email_subject_N, which we fill per
+    lead with "Re: <first subject>"): Apollo REFUSES to activate a step with no
+    subject, and an inactive step is silently skipped for enrolled contacts. 24/7
     schedule, stop-on-reply + stop-on-interested. Returns {id, name}.
 
-    Apollo won't activate a sequence via API — the user flips the Activate toggle
-    in Apollo once; surface that in the UI.
+    Each step's variant is created as status 'to_be_reviewed' (inactive) and is flipped
+    to 'active' here, so contacts don't skip it. The user still flips the sequence-level
+    Activate toggle in Apollo once; surface that in the UI.
     """
     key = os.environ.get("APOLLO_API_KEY")
     if not key:
@@ -122,19 +125,31 @@ def create_sequence(name: str, waits: list[int] | None = None) -> dict:
     if not sid:
         raise RuntimeError("Apollo did not return a sequence id")
 
-    def step(pos: int, wait_days: int, body_tag: str, subj_tag: str = ""):
+    def step(pos: int, wait_days: int, body_tag: str, subj_tag: str):
         payload = {"emailer_campaign_id": sid, "type": "auto_email", "position": pos,
                    "wait_mode": "day" if wait_days else "minute",
                    "wait_time": wait_days if wait_days else 30, "exact_datetime": None}
         d = _request("POST", "/emailer_steps", key, payload)
-        tmpl = (d.get("emailer_touch") or {}).get("emailer_template_id")
+        touch = d.get("emailer_touch") or {}
+        tmpl = touch.get("emailer_template_id")
         if tmpl:
             _request("PUT", f"/emailer_templates/{tmpl}", key,
                      {"subject": subj_tag, "body_html": body_tag})
+        # Steps are created inactive (touch status 'to_be_reviewed') and Apollo then
+        # SKIPS them for enrolled contacts, so nothing sends. Activate the variant:
+        # PUT status 'active' (Apollo settles it to 'approved') WITH the template
+        # nested — the endpoint 422s ("undefined method '[]' for nil") without it.
+        # Apollo also refuses activation when the subject is empty, which is why every
+        # step (subj_tag above) carries a subject merge tag.
+        tid = touch.get("id")
+        if tid:
+            _request("PUT", f"/emailer_touches/{tid}", key,
+                     {"status": "active", "emailer_template": {"subject": subj_tag, "body_html": body_tag}})
 
     step(1, 0, "{{contact.email_body}}", "{{contact.email_subject}}")
     for i, wd in enumerate([3, 4] if waits is None else waits, start=2):
-        step(i, max(1, int(wd or 1)), f"{{{{contact.email_body_{i}}}}}")
+        step(i, max(1, int(wd or 1)),
+             f"{{{{contact.email_body_{i}}}}}", f"{{{{contact.email_subject_{i}}}}}")
 
     # 24/7 schedule if one exists (any schedule covering all 7 days), else leave default
     try:
