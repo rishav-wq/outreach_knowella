@@ -10,6 +10,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 
 import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -44,7 +45,8 @@ app.add_middleware(
 )
 
 CONFIG_DIR = "config"   # legacy seed source (committed campaigns + the CLI); runtime campaigns now live in Mongo
-_runs: dict = {}  # campaign -> {running, error, summary}
+_runs: dict = {}  # campaign -> {running, error, summary, started_at}
+_run_threads: dict = {}  # campaign -> worker Thread (kept out of _runs so it stays JSON-serializable)
 _seeded = False   # one-time file→Mongo migration guard (per process)
 _leads_migrated = False   # one-time lead-key re-scoping guard (per process)
 REQUIRED_KEYS = ("name", "icp", "offer", "voice")
@@ -1179,12 +1181,36 @@ def _do_run(name: str, send: bool, limit: int | None):
         _runs[name] = {"running": False, "error": str(e), "summary": {}}
 
 
+# A run should never legitimately take this long; past it a still-'running' flag is
+# treated as orphaned so a campaign can't get permanently locked out of sending.
+_RUN_STALE_SECS = 900  # 15 min
+
+
+def _run_in_progress(campaign: str) -> bool:
+    """True only when a run is genuinely still executing. A 'running' flag whose
+    worker thread has died — or that has been stuck past _RUN_STALE_SECS — is stale
+    and ignored, so an orphaned flag (e.g. a thread killed mid-run) never blocks all
+    future sends. This is the fix for a Send that silently no-ops with 'already
+    running' forever."""
+    st = _runs.get(campaign) or {}
+    if not st.get("running"):
+        return False
+    th = _run_threads.get(campaign)
+    if th is not None and not th.is_alive():
+        return False  # worker died without clearing the flag
+    if time.time() - st.get("started_at", 0) > _RUN_STALE_SECS:
+        return False  # stuck far too long — treat as orphaned
+    return True
+
+
 @app.post("/api/run")
 def run(req: RunReq):
-    if _runs.get(req.campaign, {}).get("running"):
+    if _run_in_progress(req.campaign):
         return {"started": False, "reason": "already running"}
-    _runs[req.campaign] = {"running": True, "error": None, "summary": {}}
-    threading.Thread(target=_do_run, args=(req.campaign, req.send, req.limit), daemon=True).start()
+    th = threading.Thread(target=_do_run, args=(req.campaign, req.send, req.limit), daemon=True)
+    _runs[req.campaign] = {"running": True, "error": None, "summary": {}, "started_at": time.time()}
+    _run_threads[req.campaign] = th
+    th.start()
     return {"started": True}
 
 
