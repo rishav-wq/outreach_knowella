@@ -75,7 +75,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
-    use_ai: true, use_mailbox_signature: false,
+    use_ai: true, use_mailbox_signature: true,
     seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
@@ -165,7 +165,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         mailbox_ids: send.mailbox_ids || (send.mailbox_id ? [send.mailbox_id] : []),
         daily_cap: send.daily_cap ?? 50,
         use_ai: (cfg.sequence || {}).use_ai !== false,
-        use_mailbox_signature: !!send.use_mailbox_signature,
+        use_mailbox_signature: send.use_mailbox_signature !== false,
         seq_steps: ((cfg.sequence || {}).steps || []).length
           ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
           : p.seq_steps,
@@ -418,13 +418,13 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             <input type="checkbox" checked={f.use_mailbox_signature}
               onChange={(e) => setKey('use_mailbox_signature', e.target.checked)} />
             <span>
-              <b>My Apollo mailbox already adds a signature</b>
+              <b>The sending mailbox adds the signature (recommended)</b>
               <span className="muted">{f.use_mailbox_signature
-                ? ' — on: the app won’t add its own sign-off, so the email isn’t signed twice. Only the one-click unsubscribe line is appended; your Apollo mailbox signature is the sign-off.'
-                : ' — off: the app appends the sender signature from this campaign, ending with the unsubscribe link.'}</span>
+                ? ' — on: the app won’t add its own sign-off, so no email is double-signed. Only the one-click unsubscribe line is appended; your mailbox’s signature (Apollo, Gmail…) is the sign-off.'
+                : ' — off: the app appends the sender signature from this campaign, ending with the unsubscribe link. Use this only if your mailbox has no signature of its own.'}</span>
             </span>
           </label>
-        ), 'Turn on if your Apollo mailbox is set to append a signature — otherwise every email gets signed twice (yours + Apollo’s). The one-click unsubscribe link is always included either way.')}
+        ), 'On by default so no email is ever double-signed. Leave on when your mailbox already appends a signature (Apollo, Gmail…) — the app then adds only the unsubscribe link, which is always included.')}
         {field('A/B experiment — control share', (
           <div className="slider-row">
             <input type="range" min={0} max={100} step={5} value={f.control_pct}

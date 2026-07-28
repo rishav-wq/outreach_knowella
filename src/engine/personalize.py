@@ -130,11 +130,12 @@ def signature_text(cfg: dict, lead: Lead | None = None) -> str:
         opt_out = f"Not the right fit? Unsubscribe: {unsub_link(lead.email)}"
     else:
         opt_out = "Not the right fit? Unsubscribe: [one-click link added when sent]"
-    # When the sending platform appends its own signature (e.g. an Apollo mailbox
-    # signature), skip our sender block so the email isn't signed twice — emit ONLY
-    # the unsubscribe line. The platform's signature is the sign-off; compliance
-    # (one-click unsubscribe) still rides along.
-    if (cfg.get("sending") or {}).get("use_mailbox_signature"):
+    # The sending mailbox (e.g. an Apollo mailbox signature) appends its OWN signature,
+    # so BY DEFAULT the app does not add a second one — it emits only the one-click
+    # unsubscribe line, so no email is ever double-signed, anywhere. A campaign can opt
+    # back into the app-generated signature by setting sending.use_mailbox_signature: false
+    # (e.g. a mailbox that has no signature of its own).
+    if (cfg.get("sending") or {}).get("use_mailbox_signature", True):
         return opt_out
     tail = f"\n\n{opt_out}"
     # a verbatim signature block wins — lets you paste your exact plain-text sign-off
