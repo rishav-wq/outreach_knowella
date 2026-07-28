@@ -130,6 +130,12 @@ def signature_text(cfg: dict, lead: Lead | None = None) -> str:
         opt_out = f"Not the right fit? Unsubscribe: {unsub_link(lead.email)}"
     else:
         opt_out = "Not the right fit? Unsubscribe: [one-click link added when sent]"
+    # When the sending platform appends its own signature (e.g. an Apollo mailbox
+    # signature), skip our sender block so the email isn't signed twice — emit ONLY
+    # the unsubscribe line. The platform's signature is the sign-off; compliance
+    # (one-click unsubscribe) still rides along.
+    if (cfg.get("sending") or {}).get("use_mailbox_signature"):
+        return opt_out
     tail = f"\n\n{opt_out}"
     # a verbatim signature block wins — lets you paste your exact plain-text sign-off
     raw = (s.get("signature") or "").strip()

@@ -75,7 +75,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
-    use_ai: true,
+    use_ai: true, use_mailbox_signature: false,
     seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
@@ -165,6 +165,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         mailbox_ids: send.mailbox_ids || (send.mailbox_id ? [send.mailbox_id] : []),
         daily_cap: send.daily_cap ?? 50,
         use_ai: (cfg.sequence || {}).use_ai !== false,
+        use_mailbox_signature: !!send.use_mailbox_signature,
         seq_steps: ((cfg.sequence || {}).steps || []).length
           ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
           : p.seq_steps,
@@ -215,7 +216,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         // sending merges server-side, so platform/field ids in the config are preserved
         await api.updateCampaign(slug, {
           ...payload,
-          sending: { sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '', daily_cap: Number(f.daily_cap) || 0 },
+          sending: { sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '', daily_cap: Number(f.daily_cap) || 0, use_mailbox_signature: !!f.use_mailbox_signature },
         })
       } else {
         // No send window — sends any time; the daily cap is the only throttle.
@@ -224,6 +225,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
           sending: {
             platform: 'apollo', sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '',
             subject_field: 'email_subject', body_field: 'email_body', daily_cap: Number(f.daily_cap) || 0,
+            use_mailbox_signature: !!f.use_mailbox_signature,
           },
         })
         slug = r.created
@@ -411,6 +413,18 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
           : input('sequence_id', { placeholder: 'leave empty to set later' }),
           `Where approved leads are added. “＋ Create” builds it in Apollo to match your ${f.seq_steps.length}-email plan above (stop-on-reply, per-campaign stats) — you flip its Activate toggle in Apollo once before the first send. An existing sequence only sends as many steps as it was created with, so prefer “＋ Create” when the plan changes.`)}
         {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), '0 = unlimited. Sends any time of day — the cap is the only throttle.')}
+        {field('Signature', (
+          <label className="use-ai-toggle">
+            <input type="checkbox" checked={f.use_mailbox_signature}
+              onChange={(e) => setKey('use_mailbox_signature', e.target.checked)} />
+            <span>
+              <b>My Apollo mailbox already adds a signature</b>
+              <span className="muted">{f.use_mailbox_signature
+                ? ' — on: the app won’t add its own sign-off, so the email isn’t signed twice. Only the one-click unsubscribe line is appended; your Apollo mailbox signature is the sign-off.'
+                : ' — off: the app appends the sender signature from this campaign, ending with the unsubscribe link.'}</span>
+            </span>
+          </label>
+        ), 'Turn on if your Apollo mailbox is set to append a signature — otherwise every email gets signed twice (yours + Apollo’s). The one-click unsubscribe link is always included either way.')}
         {field('A/B experiment — control share', (
           <div className="slider-row">
             <input type="range" min={0} max={100} step={5} value={f.control_pct}
