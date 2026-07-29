@@ -9,7 +9,7 @@ crash-safe: unchanged inputs return the stored output without re-paying for it.
 from __future__ import annotations
 
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from .engine import personalize, quality_gate
@@ -48,9 +48,11 @@ def research_hash(lead: Lead, cfg: dict) -> str:
 def variant_for(lead_key: str, cfg: dict) -> str:
     """A/B assignment: 'signal' (grounded, signal-led) vs 'plain' (control, no signal).
     Deterministic per lead so re-runs are stable. Off unless experiment.enabled — then
-    control_ratio of leads get the plain control opener so reply lift can be measured."""
+    control_ratio of leads get the plain control opener so reply lift can be measured.
+    Verbatim mode (AI off + template) sends ONE identical email to everyone, so there's
+    no opener to A/B — force a single arm."""
     exp = cfg.get("experiment") or {}
-    if not exp.get("enabled"):
+    if not exp.get("enabled") or _is_verbatim(cfg):
         return "signal"
     ratio = float(exp.get("control_ratio", 0.5))
     bucket = int(hash_inputs("ab", lead_key), 16) % 1000 / 1000.0
@@ -162,7 +164,9 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     # affects leads that haven't been drafted yet — an already-reviewed draft never
     # silently flips arms (and regenerates) because the ratio moved.
     _ob = store.get_outbox(lead.key) or {}
-    variant = _ob.get("variant") or variant_for(lead.key, cfg)
+    # verbatim mode has no A/B (one template for everyone) — force a single arm even for
+    # leads whose stored variant predates verbatim, so nothing is mislabeled 'control'.
+    variant = "signal" if _is_verbatim(cfg) else (_ob.get("variant") or variant_for(lead.key, cfg))
     dh = draft_hash(res, cfg, variant)
     draft = ensure_draft(store, lead, res, cfg, dh, variant)
     store.set_status(lead.key, "drafted")
@@ -191,7 +195,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     # when the first email or the step templates change and aren't hand-edited.
     ob = store.get_outbox(lead.key) or {}
     fu_steps = followup_steps(cfg)
-    fuh = hash_inputs("fu-rev3", final.subject, final.body, variant,
+    fuh = hash_inputs("fu-rev4", final.subject, final.body, variant,   # rev4: verbatim follow-ups when AI off
                       (cfg.get("sequence") or {}).get("use_ai", True),
                       [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
     if fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
@@ -270,7 +274,8 @@ def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_re
 
 
 def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
-        require_review: bool = True, max_workers: int | None = None) -> list[dict]:
+        require_review: bool = True, max_workers: int | None = None,
+        on_progress=None) -> list[dict]:
     leads = store.leads(cfg["name"])
     if limit:
         # Advance a BATCH of not-yet-processed leads first, so "run 25" drafts 25
@@ -281,16 +286,36 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
     # leads excluded in review are kept for the library but never re-processed/sent
     excluded = {l.key for l in store.leads(cfg["name"], "excluded")}
     leads = [l for l in leads if l.key not in excluded]
+    total = len(leads)
 
-    # Each lead's research/draft/gate is a chain of LLM + web calls — almost all
-    # WAITING on external APIs, not CPU. So process leads concurrently: threads
-    # overlap the waiting (pymongo + the OpenAI client with max_retries are both
-    # thread-safe). Only the DRAFTING run is parallelized; the SEND path stays
-    # sequential (sends are fast/cached and the daily cap must not race across
-    # threads). PIPELINE_WORKERS tunes the pool; 1 disables concurrency.
+    # on_progress(sent, done, total) fires after each lead so the UI can show a LIVE
+    # progress bar — a send of 100+ emails must never look frozen. Each lead's
+    # research/draft/gate is a chain of LLM + web calls — almost all WAITING on
+    # external APIs, not CPU. So process leads concurrently: threads overlap the
+    # waiting (pymongo + the OpenAI client with max_retries are both thread-safe).
+    # Only the DRAFTING run is parallelized; the SEND path stays sequential (sends are
+    # fast/cached and the daily cap must not race across threads). PIPELINE_WORKERS
+    # tunes the pool; 1 disables concurrency.
     workers = max_workers or int(os.environ.get("PIPELINE_WORKERS", "8"))
-    if dry_run and workers > 1 and len(leads) > 1:
-        with ThreadPoolExecutor(max_workers=min(workers, len(leads))) as ex:
-            futures = [ex.submit(_advance_safe, store, lead, cfg, dry_run, require_review) for lead in leads]
-            return [f.result() for f in futures]   # submission order preserved
-    return [_advance_safe(store, lead, cfg, dry_run, require_review) for lead in leads]
+    if dry_run and workers > 1 and total > 1:
+        with ThreadPoolExecutor(max_workers=min(workers, total)) as ex:
+            futs = {ex.submit(_advance_safe, store, lead, cfg, dry_run, require_review): i
+                    for i, lead in enumerate(leads)}
+            results: list = [None] * total
+            done = 0
+            for f in as_completed(futs):
+                results[futs[f]] = f.result()   # keep submission order in the output
+                done += 1
+                if on_progress:
+                    on_progress(done, done, total)
+            return results
+    results = []
+    sent = 0
+    for lead in leads:
+        r = _advance_safe(store, lead, cfg, dry_run, require_review)
+        results.append(r)
+        if r.get("verdict") == "sent":
+            sent += 1
+        if on_progress:
+            on_progress(sent, len(results), total)
+    return results

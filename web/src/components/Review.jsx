@@ -64,6 +64,7 @@ export default function Review({ campaign }) {
   const [sendBlock, setSendBlock] = useState('')
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
+  const [sendProgress, setSendProgress] = useState(null)   // {sent, done, total} live during a send
   const [boxes, setBoxes] = useState([])          // all Apollo mailboxes
   const [mailboxIds, setMailboxIds] = useState([])// which ones this campaign sends from (rotates)
   const [mboxOpen, setMboxOpen] = useState(false)
@@ -202,13 +203,14 @@ export default function Review({ campaign }) {
 
   const sendApproved = async () => {
     if (!window.confirm(`Send ${approvedCount} approved ${approvedCount === 1 ? 'email' : 'emails'} through Apollo? This is the real send.`)) return
-    setSending(true)
+    setSending(true); setSendProgress({ sent: 0, done: 0, total: approvedCount })
     const r = await api.runPipeline(campaign, true)
-    if (!r.started) { setSending(false); return }
+    if (!r.started) { setSending(false); setSendProgress(null); return }
     poll.current = setInterval(async () => {
       const s = await api.getRunStatus(campaign)
-      if (!s.running) { clearInterval(poll.current); setSending(false); load(); loadStatus() }
-    }, 2000)
+      if (s.progress) setSendProgress(s.progress)
+      if (!s.running) { clearInterval(poll.current); setSending(false); setSendProgress(null); load(); loadStatus() }
+    }, 1500)
   }
 
   const guardLabel = () => {
@@ -227,7 +229,9 @@ export default function Review({ campaign }) {
     return { kind: 'ok', text: 'Ready to send' }
   }
 
+  const sendPct = sendProgress ? Math.round((sendProgress.sent / Math.max(1, approvedCount)) * 100) : 0
   const header = (
+    <>
     <div className="review-bar">
       <div className="review-progress">
         {total > 0 && (
@@ -270,10 +274,19 @@ export default function Review({ campaign }) {
         {!sendable && sendBlock && <span className="send-block" title={sendBlock}>{sendBlock}</span>}
         <button className="btn primary" disabled={!sendable || !approvedCount || sending}
           title={!sendable ? sendBlock : ''} onClick={sendApproved}>
-          {sending ? <><span className="spinner" /> Sending…</> : `Send ${approvedCount} approved`}
+          {sending
+            ? <><span className="spinner" /> Sending {sendProgress ? `${sendProgress.sent}/${approvedCount}` : '…'}</>
+            : `Send ${approvedCount} approved`}
         </button>
       </div>
     </div>
+    {sending && (
+      <div className="send-progress" title={`${sendProgress?.sent || 0} of ${approvedCount} sent`}>
+        <i style={{ width: `${sendPct}%` }} />
+        <span className="send-progress-label">Sending {sendProgress?.sent || 0}/{approvedCount}…</span>
+      </div>
+    )}
+    </>
   )
 
   if (items === null) {
@@ -378,12 +391,14 @@ export default function Review({ campaign }) {
                     <div className="doc-row"><span className="doc-k">Subject</span><span className="doc-v doc-subject">{current.subject}</span></div>
                     <div className="doc-tags">
                       {current.source && <span className="src-tag">{current.source}</span>}
-                      <span className={`badge ${current.variant === 'plain' ? 's-drafted' : 's-approved'}`}
-                        title={current.variant === 'plain'
-                          ? 'A/B control — deliberately no researched facts, to measure whether fact-led openers lift replies'
-                          : 'Fact-led — the opener uses this lead’s verified research'}>
-                        {current.variant === 'plain' ? 'control' : 'fact-led'}
-                      </span>
+                      {current.verbatim
+                        ? <span className="badge s-drafted" title="Sent from your template as-is (AI is off) — only the name/company is filled in; no A/B">verbatim</span>
+                        : <span className={`badge ${current.variant === 'plain' ? 's-drafted' : 's-approved'}`}
+                            title={current.variant === 'plain'
+                              ? 'A/B control — deliberately no researched facts, to measure whether fact-led openers lift replies'
+                              : 'Fact-led — the opener uses this lead’s verified research'}>
+                            {current.variant === 'plain' ? 'control' : 'fact-led'}
+                          </span>}
                       {current.verdict && <span className={`badge v-${current.verdict}`}>{current.verdict}</span>}
                       {current.edited && <span className="badge s-drafted">edited</span>}
                       {current.decision && <span className={`badge s-${current.decision}`}>{current.decision}</span>}

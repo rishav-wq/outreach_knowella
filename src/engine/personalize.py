@@ -293,6 +293,28 @@ Return STRICT JSON only: {"followups": ["<body of follow-up 1>", "<body of follo
 — exactly one entry per brief, in order."""
 
 
+def _reproduce_body(lead: Lead, cfg: dict, template: str, spec) -> tuple[str, dict]:
+    """Reproduce a follow-up template near-verbatim (body only) — for 'Use AI' OFF, so a
+    templated follow-up is the owner's copy with placeholders filled, not an AI rewrite."""
+    user = (f"LEAD: {lead.full_name}, {lead.title} at {lead.company}\n\n"
+            f"TEMPLATE (reproduce this as the email body, filling placeholders only):\n{template}")
+    text, usage = llm.complete(
+        [{"role": "system", "content": VERBATIM_SYSTEM}, {"role": "user", "content": user}],
+        spec, temperature=0.15)
+    try:
+        return clean_dashes(llm.parse_json(text).get("body", "")), usage
+    except Exception:
+        return clean_dashes(text or ""), usage
+
+
+def _default_bump(lead: Lead, cfg: dict) -> str:
+    """A short, deterministic follow-up for 'Use AI' OFF steps that have no template — no
+    AI, so it never drifts; the owner can add a template to control it."""
+    one = ((cfg.get("offer") or {}).get("one_liner") or "").strip()
+    return (f"Hi {lead.first_name or 'there'},\n\nJust floating this back up in case it's useful.\n\n"
+            + (f"{one}\n\n" if one else "") + "Worth a quick reply?")
+
+
 def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subject: str,
                     first_body: str, steps: list[dict], variant: str = "signal"):
     """Bodies for every follow-up step (sequence steps 2..N), any count.
@@ -305,6 +327,22 @@ def write_followups(lead: Lead, research: Research | None, cfg: dict, first_subj
     spec = llm.ModelSpec.from_config((cfg.get("models") or {}).get("personalize"))
     offer, voice = cfg["offer"], cfg["voice"]
     use_ai = (cfg.get("sequence") or {}).get("use_ai", True)
+    # "Use AI" OFF: reproduce each TEMPLATED follow-up near-verbatim (dedicated low-temp
+    # call per step, like the first email); steps with no template get a deterministic
+    # bump. The one-shot generation below drifts too far to honor a template faithfully.
+    if not use_ai:
+        agg = {"prompt_tokens": 0, "completion_tokens": 0}
+        bodies = []
+        for st in steps:
+            tmpl = (st.get("template") or "").strip()
+            if tmpl:
+                b, u = _reproduce_body(lead, cfg, tmpl, spec)
+                agg["prompt_tokens"] += u.get("prompt_tokens", 0)
+                agg["completion_tokens"] += u.get("completion_tokens", 0)
+            else:
+                b = _default_bump(lead, cfg)
+            bodies.append(b)
+        return bodies, agg, spec.resolved_model()
     facts = ("(control variant — no researched facts; keep all follow-ups role-based and generic)"
              if variant == "plain" else (_facts_block(research) if research else "FACTS:\n(none)"))
     briefs = []

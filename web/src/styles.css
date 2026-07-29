@@ -525,6 +525,14 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .review-work { display: grid; grid-template-columns: 258px minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
 .review-work > * { max-height: calc(100vh - 172px); }
 
+/* live send-progress bar under the review header — a 100+ send never looks frozen */
+.send-progress { position: relative; height: 24px; margin: 2px 0 12px; border-radius: 6px;
+  background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.send-progress > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--signal-tint);
+  transition: width 0.4s ease; }
+.send-progress-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text, #1f2430); }
+
 .rq-list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow-y: auto; }
 .rq-skel { padding: 13px 15px; border-bottom: 1px solid var(--line); }
 .rq-item {

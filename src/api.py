@@ -574,6 +574,7 @@ def review(campaign: str):
     verify_active = email_verify.has_key()
     require_deliverable = bool((cfg.get("verify") or {}).get("require_deliverable"))
     signature = personalize.signature_text(cfg)   # appended to every send; shown as a footer
+    verbatim = pipeline._is_verbatim(cfg)   # AI off + template: shown as-is, no A/B badge
     out = []
     for lead in store.leads(cfg["name"], "queued"):
         ob = store.get_outbox(lead.key)
@@ -587,7 +588,7 @@ def review(campaign: str):
             "key": lead.key, "name": lead.full_name, "company": lead.company,
             "title": lead.title, "source": lead.source,
             "verdict": ob["verdict"], "subject": ob["subject"], "body": ob["body"],
-            "variant": ob.get("variant", "signal"),
+            "variant": ob.get("variant", "signal"), "verbatim": verbatim,
             "signature": signature,
             "followups": [{"step": n, "subject": ob.get(f"subject_{n}", ""), "body": ob.get(f"body_{n}", "")}
                           for n in sorted(int(k.rsplit("_", 1)[-1]) for k in ob
@@ -1175,7 +1176,11 @@ def _do_run(name: str, send: bool, limit: int | None):
     try:
         cfg = _load(name)
         store = open_store()
-        pipeline.run(store, cfg, dry_run=not send, limit=limit, require_review=True)
+        def _prog(sent, done, total):   # live progress for the UI's send/draft bar
+            r = _runs.get(name)
+            if r is not None:
+                r["progress"] = {"sent": sent, "done": done, "total": total}
+        pipeline.run(store, cfg, dry_run=not send, limit=limit, require_review=True, on_progress=_prog)
         _runs[name] = {"running": False, "error": None, "summary": store.counts(cfg["name"])}
     except Exception as e:
         _runs[name] = {"running": False, "error": str(e), "summary": {}}
@@ -1208,7 +1213,8 @@ def run(req: RunReq):
     if _run_in_progress(req.campaign):
         return {"started": False, "reason": "already running"}
     th = threading.Thread(target=_do_run, args=(req.campaign, req.send, req.limit), daemon=True)
-    _runs[req.campaign] = {"running": True, "error": None, "summary": {}, "started_at": time.time()}
+    _runs[req.campaign] = {"running": True, "error": None, "summary": {}, "started_at": time.time(),
+                           "progress": {"sent": 0, "done": 0, "total": 0}}
     _run_threads[req.campaign] = th
     th.start()
     return {"started": True}
