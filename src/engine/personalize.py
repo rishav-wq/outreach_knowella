@@ -177,33 +177,60 @@ def _facts_block(research: Research) -> str:
     return f"FACTS:\n{facts}\n\nPAIN HYPOTHESES:\n{pains}"
 
 
-VERBATIM_SYSTEM = """The user wrote the TEMPLATE below and wants it sent almost exactly as-is —
-keep AT LEAST 90% of their wording, sentences, and order. Reproduce it faithfully.
+# --- verbatim mode (AI OFF): deterministic template fill -----------------------
+# When the owner turns AI off and gives a template, they want THEIR exact copy sent,
+# only placeholders filled. We do that by string substitution, not a model: an LLM
+# reproducing the text drifts and — worse — flattens the line breaks when it round-
+# trips through JSON, so "Hi {name},\n\n<body>" collapsed onto one line. Plain
+# substitution keeps the template byte-for-byte and costs nothing per lead.
+def _placeholder_map(lead: Lead, cfg: dict) -> dict:
+    offer = cfg.get("offer") or {}
+    first = lead.first_name or ""
+    link = offer.get("link") or ""
+    return {
+        "first_name": first, "firstname": first, "first": first,
+        "name": first or lead.full_name,          # greetings use the first name
+        "last_name": lead.last_name, "lastname": lead.last_name,
+        "full_name": lead.full_name, "fullname": lead.full_name,
+        "company": lead.company, "company_name": lead.company,
+        "org": lead.company, "organization": lead.company,
+        "title": lead.title, "role": lead.title, "job_title": lead.title, "position": lead.title,
+        "link": link, "url": link, "signup": link, "signup_link": link,
+        "email": lead.email,
+    }
 
-Your ONLY edits:
-- Replace placeholders (e.g. [first name], {first_name}, [company], {company}, [role]) with this
-  lead's real details. If a placeholder has no value, remove it cleanly.
-- Fix only broken grammar or spacing.
 
-Do NOT rewrite, reorder, shorten, add, or remove sentences. Do NOT add facts, claims, or a
-signature. Plain text only. No em-dashes or en-dashes.
-Return STRICT JSON only: {"subject": "...", "body": "...", "angle": "verbatim template", "used_facts": []}"""
+def fill_placeholders(text: str, lead: Lead, cfg: dict) -> str:
+    """Substitute {name} / {{first_name}} / [company] placeholders with this lead's details,
+    preserving every other character — line breaks included. Unknown placeholders are left
+    untouched (so a typo stays visible); known-but-empty ones drop out cleanly."""
+    if not text:
+        return text
+    vals = _placeholder_map(lead, cfg)
+
+    def repl(m):
+        key = re.sub(r"[\s\-]+", "_", m.group("key").strip().lower())
+        val = vals.get(key)
+        return val if val is not None else m.group(0)
+
+    out = text
+    for pat in (r"\{\{\s*(?P<key>[\w \-]+?)\s*\}\}",   # {{first_name}}
+                r"\{\s*(?P<key>[\w \-]+?)\s*\}",        # {first_name}
+                r"\[\s*(?P<key>[\w \-]+?)\s*\]"):       # [first name]
+        out = re.sub(pat, repl, out)
+    # tidy within each line only, so blank lines between paragraphs survive
+    out = "\n".join(re.sub(r"[ \t]{2,}", " ", ln).rstrip() for ln in out.split("\n"))
+    return clean_dashes(out)
 
 
-def _write_verbatim(lead: Lead, cfg: dict, template: str, subject: str, spec):
-    """'Use AI' is OFF: send the user's template near-verbatim, just filling placeholders.
-    Low temperature so it stays faithful to their copy."""
-    user = (f"LEAD: {lead.full_name}, {lead.title} at {lead.company}\n\n"
-            f"TEMPLATE (reproduce this):\n{template}\n\n"
-            f"SUBJECT: {subject or '(none given — write a short 2-5 word subject that fits)'}")
-    text, usage = llm.complete(
-        [{"role": "system", "content": VERBATIM_SYSTEM}, {"role": "user", "content": user}],
-        spec, temperature=0.15)
-    data = llm.parse_json(text)
-    draft = Draft(body=clean_dashes(data.get("body", "")),
-                  subject=clean_dashes(subject) if subject else clean_subject(data.get("subject", "")),
-                  angle="verbatim template", used_facts=[])
-    return draft, usage, spec.resolved_model()
+def _write_verbatim(lead: Lead, cfg: dict, template: str, subject: str, spec=None):
+    """'Use AI' is OFF: send the owner's template as-is, only filling placeholders.
+    Deterministic (no model) so the wording and layout are preserved exactly."""
+    body = fill_placeholders(template, lead, cfg)
+    subj = (fill_placeholders(subject, lead, cfg) if subject
+            else clean_subject((cfg.get("offer") or {}).get("product") or ""))
+    draft = Draft(body=body, subject=subj, angle="verbatim template", used_facts=[])
+    return draft, {}, "verbatim (no AI)"
 
 
 def write_email(lead: Lead, research: Research, cfg: dict, variant: str = "signal"):
@@ -296,18 +323,10 @@ Return STRICT JSON only: {"followups": ["<body of follow-up 1>", "<body of follo
 — exactly one entry per brief, in order."""
 
 
-def _reproduce_body(lead: Lead, cfg: dict, template: str, spec) -> tuple[str, dict]:
-    """Reproduce a follow-up template near-verbatim (body only) — for 'Use AI' OFF, so a
-    templated follow-up is the owner's copy with placeholders filled, not an AI rewrite."""
-    user = (f"LEAD: {lead.full_name}, {lead.title} at {lead.company}\n\n"
-            f"TEMPLATE (reproduce this as the email body, filling placeholders only):\n{template}")
-    text, usage = llm.complete(
-        [{"role": "system", "content": VERBATIM_SYSTEM}, {"role": "user", "content": user}],
-        spec, temperature=0.15)
-    try:
-        return clean_dashes(llm.parse_json(text).get("body", "")), usage
-    except Exception:
-        return clean_dashes(text or ""), usage
+def _reproduce_body(lead: Lead, cfg: dict, template: str, spec=None) -> tuple[str, dict]:
+    """Reproduce a follow-up template as-is (body only) for 'Use AI' OFF — the owner's copy
+    with placeholders filled and layout preserved. Deterministic, no model call."""
+    return fill_placeholders(template, lead, cfg), {}
 
 
 def _default_bump(lead: Lead, cfg: dict) -> str:

@@ -62,7 +62,7 @@ def variant_for(lead_key: str, cfg: dict) -> str:
 def draft_hash(research: Research, cfg: dict, variant: str = "signal") -> str:
     seq_steps = (cfg.get("sequence") or {}).get("steps") or []
     return hash_inputs(
-        "draft-rev9",  # bump when the personalize prompt/format changes (invalidates drafts)
+        "draft-rev10",  # bump when the personalize prompt/format changes (invalidates drafts). rev10: verbatim fills the template deterministically (preserves line breaks)
         variant,       # signal vs plain control cache separately
         research.model_dump(),
         cfg.get("offer"),
@@ -200,7 +200,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     # when the first email or the step templates change and aren't hand-edited.
     ob = store.get_outbox(lead.key) or {}
     fu_steps = followup_steps(cfg)
-    fuh = hash_inputs("fu-rev4", final.subject, final.body, variant,   # rev4: verbatim follow-ups when AI off
+    fuh = hash_inputs("fu-rev5", final.subject, final.body, variant,   # rev5: verbatim follow-ups fill the template deterministically
                       (cfg.get("sequence") or {}).get("use_ai", True),
                       [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
     if fu_steps and ob.get("fu_hash") != fuh and not (ob.get("edited") and not verbatim):
