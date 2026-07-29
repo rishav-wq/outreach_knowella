@@ -66,6 +66,17 @@ export default function Dashboard({ campaign, onNavigate }) {
     beginPolling()
   }
 
+  // Re-draft EVERY lead (not just new ones) from the current templates — the fix for
+  // "I edited a template / offer and the existing drafts are stale". Nothing sends.
+  const regenerate = async () => {
+    if (!window.confirm(`Regenerate all drafts for ${campaign} from the current templates?\n\nThis re-drafts every lead and overwrites the current drafts (instant for template/verbatim campaigns; an LLM re-run for AI ones). Your approve/reject decisions are kept, and nothing is sent.`)) return
+    setMsg('')
+    const r = await api.runPipeline(campaign, false, 0)   // 0 = all leads, force a full re-draft
+    if (!r.started) { setMsg(r.reason || 'Could not start a regenerate.'); return }
+    setRunning(true)
+    beginPolling()
+  }
+
   const c = status.counts || {}
   const total = Object.values(c).reduce((a, b) => a + b, 0)
   const queued = c.queued || 0
@@ -135,6 +146,12 @@ export default function Dashboard({ campaign, onNavigate }) {
               <span className="wh-secondary">
                 {step.go !== 'run' && newCount > 0 && (
                   <button className="btn" disabled={running} onClick={startRun}><Icon name="play" size={14} /> Run pipeline</button>
+                )}
+                {queued > 0 && (
+                  <button className="btn" disabled={running} onClick={regenerate}
+                    title="Re-draft every lead from the current templates — use after editing a template, subject, or offer">
+                    <Icon name="refresh" size={14} /> Regenerate drafts
+                  </button>
                 )}
                 <select className="src-select" value={runLimit} onChange={(e) => setRunLimit(Number(e.target.value))} disabled={running} title="How many unprocessed leads to research + draft this run">
                   <option value={25}>25 leads</option>
