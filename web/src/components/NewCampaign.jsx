@@ -414,7 +414,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             </select>
           : input('sequence_id', { placeholder: 'leave empty to set later' }),
           `Where approved leads are added. “＋ Create” builds it in Apollo to match your ${f.seq_steps.length}-email plan above (stop-on-reply, per-campaign stats) — you flip its Activate toggle in Apollo once before the first send. An existing sequence only sends as many steps as it was created with, so prefer “＋ Create” when the plan changes.`)}
-        {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), '0 = unlimited. Sends any time of day — the cap is the only throttle.')}
+        {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), 'Not enforced by the app — Apollo paces delivery at its own per-mailbox daily limit, so approved leads always queue and Apollo drips them safely. Left here for reference.')}
         {field('Signature', (
           <label className="use-ai-toggle">
             <input type="checkbox" checked={f.use_mailbox_signature}

@@ -516,7 +516,7 @@ def status(campaign: str):
         "mailbox_id": mailbox_ids[0] if mailbox_ids else "",
         "mailbox_ids": mailbox_ids,
         "guardrails": {
-            "daily_cap": int(send_cfg.get("daily_cap") or 0),
+            "daily_cap": 0,   # app no longer caps sends — Apollo paces delivery at its own per-mailbox daily limit
             "sent_today": store.sent_today(cfg["name"]),
             "window": send_cfg.get("window") or {},
         },

@@ -24,7 +24,11 @@ def send_guard(store: Store, cfg: dict) -> str:
     reason to hold the send, or '' when sending is allowed.
 
     sending.window: {start_hour, end_hour, weekdays_only} — local time.
-    sending.daily_cap: max pushes per day (0/absent = unlimited).
+
+    NOTE: there is deliberately NO app-level daily cap. Adding an approved lead to the Apollo
+    sequence only QUEUES it — Apollo drips the actual sends at its own per-mailbox daily limit —
+    so a count-based cap here would only strand approved leads instead of letting them queue.
+    Apollo is the throttle; we just hand it the approved leads.
     """
     send_cfg = cfg.get("sending") or {}
     win = send_cfg.get("window") or {}
@@ -34,9 +38,6 @@ def send_guard(store: Store, cfg: dict) -> str:
     start, end = win.get("start_hour"), win.get("end_hour")
     if start is not None and end is not None and not (int(start) <= now.hour < int(end)):
         return f"outside send window ({int(start):02d}:00-{int(end):02d}:00)"
-    cap = int(send_cfg.get("daily_cap") or 0)
-    if cap and store.sent_today(cfg["name"]) >= cap:
-        return f"daily cap reached ({cap}/day)"
     return ""
 
 
