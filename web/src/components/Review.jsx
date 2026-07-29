@@ -396,19 +396,14 @@ export default function Review({ campaign }) {
                     <div className="doc-row"><span className="doc-k">From</span><span className="doc-v">{sendFrom || <span className="muted">choose a mailbox in campaign settings</span>}</span></div>
                     <div className="doc-row"><span className="doc-k">Subject</span><span className="doc-v doc-subject">{current.subject}</span></div>
                     <div className="doc-tags">
-                      {current.source && <span className="src-tag">{current.source}</span>}
-                      {current.verbatim
-                        ? <span className="badge s-drafted" title="Sent from your template as-is (AI is off) — only the name/company is filled in; no A/B">verbatim</span>
-                        : <span className={`badge ${current.variant === 'plain' ? 's-drafted' : 's-approved'}`}
-                            title={current.variant === 'plain'
-                              ? 'A/B control — deliberately no researched facts, to measure whether fact-led openers lift replies'
-                              : 'Fact-led — the opener uses this lead’s verified research'}>
-                            {current.variant === 'plain' ? 'control' : 'fact-led'}
-                          </span>}
-                      {current.verdict && <span className={`badge v-${current.verdict}`}>{current.verdict}</span>}
-                      {current.edited && <span className="badge s-drafted">edited</span>}
-                      {current.decision && <span className={`badge s-${current.decision}`}>{current.decision}</span>}
                       <span className={`badge ${ready.kind === 'ok' ? 's-approved' : 's-held'}`}>{ready.text}</span>
+                      {current.decision && <span className={`badge s-${current.decision}`}>{current.decision}</span>}
+                      <span className="doc-meta" title="how this draft was produced">
+                        {[current.source,
+                          current.verbatim ? 'verbatim' : (current.variant === 'plain' ? 'control' : 'fact-led'),
+                          !current.verbatim && current.verdict,
+                          current.edited && 'edited'].filter(Boolean).join(' · ')}
+                      </span>
                     </div>
                   </div>
                   <pre className="body">{current.body}</pre>
