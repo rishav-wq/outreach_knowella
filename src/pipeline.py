@@ -130,6 +130,16 @@ def ensure_gate(store: Store, lead: Lead, draft: Draft, research: Research, cfg:
     return gate
 
 
+def _is_verbatim(cfg: dict) -> bool:
+    """True when the campaign owner turned AI off AND supplied a step-1 template — they
+    want their exact copy sent (only placeholders filled), so drafting reproduces it
+    verbatim and the quality gate is skipped (it must not swap in a generic fallback)."""
+    seq = cfg.get("sequence") or {}
+    steps = seq.get("steps") or []
+    tmpl = (steps[0].get("template") or "").strip() if steps else ""
+    return not seq.get("use_ai", True) and bool(tmpl)
+
+
 def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool = True) -> dict:
     # Stage -1: do-not-contact list (compliance) — before spending anything
     if lead.email and store.is_suppressed(lead.email):
@@ -157,7 +167,14 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     draft = ensure_draft(store, lead, res, cfg, dh, variant)
     store.set_status(lead.key, "drafted")
 
-    gate = ensure_gate(store, lead, draft, res, cfg, dh)
+    # "Use AI" OFF with a step-1 template = the campaign owner authored this copy and
+    # wants it sent as-is. The quality gate (grounding / length / generic fallback) must
+    # NOT apply here — it would throw their email away and swap in a canned fallback.
+    # Pass the verbatim draft straight through.
+    if _is_verbatim(cfg):
+        gate = GateResult(verdict="pass", reason="verbatim template — gate skipped")
+    else:
+        gate = ensure_gate(store, lead, draft, res, cfg, dh)
     store.set_status(lead.key, "gated")
 
     if gate.verdict == "drop":
