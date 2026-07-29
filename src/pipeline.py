@@ -216,7 +216,9 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
         store.save_followups(lead.key, [], fuh)   # single-email sequence: clear stale follow-ups
 
     if dry_run:
-        store.set_status(lead.key, "queued")
+        # a re-draft must not resurface an ALREADY-SENT lead back into the review queue —
+        # keep its 'sent' status; only not-yet-sent leads become 'queued' for review.
+        store.set_status(lead.key, "sent" if store.is_sent(lead.key) else "queued")
         return {"lead": lead, "verdict": gate.verdict, "reason": gate.reason, "draft": final}
 
     # send path — the only irreversible step. Only approved leads are pushed;
