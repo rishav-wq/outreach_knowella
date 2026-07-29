@@ -6,6 +6,7 @@ The engine logic lives in pipeline/; this just exposes it as JSON endpoints.
 from __future__ import annotations
 
 import glob
+import html
 import os
 import re
 import tempfile
@@ -620,11 +621,32 @@ def _lead_directory(store, campaign: str) -> dict:
     return out
 
 
+def _html_to_text(s: str) -> str:
+    """Convert Apollo's HTML email body to plain text WITH line breaks preserved. Apollo's own
+    body_text flattens the mailbox signature's block/<br> tags onto one line; we render the
+    result in a <pre>, so we turn those block boundaries back into newlines ourselves."""
+    if not s:
+        return ""
+    s = re.sub(r"(?i)<\s*br\s*/?>", "\n", s)                             # <br> -> newline
+    s = re.sub(r"(?i)</\s*(div|p|li|tr|h[1-6]|blockquote)\s*>", "\n", s)  # end of a block -> newline
+    s = re.sub(r"(?i)<\s*(div|p|li|tr|h[1-6]|blockquote)[^>]*>", "", s)   # drop the opening block tag
+    s = re.sub(r"(?s)<[^>]+>", "", s)                                     # strip any remaining tags
+    s = html.unescape(s)                                                 # &amp; -> &, &nbsp; -> space
+    s = "\n".join(ln.rstrip() for ln in s.split("\n"))                   # trim trailing spaces per line
+    return re.sub(r"\n{3,}", "\n\n", s).strip()                          # collapse runaway blank lines
+
+
 def _msg_text(m: dict) -> str:
-    b = m.get("body") or m.get("body_text") or m.get("body_html") or ""
+    b = m.get("body")
     if isinstance(b, dict):
-        b = b.get("text") or b.get("html") or ""
-    return (b or "").strip()
+        b = b.get("html") or b.get("text") or ""
+    b = b or ""
+    # Prefer the HTML body and convert it ourselves — Apollo's plaintext (body_text) collapses
+    # the signature onto one line. Fall back to plaintext only when there's no HTML to work from.
+    html_body = m.get("body_html") or (b if ("<" in b and ">" in b) else "")
+    if html_body:
+        return _html_to_text(html_body)
+    return (b or m.get("body_text") or "").strip()
 
 
 _LABEL_PRIORITY = ["opt_out", "interested", "not_interested", "ooo", "other"]
