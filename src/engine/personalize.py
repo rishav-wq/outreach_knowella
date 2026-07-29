@@ -127,7 +127,10 @@ def signature_text(cfg: dict, lead: Lead | None = None) -> str:
     # "reply no thanks", and what mailbox providers now expect). Honoring it is
     # enforced by the do-not-contact list (suppression) at pull/pipeline/send.
     if lead and lead.email:
-        opt_out = f"Not the right fit? Unsubscribe: {unsub_link(lead.email)}"
+        # HTML anchor: Apollo renders the body as HTML (verified), so this shows a clean
+        # clickable "Unsubscribe" instead of a raw URL. The per-lead link is always present
+        # in the body (no separate merge field), so it can't silently break.
+        opt_out = f'Not the right fit? <a href="{unsub_link(lead.email)}">Unsubscribe</a>'
     else:
         opt_out = "Not the right fit? Unsubscribe: [one-click link added when sent]"
     # The sending mailbox (e.g. an Apollo mailbox signature) appends its OWN signature,
