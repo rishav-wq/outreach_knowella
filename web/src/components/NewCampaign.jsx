@@ -75,7 +75,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     exclude_titles: [], hiring_titles: [], pull_limit: 25,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
-    use_ai: true, use_mailbox_signature: true,
+    use_ai: true, use_mailbox_signature: true, cross_campaign_dedup: false,
     seq_steps: [{ wait_days: 0, subject: '', template: '' }, { wait_days: 3, subject: '', template: '' }, { wait_days: 4, subject: '', template: '' }],
     // Advanced (sensible defaults; hidden unless expanded)
     tone: 'direct, peer-to-peer, no fake warmth', max_words: 75,
@@ -166,6 +166,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         daily_cap: send.daily_cap ?? 50,
         use_ai: (cfg.sequence || {}).use_ai !== false,
         use_mailbox_signature: send.use_mailbox_signature !== false,
+        cross_campaign_dedup: !!send.cross_campaign_dedup,
         seq_steps: ((cfg.sequence || {}).steps || []).length
           ? cfg.sequence.steps.map((s, i) => ({ wait_days: i === 0 ? 0 : (Number(s.wait_days) || 3), subject: s.subject || '', template: s.template || '' }))
           : p.seq_steps,
@@ -216,7 +217,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         // sending merges server-side, so platform/field ids in the config are preserved
         await api.updateCampaign(slug, {
           ...payload,
-          sending: { sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '', daily_cap: Number(f.daily_cap) || 0, use_mailbox_signature: !!f.use_mailbox_signature },
+          sending: { sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '', daily_cap: Number(f.daily_cap) || 0, use_mailbox_signature: !!f.use_mailbox_signature, cross_campaign_dedup: !!f.cross_campaign_dedup },
         })
       } else {
         // No send window — sends any time; the daily cap is the only throttle.
@@ -226,6 +227,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             platform: 'apollo', sequence_id: sequenceId, mailbox_ids: f.mailbox_ids, mailbox_id: f.mailbox_ids[0] || '',
             subject_field: 'email_subject', body_field: 'email_body', daily_cap: Number(f.daily_cap) || 0,
             use_mailbox_signature: !!f.use_mailbox_signature,
+            cross_campaign_dedup: !!f.cross_campaign_dedup,
           },
         })
         slug = r.created
@@ -425,6 +427,18 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             </span>
           </label>
         ), 'On by default so no email is ever double-signed. Leave on when your mailbox already appends a signature (Apollo, Gmail…) — the app then adds only the unsubscribe link, which is always included.')}
+        {field('Cross-campaign dedup', (
+          <label className="use-ai-toggle">
+            <input type="checkbox" checked={f.cross_campaign_dedup}
+              onChange={(e) => setKey('cross_campaign_dedup', e.target.checked)} />
+            <span>
+              <b>Skip anyone already emailed in another campaign</b>
+              <span className="muted">{f.cross_campaign_dedup
+                ? ' — on: a lead already sent an email in a different campaign is held here, so no one is contacted twice across campaigns.'
+                : ' — off (default): campaigns are independent, so the same person can be reached by more than one.'}</span>
+            </span>
+          </label>
+        ), 'Turn on to avoid double-contacting the same person across campaigns. Off by default so overlapping campaigns aren’t silently blocked.')}
         {field('A/B experiment — control share', (
           <div className="slider-row">
             <input type="range" min={0} max={100} step={5} value={f.control_pct}

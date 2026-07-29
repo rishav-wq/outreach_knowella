@@ -235,6 +235,14 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
         store.set_status(lead.key, "queued")
         return {"lead": lead, "verdict": "held", "reason": guard, "draft": final}
 
+    # opt-in cross-campaign dedup: hold anyone already emailed in ANOTHER campaign, so a
+    # person isn't contacted twice across campaigns. Held (not dropped) — turn the
+    # campaign's toggle off to allow intentional overlap.
+    if (cfg.get("sending") or {}).get("cross_campaign_dedup") and store.sent_in_other_campaign(lead.key):
+        store.set_status(lead.key, "queued")
+        return {"lead": lead, "verdict": "held",
+                "reason": "already emailed in another campaign", "draft": final}
+
     # ensure we have an email (enrich from the domain if it's missing)
     if not lead.email:
         found = enrich.find_email(lead.company_domain, lead.first_name, lead.last_name)

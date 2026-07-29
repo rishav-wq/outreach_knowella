@@ -9,6 +9,7 @@ exactly like SQLite, so the incremental-build behavior is identical.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from pymongo import MongoClient
@@ -255,6 +256,19 @@ class MongoStore:
         if not keys:
             return 0
         return self.db.sends.count_documents({"_id": {"$in": keys}, "created_at": {"$gte": start}})
+
+    def sent_in_other_campaign(self, key: str) -> bool:
+        """True if this lead's base identity (the part after 'campaign::') was already
+        SENT in a DIFFERENT campaign — powers opt-in cross-campaign dedup so the same
+        person isn't emailed twice across campaigns. Keyed by base so it matches the
+        same person even when they live as separate rows in each campaign."""
+        if "::" not in key:
+            return False
+        campaign, base = key.split("::", 1)
+        for d in self.db.sends.find({"_id": {"$regex": "::" + re.escape(base) + "$"}}, {"_id": 1}):
+            if not d["_id"].startswith(campaign + "::"):
+                return True
+        return False
 
     # --- cost audit ----------------------------------------------------------
     def log_llm(self, key: str, stage: str, model: str, usage: dict) -> None:
