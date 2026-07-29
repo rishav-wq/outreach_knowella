@@ -270,14 +270,17 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     if store.is_suppressed(lead.email):   # final gate — suppression added after approval
         store.set_status(lead.key, "suppressed")
         return {"lead": lead, "verdict": "suppressed", "reason": "on the do-not-contact list", "draft": final}
+    pushed = False
     if not store.is_sent(lead.key):
         # every stored follow-up step rides along, however many the sequence has
         fu = {k: v for k, v in (outbox or {}).items()
               if (k.startswith("subject_") or k.startswith("body_")) and k.rsplit("_", 1)[-1].isdigit()}
         pid = apollo_send.push_lead(lead, send_draft, cfg, followups=fu)
         store.mark_sent(lead.key, "apollo", pid or "")
+        pushed = True
     store.set_status(lead.key, "sent")
-    return {"lead": lead, "verdict": "sent", "reason": "pushed", "draft": send_draft}
+    return {"lead": lead, "verdict": "sent", "reason": "pushed" if pushed else "already sent",
+            "pushed": pushed, "draft": send_draft}
 
 
 def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool) -> dict:
@@ -301,6 +304,11 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
     # leads excluded in review are kept for the library but never re-processed/sent
     excluded = {l.key for l in store.leads(cfg["name"], "excluded")}
     leads = [l for l in leads if l.key not in excluded]
+    if not dry_run:
+        # a real send only touches not-yet-sent leads. Already-sent ones are skipped by the
+        # idempotency guard in advance() anyway, but counting them made progress read "30/25"
+        # (25 prior sends + the new batch) — drop them so the count matches what's being sent.
+        leads = [l for l in leads if not store.is_sent(l.key)]
     total = len(leads)
 
     # on_progress(sent, done, total) fires after each lead so the UI can show a LIVE
@@ -329,7 +337,7 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
     for lead in leads:
         r = _advance_safe(store, lead, cfg, dry_run, require_review)
         results.append(r)
-        if r.get("verdict") == "sent":
+        if r.get("pushed"):   # count only NEW pushes, not idempotent already-sent skips
             sent += 1
         if on_progress:
             on_progress(sent, len(results), total)

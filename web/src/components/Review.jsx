@@ -244,7 +244,8 @@ export default function Review({ campaign }) {
     return { kind: 'ok', text: 'Ready to send' }
   }
 
-  const sendPct = sendProgress ? Math.round((sendProgress.sent / Math.max(1, approvedCount)) * 100) : 0
+  const sentShown = Math.min(sendProgress?.sent || 0, approvedCount)   // never display more than were approved
+  const sendPct = approvedCount ? Math.round((sentShown / approvedCount) * 100) : 0
   const header = (
     <>
     <div className="review-bar">
@@ -296,7 +297,7 @@ export default function Review({ campaign }) {
         <button className="btn primary" disabled={!sendable || !approvedCount || sending}
           title={!sendable ? sendBlock : ''} onClick={sendApproved}>
           {sending
-            ? <><span className="spinner" /> Sending {sendProgress ? `${sendProgress.sent}/${approvedCount}` : '…'}</>
+            ? <><span className="spinner" /> Sending {sendProgress ? `${sentShown}/${approvedCount}` : '…'}</>
             : `Send ${approvedCount} approved`}
         </button>
       </div>
@@ -304,7 +305,7 @@ export default function Review({ campaign }) {
     {sending && (
       <div className="send-progress" title={`${sendProgress?.sent || 0} of ${approvedCount} sent`}>
         <i style={{ width: `${sendPct}%` }} />
-        <span className="send-progress-label">Sending {sendProgress?.sent || 0}/{approvedCount}…</span>
+        <span className="send-progress-label">Sending {sentShown}/{approvedCount}…</span>
       </div>
     )}
     </>
