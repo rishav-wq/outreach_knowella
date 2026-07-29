@@ -533,6 +533,16 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .send-progress-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text, #1f2430); }
 
+/* collapsed follow-ups + revise toggles — keep the review footer calm until you need them */
+.fu-toggle, .ai-tweak-toggle {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 0; background: none;
+  border: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text, #2a2540); cursor: pointer;
+}
+.fu-toggle .muted, .ai-tweak-toggle .muted { font-weight: 400; }
+.fu-toggle:hover, .ai-tweak-toggle:hover { opacity: 0.72; }
+.fu-toggle .chev { transition: transform 0.15s ease; }
+.fu-toggle .chev.up { transform: rotate(180deg); }
+
 .rq-list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow-y: auto; }
 .rq-skel { padding: 13px 15px; border-bottom: 1px solid var(--line); }
 .rq-item {

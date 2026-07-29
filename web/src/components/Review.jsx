@@ -65,6 +65,8 @@ export default function Review({ campaign }) {
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState(null)   // {sent, done, total} live during a send
+  const [fuOpen, setFuOpen] = useState(false)              // follow-ups collapsed by default
+  const [reviseOpen, setReviseOpen] = useState(false)      // AI-revise box collapsed by default
   const [boxes, setBoxes] = useState([])          // all Apollo mailboxes
   const [mailboxIds, setMailboxIds] = useState([])// which ones this campaign sends from (rotates)
   const [mboxOpen, setMboxOpen] = useState(false)
@@ -199,7 +201,7 @@ export default function Review({ campaign }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [view, current, total, editing, decide])
 
-  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr(''); setRefineText(''); setRefineErr(''); setExcluding(false) }, [i])
+  useEffect(() => { setEditing(false); setEmailEdit(false); setEmailErr(''); setRefineText(''); setRefineErr(''); setExcluding(false); setFuOpen(false); setReviseOpen(false) }, [i])
 
   const sendApproved = async () => {
     if (!window.confirm(`Send ${approvedCount} approved ${approvedCount === 1 ? 'email' : 'emails'} through Apollo? This is the real send.`)) return
@@ -413,8 +415,12 @@ export default function Review({ campaign }) {
                 {emailErr && <div className="ready-err">{emailErr}</div>}
                 {(current.followups || []).length > 0 && (
                   <div className="fu-block">
-                    <div className="drawer-label">Follow-ups — auto-send to non-repliers (day 3 &amp; day 7); anyone who replies exits the sequence</div>
-                    {current.followups.map((fu) => (
+                    <button type="button" className="fu-toggle" onClick={() => setFuOpen((o) => !o)} aria-expanded={fuOpen}>
+                      <Icon name="chevron" size={13} className={`chev ${fuOpen ? 'up' : ''}`} />
+                      {current.followups.length} follow-up{current.followups.length === 1 ? '' : 's'}
+                      <span className="muted"> — auto-send to non-repliers; anyone who replies exits</span>
+                    </button>
+                    {fuOpen && current.followups.map((fu) => (
                       <FollowupCard key={fu.step} campaign={campaign} leadKey={current.key} fu={fu}
                         onSaved={(subject, body) => patch(current.key, {
                           followups: current.followups.map((x) => x.step === fu.step ? { ...x, subject, body } : x),
@@ -438,16 +444,23 @@ export default function Review({ campaign }) {
                     </div>
                   </div>
                 )}
-                <div className="ai-tweak">
-                  <span className="ai-tweak-k"><Icon name="refresh" size={13} /> Revise</span>
-                  <input className="ai-tweak-input" value={refineText} disabled={refining}
-                    placeholder="ask AI for a change — “make it shorter”, “lead with their hiring”, “warmer tone” (updates the follow-ups too)"
-                    onChange={(e) => setRefineText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
-                  <button className="btn" onClick={doRefine} disabled={refining || !refineText.trim()}>
-                    {refining ? <><span className="spinner spinner-dark" /> revising…</> : 'Revise'}
+                {!reviseOpen ? (
+                  <button type="button" className="ai-tweak-toggle" onClick={() => setReviseOpen(true)}>
+                    <Icon name="refresh" size={13} /> Revise with AI
                   </button>
-                </div>
+                ) : (
+                  <div className="ai-tweak">
+                    <span className="ai-tweak-k"><Icon name="refresh" size={13} /> Revise</span>
+                    <input className="ai-tweak-input" value={refineText} disabled={refining} autoFocus
+                      placeholder="ask AI for a change — “make it shorter”, “lead with their hiring”, “warmer tone” (updates the follow-ups too)"
+                      onChange={(e) => setRefineText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
+                    <button className="btn" onClick={doRefine} disabled={refining || !refineText.trim()}>
+                      {refining ? <><span className="spinner spinner-dark" /> revising…</> : 'Revise'}
+                    </button>
+                    <button className="icon-btn" onClick={() => setReviseOpen(false)} aria-label="Close revise"><Icon name="x" size={14} /></button>
+                  </div>
+                )}
                 {refineErr && <div className="ready-err">{refineErr}</div>}
                 <div className="rq-actions">
                   <span className="rq-keys">A approve · R reject · E edit · J/K move</span>
