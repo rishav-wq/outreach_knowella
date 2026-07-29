@@ -12,6 +12,7 @@ const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { durat
 export default function Leads({ campaign, onNavigate }) {
   const [leads, setLeads] = useState(null)
   const [q, setQ] = useState('')
+  const [dateFilter, setDateFilter] = useState('all')   // all | today | 7d | 30d — by pull date
   const [limit, setLimit] = useState(25)
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
@@ -152,7 +153,17 @@ export default function Leads({ campaign, onNavigate }) {
     )
   }
 
-  const filtered = leads.filter((l) => `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()))
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+  const inDateRange = (l) => {
+    if (dateFilter === 'all') return true
+    if (!l.pulled_at) return false   // leads pulled before dates were tracked drop out of a date filter
+    const d = new Date(l.pulled_at)
+    if (dateFilter === 'today') return d.toDateString() === new Date().toDateString()
+    const days = dateFilter === '7d' ? 7 : 30
+    return (Date.now() - d.getTime()) <= days * 86400000
+  }
+  const filtered = leads.filter((l) =>
+    `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()) && inDateRange(l))
   const allSelected = filtered.length > 0 && filtered.every((l) => sel.has(l.key))
   const toggleAll = () => setSel((prev) => {
     const next = new Set(prev)
@@ -167,6 +178,12 @@ export default function Leads({ campaign, onNavigate }) {
       {msg && <div className={`banner ${msg.kind === 'err' ? 'error' : ''}`}>{msg.text}</div>}
       <div className="table-bar">
         <input className="search" type="search" placeholder="Search name, company, or email" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="src-select" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} title="Filter by when leads were pulled in">
+          <option value="all">All dates</option>
+          <option value="today">Pulled today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </select>
         {sel.size > 0 ? (
           <div className="bulk-bar">
             <span className="bulk-count">{sel.size} selected</span>
@@ -196,12 +213,13 @@ export default function Leads({ campaign, onNavigate }) {
       <div className="table-wrap">
         <table className="table">
           <thead>
-            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
+            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th>Pulled</th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
           </thead>
           <motion.tbody variants={stagger} initial="hidden" animate="show">
             {filtered.map((l) => (
               <motion.tr key={l.key} variants={rowVar} className={sel.has(l.key) ? 'row-sel' : ''}>
                 <td className="chk-col"><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggleSel(l.key)} /></td>
+                <td className="muted" title={l.pulled_at ? new Date(l.pulled_at).toLocaleString() : 'pulled before dates were tracked'}>{fmtDate(l.pulled_at)}</td>
                 <td><div className="avatar sm">{(l.name || '?').slice(0, 1)}</div></td>
                 <td>{l.name}</td>
                 <td className="muted">{l.title || '—'}</td>

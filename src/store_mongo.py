@@ -69,7 +69,7 @@ class MongoStore:
         self.db.leads.update_one(
             {"_id": sid},
             {"$setOnInsert": {"campaign": campaign, "status": "new", "lead": lead.model_dump(),
-                              "topics": topics or []}},
+                              "topics": topics or [], "pulled_at": datetime.now(timezone.utc)}},
             upsert=True,
         )
 
@@ -194,6 +194,8 @@ class MongoStore:
             out.append({"key": d["_id"], "status": d["status"], "name": lead.full_name,
                         "company": lead.company, "title": lead.title, "email": lead.email,
                         "source": lead.source,
+                        # when the lead was first pulled in (None for leads pulled before this was tracked)
+                        "pulled_at": d["pulled_at"].isoformat() if d.get("pulled_at") else None,
                         # Apollo person id — lets the UI offer "find more like this" (lookalike seed)
                         "apollo_id": (lead.raw or {}).get("id") or ""})
         return out
