@@ -318,6 +318,10 @@ export default function Review({ campaign }) {
   }
 
   const ready = readiness(current)
+  // Evidence panel presence is a property of the CAMPAIGN, not the lead: show it only
+  // when the campaign actually produces facts (any queued lead has some), so it never
+  // flickers row-to-row. A factless lead in a research campaign still shows the panel.
+  const showEvidence = items.some((it) => (it.facts || []).length > 0)
 
   return (
     <div className="review">
@@ -325,7 +329,7 @@ export default function Review({ campaign }) {
       {view === 'board' ? (
         <Kanban campaign={campaign} embedded />
       ) : (
-        <div className="review-work">
+        <div className={`review-work ${showEvidence ? '' : 'no-evidence'}`}>
           {/* queue rail */}
           <aside className="rq-list">
             {items.map((it, idx) => {
@@ -474,7 +478,8 @@ export default function Review({ campaign }) {
             )}
           </main>
 
-          {/* evidence — the co-star, expanded by default */}
+          {/* evidence — shown only when the campaign produces facts (consistent per campaign) */}
+          {showEvidence && (
           <aside className="rq-evidence">
             <div className="drawer-label">
               {current.facts.length ? `Grounded in ${current.facts.length} verified ${current.facts.length === 1 ? 'fact' : 'facts'}` : 'Evidence'}
@@ -500,6 +505,7 @@ export default function Review({ campaign }) {
               </ul>
             )}
           </aside>
+          )}
         </div>
       )}
     </div>

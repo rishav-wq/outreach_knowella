@@ -523,6 +523,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .seg button:not(.on):hover { background: #efeee7; color: var(--text); }
 
 .review-work { display: grid; grid-template-columns: 258px minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.review-work.no-evidence { grid-template-columns: 258px minmax(0, 1fr); }   /* draft reclaims the evidence width */
 .review-work > * { max-height: calc(100vh - 172px); }
 
 /* live send-progress bar under the review header — a 100+ send never looks frozen */
@@ -618,7 +619,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .ev-link:hover { text-decoration: underline; }
 
 @media (max-width: 1080px) {
-  .review-work { grid-template-columns: 1fr; }
+  .review-work, .review-work.no-evidence { grid-template-columns: 1fr; }
   .review-work > * { max-height: none; }
   .rq-list { display: flex; overflow-x: auto; overflow-y: hidden; }
   .rq-item { border-bottom: none; border-right: 1px solid var(--line); min-width: 180px; }
