@@ -649,6 +649,45 @@ def _msg_text(m: dict) -> str:
     return (b or m.get("body_text") or "").strip()
 
 
+_SENT_STATUSES = {"completed", "delivered", "sent", "opened", "clicked",
+                  "replied", "bounced", "hard_bounced", "soft_bounced"}
+
+
+def _msg_sent(m: dict) -> bool:
+    """True when Apollo has actually SENT this message (vs still scheduled/queued) — so we only
+    preview staged copy for not-yet-sent messages and never mask a genuinely empty send."""
+    s = (m.get("email_status") or m.get("status") or m.get("mailing_status") or "").lower()
+    return s in _SENT_STATUSES
+
+
+def _fill_scheduled(store, lead_key: str, msgs: list[dict]) -> None:
+    """Apollo drip-sends a sequence, so most steps sit 'scheduled' with only an empty HTML
+    skeleton for a body until it sends them. For those NOT-YET-SENT outbound messages, show the
+    copy we STAGED (the outbox), matched by step order, instead of a blank bubble — the user
+    sees what WILL go out. Sent messages are left exactly as Apollo rendered them, so a
+    genuinely empty send is never hidden. Mutates msgs; each dict needs 'direction', 'text',
+    'subject', and 'sent'."""
+    if not lead_key:
+        return
+    ob = store.get_outbox(lead_key) or {}
+    if not ob:
+        return
+    step = 0
+    for m in msgs:
+        if m.get("direction") != "out":
+            continue
+        step += 1
+        if m.get("sent"):                       # already gone out — never mask its real content
+            continue
+        if not m.get("text"):
+            staged = ob.get("body") if step == 1 else ob.get(f"body_{step}", "")
+            if staged:
+                m["text"] = staged
+                m["scheduled"] = True           # a preview of a not-yet-sent message
+        if not m.get("subject") or m.get("subject") == "(no subject)":
+            m["subject"] = (ob.get("subject") if step == 1 else ob.get(f"subject_{step}", "")) or m.get("subject") or ""
+
+
 _LABEL_PRIORITY = ["opt_out", "interested", "not_interested", "ooo", "other"]
 
 
@@ -708,12 +747,20 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
             store.save_verify(lead_email, "undeliverable")
             if who.get("key"):
                 store.set_status(who["key"], "bounced")
+        # scheduled sends aren't rendered by Apollo yet — fall back to our staged copy so the
+        # list shows the subject/snippet instead of "(no subject)"/blank.
+        ob = store.get_outbox(who["key"]) if who.get("key") else None
+        out_steps = sum(1 for mm in msgs if not apollo_send.is_inbound(mm))
+        subject = (first_out or last).get("subject") or (ob or {}).get("subject") or "(no subject)"
+        snippet = _msg_text(last)
+        if not snippet and ob and not apollo_send.is_inbound(last) and not _msg_sent(last):
+            snippet = (ob.get("body") if out_steps <= 1 else ob.get(f"body_{out_steps}", "")) or ""
         items.append({
             "bounced": bounced,
             "meeting": bool(who.get("key")) and bool(store.meeting_keys([who["key"]])),
             "thread_id": cid,
-            "subject": (first_out or last).get("subject") or "(no subject)",
-            "snippet": _msg_text(last)[:180],
+            "subject": subject,
+            "snippet": snippet[:180],
             "lead_email": lead_email,
             "name": who.get("name") or (last.get("to_name") if not apollo_send.is_inbound(last) else "") or lead_email or "Conversation",
             "company": who.get("company") or "",
@@ -798,8 +845,14 @@ def inbox_thread(campaign: str, thread_id: str):
             "text": _msg_text(m),
             "ts": m.get("created_at") or m.get("completed_at") or "",
             "direction": "in" if received else "out",
+            "sent": _msg_sent(m),
         })
     msgs.sort(key=lambda x: x["ts"])
+    # scheduled sends Apollo hasn't rendered yet: show the staged copy, not a blank bubble
+    store = open_store()
+    lead_email = next((x["to"] for x in msgs if x["direction"] == "out" and x.get("to")), "")
+    key = _lead_directory(store, cfg["name"]).get(lead_email.lower(), {}).get("key", "") if lead_email else ""
+    _fill_scheduled(store, key, msgs)
     return {"connected": True, "messages": msgs}
 
 

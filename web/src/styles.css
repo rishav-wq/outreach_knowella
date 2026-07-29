@@ -685,6 +685,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .msg.out { align-self: flex-end; }
 .msg-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-bottom: 5px; }
 .msg.out .msg-meta { text-align: right; }
+.msg-scheduled { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--amber-soft, #fdf1d8); color: var(--amber-ink, #8a5a00); font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase; }
 .msg-text {
   white-space: pre-wrap; font: inherit; font-size: 13.5px; line-height: 1.65; color: var(--text-2);
   margin: 0; background: #f6f7f3; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 15px;
