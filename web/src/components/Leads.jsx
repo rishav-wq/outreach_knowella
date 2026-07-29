@@ -7,10 +7,10 @@ import { stagger, tap } from './anim'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
-// Professional monogram avatars: a stable per-name color + first/last initials, so each
-// person reads as distinct instead of a row of look-alike single letters. Teal (#04b492)
-// is deliberately excluded — it's reserved for verify/approve semantics in the palette.
-const AVATAR_COLORS = ['#6e63ff', '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899', '#f0862e', '#0ea5e9', '#6366f1', '#f59e0b']
+// Monogram avatars in Knowella's palette: violet-led (the brand primary) with green + amber
+// accents from the pinwheel; a stable color per name so people read as distinct. Teal
+// (#04b492) is left out — it's reserved for verify/approve semantics.
+const AVATAR_COLORS = ['#6e63ff', '#4f46e5', '#7c3aed', '#3ea35c', '#d99b00']
 const initials = (name) => {
   const p = (name || '').trim().split(/\s+/).filter(Boolean)
   if (!p.length) return '?'
@@ -31,7 +31,6 @@ export default function Leads({ campaign, onNavigate }) {
   const [limit, setLimit] = useState(25)
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
-  const [seeds, setSeeds] = useState([]) // lookalike seeds from the campaign config
   const [sel, setSel] = useState(() => new Set())  // selected lead keys for bulk actions
   const [confirm, setConfirm] = useState(null)      // 'exclude' | 'delete' | null
   const [working, setWorking] = useState(false)
@@ -39,24 +38,7 @@ export default function Leads({ campaign, onNavigate }) {
   const load = () => api.getLeads(campaign).then(setLeads).catch(() => setLeads([]))
   useEffect(() => {
     setLeads(null); setMsg(null); setSel(new Set()); setConfirm(null); load()
-    api.getCampaignConfig(campaign).then((cfg) => setSeeds((cfg.apollo || {}).lookalike_seeds || [])).catch(() => setSeeds([]))
   }, [campaign])
-
-  // "More like this": seed Apollo's lookalike search with a proven lead, so the
-  // next pull finds similar people (same kind of role at the same kind of company).
-  const seedIds = new Set(seeds.map((s) => s.id))
-  const toggleSeed = async (l) => {
-    const on = !seedIds.has(l.apollo_id)
-    try {
-      const r = await api.setLookalike(campaign, l.key, on)
-      setSeeds(r.lookalike_seeds || [])
-      setMsg({ kind: 'ok', text: on
-        ? `${l.name} added as a lookalike seed — the next Apollo pull also looks for people like them.`
-        : `${l.name} removed from the lookalike seeds.` })
-    } catch (e) {
-      setMsg({ kind: 'err', text: `Could not update lookalike seeds: ${e.message || e}` })
-    }
-  }
 
   // multi-select for bulk actions on a pull
   const toggleSel = (key) => setSel((prev) => {
@@ -178,8 +160,9 @@ export default function Leads({ campaign, onNavigate }) {
     const days = dateFilter === '7d' ? 7 : 30
     return (Date.now() - d.getTime()) <= days * 86400000
   }
-  const filtered = leads.filter((l) =>
-    `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()) && inDateRange(l))
+  const filtered = leads
+    .filter((l) => `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()) && inDateRange(l))
+    .sort((a, b) => (b.pulled_at ? Date.parse(b.pulled_at) : 0) - (a.pulled_at ? Date.parse(a.pulled_at) : 0))   // newest pulls at top; undated (older) sink to the bottom
   const allSelected = filtered.length > 0 && filtered.every((l) => sel.has(l.key))
   const toggleAll = () => setSel((prev) => {
     const next = new Set(prev)
@@ -229,7 +212,7 @@ export default function Leads({ campaign, onNavigate }) {
       <div className="table-wrap">
         <table className="table">
           <thead>
-            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th>Pulled</th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
+            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th>Pulled</th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th></tr>
           </thead>
           <motion.tbody variants={stagger} initial="hidden" animate="show">
             {filtered.map((l) => (
@@ -241,17 +224,7 @@ export default function Leads({ campaign, onNavigate }) {
                 <td className="muted">{l.title || '—'}</td>
                 <td>{l.company}</td>
                 <td className="muted">{l.email || '—'}</td>
-                <td>{l.source ? <span className="src-tag">{l.source}</span> : <span className="muted">—</span>}</td>
                 <td><span className={`badge s-${l.status}`}>{l.status}</span></td>
-                <td>{l.apollo_id && (
-                  <button type="button" className={`seed-btn ${seedIds.has(l.apollo_id) ? 'on' : ''}`}
-                    onClick={() => toggleSeed(l)}
-                    title={seedIds.has(l.apollo_id)
-                      ? 'Lookalike seed — the next Apollo pull also finds people like this lead. Click to remove.'
-                      : 'More like this: seed the next Apollo pull with people similar to this lead.'}>
-                    <Icon name="users" size={13} /> {seedIds.has(l.apollo_id) ? 'Seeded' : 'More like this'}
-                  </button>
-                )}</td>
               </motion.tr>
             ))}
           </motion.tbody>

@@ -17,6 +17,7 @@ export default function Dashboard({ campaign, onNavigate }) {
   const [status, setStatus] = useState({ counts: {}, tokens: {} })
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [runProgress, setRunProgress] = useState(null)   // {done, total} while the pipeline runs
   const [msg, setMsg] = useState('')
   const [delivery, setDelivery] = useState(null)
   const [ab, setAb] = useState(null)
@@ -31,13 +32,15 @@ export default function Dashboard({ campaign, onNavigate }) {
     clearInterval(poll.current)
     poll.current = setInterval(async () => {
       const s = await api.getRunStatus(campaign)
+      if (s.progress) setRunProgress(s.progress)
       load() // keep the rail moving while the pipeline works
       if (!s.running) {
         clearInterval(poll.current)
         setRunning(false)
+        setRunProgress(null)
         setMsg(s.error ? 'Pipeline stopped with an error: ' + s.error : 'Pipeline finished. New drafts are waiting on the Review tab.')
       }
-    }, 2000)
+    }, 1500)
   }
 
   useEffect(() => {
@@ -115,7 +118,12 @@ export default function Dashboard({ campaign, onNavigate }) {
         <p className="wh-sub">{step.sub}</p>
         <div className="wh-actions">
           {running ? (
-            <span className="wh-running"><span className="spinner" /> researching &amp; drafting…</span>
+            <div className="wh-running">
+              <span className="wh-running-label"><span className="spinner" /> researching &amp; drafting{runProgress?.total ? ` — ${runProgress.done}/${runProgress.total}` : '…'}</span>
+              {runProgress?.total > 0 && (
+                <div className="run-progress"><i style={{ width: `${Math.round((runProgress.done / runProgress.total) * 100)}%` }} /></div>
+              )}
+            </div>
           ) : (
             <>
               {step.cta && step.go !== 'run' && (

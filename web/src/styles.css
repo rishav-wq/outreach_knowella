@@ -160,7 +160,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .wh-sub { margin: 0 0 18px; color: var(--text-2); font-size: 14px; max-width: 560px; }
 .wh-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wh-secondary { display: flex; align-items: center; gap: 8px; margin-left: 4px; }
-.wh-running { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+.wh-running { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
+.wh-running-label { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+.run-progress { position: relative; height: 6px; width: 280px; max-width: 100%; border-radius: 999px; background: var(--signal-tint); overflow: hidden; }
+.run-progress > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--signal); transition: width 0.4s ease; }
 
 /* pipeline rail — lifecycle as a ledger line */
 .rail { display: flex; align-items: flex-start; gap: 0; padding: 18px 6px 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
