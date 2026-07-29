@@ -868,6 +868,28 @@ def decide(d: Decision):
     return {"key": d.key, "decision": val}
 
 
+class ApproveAllReq(BaseModel):
+    campaign: str
+
+
+@app.post("/api/review/approve_all")
+def approve_all(r: ApproveAllReq):
+    """Bulk-approve every pending, sendable draft in the review queue — the fast path for
+    verbatim campaigns where every draft is the same template. Leaves explicit rejections
+    untouched, and skips leads with no draft or no email (they could never send anyway)."""
+    cfg = _load(r.campaign)
+    store = open_store()
+    n = 0
+    for lead in store.leads(cfg["name"], "queued"):
+        if store.get_review(lead.key) == "rejected":
+            continue
+        if not lead.email or not store.get_outbox(lead.key):
+            continue
+        store.set_review(lead.key, "approved")
+        n += 1
+    return {"approved": n}
+
+
 class ExcludeReq(BaseModel):
     campaign: str
     key: str

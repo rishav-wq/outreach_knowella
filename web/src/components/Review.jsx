@@ -64,6 +64,7 @@ export default function Review({ campaign }) {
   const [sendBlock, setSendBlock] = useState('')
   const [guard, setGuard] = useState(null)
   const [sending, setSending] = useState(false)
+  const [approvingAll, setApprovingAll] = useState(false)  // bulk-approve in flight
   const [sendProgress, setSendProgress] = useState(null)   // {sent, done, total} live during a send
   const [fuOpen, setFuOpen] = useState(false)              // follow-ups collapsed by default
   const [reviseOpen, setReviseOpen] = useState(false)      // AI-revise box collapsed by default
@@ -108,6 +109,7 @@ export default function Review({ campaign }) {
   const total = items?.length || 0
   const decidedCount = items?.filter((it) => it.decision).length || 0
   const approvedCount = items?.filter((it) => it.decision === 'approved').length || 0
+  const approvable = items?.filter((it) => !it.decision && it.email).length || 0  // pending + sendable
   const remaining = total - decidedCount
 
   const patch = (key, fields) => setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...fields } : it)))
@@ -215,6 +217,17 @@ export default function Review({ campaign }) {
     }, 1500)
   }
 
+  // bulk-approve every pending, sendable draft — the fast path for verbatim campaigns
+  // where all drafts are the same template. Rejections are respected server-side.
+  const approveAll = async () => {
+    if (!approvable || approvingAll) return
+    if (!window.confirm(`Approve all ${approvable} pending ${approvable === 1 ? 'draft' : 'drafts'}? Leads you've rejected stay rejected — you can still review or change any before sending.`)) return
+    setApprovingAll(true)
+    try { await api.approveAll(campaign); await load() }
+    catch { /* leave the queue untouched if it fails */ }
+    finally { setApprovingAll(false) }
+  }
+
   const guardLabel = () => {
     if (!guard) return ''
     const parts = []
@@ -274,6 +287,12 @@ export default function Review({ campaign }) {
         )}
         {guardLabel() && <span className="guard-note">{guardLabel()}</span>}
         {!sendable && sendBlock && <span className="send-block" title={sendBlock}>{sendBlock}</span>}
+        {approvable > 0 && (
+          <button className="btn" disabled={approvingAll} onClick={approveAll}
+            title="Approve every pending draft at once — leads you've rejected are left as-is">
+            {approvingAll ? <><span className="spinner" /> Approving…</> : `Approve all ${approvable}`}
+          </button>
+        )}
         <button className="btn primary" disabled={!sendable || !approvedCount || sending}
           title={!sendable ? sendBlock : ''} onClick={sendApproved}>
           {sending

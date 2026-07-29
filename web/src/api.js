@@ -50,6 +50,8 @@ export const deleteCampaign = (campaign) => apiSend('/api/campaign/delete', 'POS
 export const setMailbox = (campaign, mailbox_ids) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_ids })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
+// bulk-approve every pending, sendable draft (respects existing rejections)
+export const approveAll = (campaign) => apiSend('/api/review/approve_all', 'POST', { campaign })
 // exclude a not-a-fit lead: clears its drafts + drops it from the campaign, but keeps it in the library
 export const excludeLead = (campaign, key) => apiSend('/api/review/exclude', 'POST', { campaign, key })
 // master leads library: every lead across all campaigns, with function bucket + topic tags
