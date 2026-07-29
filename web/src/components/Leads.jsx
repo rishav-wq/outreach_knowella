@@ -77,9 +77,10 @@ export default function Leads({ campaign, onNavigate }) {
     try {
       const r = await api.pullApollo(campaign, limit)
       const credits = r.credits_used != null ? ` · used ${r.credits_used} Apollo ${r.credits_used === 1 ? 'credit' : 'credits'}` : ''
+      const noEmail = r.no_email ? ` · skipped ${r.no_email} with no email` : ''
       setMsg(r.pulled
-        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${credits}. Run the pipeline on the Overview to research and draft them.` }
-        : { kind: 'ok', text: 'Apollo returned no new leads for these filters — widen the titles, keywords, or geographies in the campaign settings.' })
+        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${credits}${noEmail}. Run the pipeline on the Overview to research and draft them.` }
+        : { kind: 'ok', text: `Apollo returned no new emailable leads${noEmail}. Widen the titles, keywords, or geographies in the campaign settings.` })
       await load()
     } catch (e) {
       setMsg({ kind: 'err', text: `Apollo pull failed: ${e.message || e}` })

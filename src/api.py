@@ -1152,6 +1152,7 @@ def pull_apollo(r: ApolloPull):
         raise HTTPException(400, str(e))
     topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
     skipped = 0
+    no_email = 0
     for lead in leads_in:
         lead.source = "apollo"
         if lead.email and store.is_suppressed(lead.email):  # compliance: never re-import
@@ -1161,8 +1162,11 @@ def pull_apollo(r: ApolloPull):
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
+        if not lead.email:  # Apollo couldn't reveal an email — an unemailable lead only clutters, so skip it
+            no_email += 1
+            continue
         store.upsert_lead(lead, cfg["name"], topics)
-    return {"pulled": len(leads_in) - skipped, "suppressed": skipped,
+    return {"pulled": len(leads_in) - skipped - no_email, "suppressed": skipped, "no_email": no_email,
             "credits_used": credits, "counts": store.counts(cfg["name"])}
 
 
