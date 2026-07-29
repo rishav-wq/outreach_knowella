@@ -164,9 +164,10 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     # affects leads that haven't been drafted yet — an already-reviewed draft never
     # silently flips arms (and regenerates) because the ratio moved.
     _ob = store.get_outbox(lead.key) or {}
+    verbatim = _is_verbatim(cfg)
     # verbatim mode has no A/B (one template for everyone) — force a single arm even for
     # leads whose stored variant predates verbatim, so nothing is mislabeled 'control'.
-    variant = "signal" if _is_verbatim(cfg) else (_ob.get("variant") or variant_for(lead.key, cfg))
+    variant = "signal" if verbatim else (_ob.get("variant") or variant_for(lead.key, cfg))
     dh = draft_hash(res, cfg, variant)
     draft = ensure_draft(store, lead, res, cfg, dh, variant)
     store.set_status(lead.key, "drafted")
@@ -175,7 +176,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     # wants it sent as-is. The quality gate (grounding / length / generic fallback) must
     # NOT apply here — it would throw their email away and swap in a canned fallback.
     # Pass the verbatim draft straight through.
-    if _is_verbatim(cfg):
+    if verbatim:
         gate = GateResult(verdict="pass", reason="verbatim template — gate skipped")
     else:
         gate = ensure_gate(store, lead, draft, res, cfg, dh)
@@ -187,8 +188,12 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
 
     final = gate.draft or draft
     ob = store.get_outbox(lead.key)
-    if not (ob and ob.get("edited")):
-        store.save_outbox(lead.key, final, gate.verdict, variant)  # refresh unless manually edited
+    # In verbatim mode the template is the source of truth, so a stale 'edited' flag (e.g.
+    # from an earlier revise) must NOT block it from refreshing — otherwise a template
+    # change silently never takes effect (this is the bug that stranded the knowdoc-freight
+    # follow-ups). A real manual edit is still protected in AI mode.
+    if not (ob and ob.get("edited") and not verbatim):
+        store.save_outbox(lead.key, final, gate.verdict, variant)
 
     # follow-ups (sequence steps 2..N, count from the campaign's sequence block):
     # drafted from the final first email, cached by fu_hash so they regenerate only
@@ -198,7 +203,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
     fuh = hash_inputs("fu-rev4", final.subject, final.body, variant,   # rev4: verbatim follow-ups when AI off
                       (cfg.get("sequence") or {}).get("use_ai", True),
                       [(s["wait_days"], s["template"], s["subject"]) for s in fu_steps])
-    if fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
+    if fu_steps and ob.get("fu_hash") != fuh and not (ob.get("edited") and not verbatim):
         bodies, usage, model = personalize.write_followups(
             lead, res, cfg, final.subject, final.body, fu_steps, variant)
         if all(bodies):
@@ -207,7 +212,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
                 lead.key, [{"subject": s["subject"] or f"Re: {final.subject}", "body": b}
                            for s, b in zip(fu_steps, bodies)], fuh)
             store.log_llm(lead.key, "followups", model, usage)
-    elif not fu_steps and ob.get("fu_hash") != fuh and not ob.get("edited"):
+    elif not fu_steps and ob.get("fu_hash") != fuh and not (ob.get("edited") and not verbatim):
         store.save_followups(lead.key, [], fuh)   # single-email sequence: clear stale follow-ups
 
     if dry_run:
