@@ -1251,6 +1251,45 @@ def linkedin_campaigns(request: Request):
     return {"campaigns": open_store().campaign_names()}
 
 
+# --- ICP fit for captured commenters ------------------------------------------
+# A LinkedIn post's commenters are self-selected, not filtered like an Apollo pull —
+# a broad post can hand us 130 software engineers for a freight campaign. This check
+# compares each person against the campaign's own targeting (icp/apollo titles +
+# industries/keywords) and skips CLEAR misses. Deliberately conservative: seniority
+# words (director/manager/head…) don't count as fit — the DOMAIN words do (safety,
+# ehs, freight…) — and people with no readable title are kept for human review.
+_TITLE_STOP = {
+    "of", "the", "and", "at", "for", "in", "a", "an",
+    "sr", "senior", "jr", "junior", "head", "director", "manager", "managing", "lead",
+    "chief", "officer", "vp", "vice", "president", "specialist", "coordinator",
+    "executive", "assistant", "associate", "global", "regional", "group", "corporate",
+}
+
+
+def _icp_tokens(cfg: dict) -> set[str]:
+    """Domain words from the campaign's targeting. Empty set = check disabled."""
+    icp = cfg.get("icp") or {}
+    ap = cfg.get("apollo") or {}
+    words: set[str] = set()
+    for t in (ap.get("titles") or icp.get("titles") or []) \
+           + (ap.get("keywords") or icp.get("industries") or []):
+        for w in re.split(r"[^a-z0-9]+", str(t).lower()):
+            if len(w) > 1 and w not in _TITLE_STOP:
+                words.add(w)
+    return words
+
+
+def _fits_icp(text: str, toks: set[str]) -> bool | None:
+    """True = overlaps the targeting; False = readable text with ZERO overlap (clear
+    miss); None = nothing readable to judge (kept — missing data isn't a mismatch)."""
+    if not toks:
+        return True
+    words = {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 1}
+    if not words:
+        return None
+    return True if words & toks else False
+
+
 class Commenter(BaseModel):
     name: str = ""
     profile_url: str = ""
@@ -1292,10 +1331,23 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         seen.add(url)
         fresh.append({"name": c.name.strip(), "profile_url": c.profile_url.strip(),
                       "headline": c.headline.strip()})
+
+    # ICP fit, pass 1 — the headline, BEFORE enrichment: a clear miss ("Software
+    # Engineer" into a freight campaign) is skipped without spending a credit.
+    toks = _icp_tokens(cfg)
+    off_icp = 0
+    if toks:
+        kept = []
+        for c in fresh:
+            if _fits_icp(c["headline"], toks) is False:
+                off_icp += 1
+            else:
+                kept.append(c)
+        fresh = kept
     if not fresh:
         return {"received": len(r.commenters), "added": 0, "with_email": 0, "no_email": 0,
-                "duplicates": duplicates, "suppressed": 0, "credits_used": 0,
-                "counts": store.counts(cfg["name"])}
+                "duplicates": duplicates, "off_icp": off_icp, "suppressed": 0,
+                "credits_used": 0, "counts": store.counts(cfg["name"])}
 
     # enrich from Apollo's database (LinkedIn contributed only the pointer)
     credits = 0
@@ -1318,6 +1370,12 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         if lead.email and store.is_suppressed(lead.email):
             suppressed += 1
             continue
+        # ICP fit, pass 2 — Apollo's verified title (fresher than the headline). Only
+        # people whose headline was unreadable reach here unjudged; a clear miss on
+        # BOTH title and headline is skipped rather than added to the campaign.
+        if toks and _fits_icp(f"{lead.title} {c['headline']}", toks) is False:
+            off_icp += 1
+            continue
         lead.source = "linkedin_comment"
         lead.raw = {**(lead.raw or {}),
                     "linkedin_capture": {"post_url": r.post_url, "headline": c["headline"]}}
@@ -1327,7 +1385,7 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
             with_email += 1
     return {"received": len(r.commenters), "added": added, "with_email": with_email,
             "no_email": added - with_email, "duplicates": duplicates,
-            "suppressed": suppressed, "credits_used": credits,
+            "off_icp": off_icp, "suppressed": suppressed, "credits_used": credits,
             "counts": store.counts(cfg["name"])}
 
 

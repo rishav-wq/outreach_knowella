@@ -282,6 +282,7 @@ async function send() {
     await saveState()
     renderCount(0)
     msg(`Added ${d.added} lead${d.added === 1 ? '' : 's'} to ${campaign} — ${d.with_email} with email, ${d.no_email} without` +
+        `${d.off_icp ? `, ${d.off_icp} skipped (didn’t match the campaign’s targeting)` : ''}` +
         `${d.duplicates ? `, ${d.duplicates} already captured` : ''}${d.suppressed ? `, ${d.suppressed} suppressed` : ''}` +
         `${d.credits_used ? ` · ${d.credits_used} Apollo credits` : ''}. Review them in the app.`, 'ok')
   } catch (e) {
