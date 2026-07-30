@@ -89,8 +89,13 @@ function scrapeComments() {
 async function scan() {
   msg('')
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab || !/linkedin\.com/.test(tab.url || '')) {
-    msg('Open a LinkedIn post first, then click Scan.', 'err'); return
+  if (!tab) { msg('No active tab found.', 'err'); return }
+  // tab.url is only visible while activeTab is granted (per toolbar click, lapses on
+  // navigation) — so an unreadable URL is NOT proof we're off LinkedIn. Only block when
+  // we can positively see a non-LinkedIn site; otherwise try the scan and let Chrome's
+  // permission error tell us to re-grant.
+  if (tab.url && !/linkedin\.com/.test(tab.url)) {
+    msg('This isn’t LinkedIn — open the post there, then Scan.', 'err'); return
   }
   if (tab.id !== tabId) { tabId = tab.id; await loadState() }   // panel stayed open across a tab switch
   let res
@@ -98,8 +103,8 @@ async function scan() {
     const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scrapeComments })
     res = r?.result
   } catch (e) {
-    // activeTab is granted per toolbar click and lapses when the tab navigates
-    msg('Chrome needs a fresh grant for this page: click the extension’s toolbar icon once, then Scan again.', 'err')
+    // activeTab lapsed (navigation) or was never granted on this tab
+    msg('Chrome needs a fresh grant: click the extension’s toolbar icon once (panel may blink), then Scan again.', 'err')
     return
   }
   if (!res || res.blocks === 0) {
