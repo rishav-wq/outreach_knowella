@@ -1001,14 +1001,16 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 /* Hero: everything lives inside ONE contained panel washed in Knowella's
    actual login gradient — copy left, live product window right, metrics as
    a frosted strip along the panel's bottom edge. */
-.lp-hero { position: relative; max-width: 1320px; margin: 0 auto; padding: 20px 20px 0; }
+/* FULL-BLEED hero — the hero IS the page, not a card floating on it. The
+   product's login gradient runs edge to edge; content stays in the container. */
+.lp-hero { position: relative; margin: 0; padding: 0; }
 .lp-hero-panel {
-  position: relative; overflow: hidden; border-radius: 24px;
+  position: relative; overflow: hidden; border-radius: 0;
   background: linear-gradient(-45deg, #e2e0ff, #d0e8f0, #e6f8f4, #c8cef5); /* $login-gradient-bg */
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: var(--shadow-md);
+  border: none; border-bottom: 1px solid var(--line);
+  box-shadow: none;
   display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0;
-  padding: 56px 52px 0;
+  padding: 72px max(52px, calc((100vw - 1180px) / 2)) 0;
 }
 /* centered grid items size to fit-content — cap them so text wraps on small screens */
 .lp-hero-panel > * { max-width: 100%; min-width: 0;
@@ -1271,7 +1273,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-metrics {
   position: relative; z-index: 1; grid-column: 1 / -1; justify-self: stretch; display: flex; flex-wrap: wrap;
   max-width: none;   /* exempt from the panel child cap so it bleeds edge-to-edge */
-  margin: 26px -52px 0; padding: 20px 40px;
+  margin: 30px calc(-1 * max(52px, (100vw - 1180px) / 2)) 0;
+  padding: 20px max(40px, calc((100vw - 1180px) / 2));
   background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.9);
 }
@@ -1313,8 +1316,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-copy { color: var(--muted); font-family: var(--font-mono); font-size: 11px; margin-top: 36px; border-top: 1px solid var(--line); padding-top: 24px; }
 
 @media (max-width: 880px) {
-  .lp-hero { padding: 12px 12px 0; }
-  .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 36px 24px 0; gap: 32px; }
+  .lp-hero { padding: 0; }
+  .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 44px 24px 0; gap: 32px; }
   .lp-metrics { margin: 18px -24px 0; padding: 16px 12px; }
   .lp-metrics > div + div { border-left: none; }
   .lp-steps { grid-template-columns: 1fr; }
