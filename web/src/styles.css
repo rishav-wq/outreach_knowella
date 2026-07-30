@@ -1105,14 +1105,60 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
    works), yellow (you approve), teal (sent) — with one lead card traveling
    the line on a 16s pure-CSS loop. Base (non-animated) styles are the FINAL
    state, so reduced-motion and mobile show a complete, truthful still. */
-.pipe { position: relative; z-index: 1; width: min(880px, 100%); margin: 40px auto 30px; padding-top: 148px; }
+.pipe { position: relative; z-index: 1; width: min(760px, 100%); margin: 38px auto 28px; }
+
+/* the full-size stage window — transforms in place through the four stages */
+.pipe-window {
+  position: relative; display: grid; min-height: 236px; margin-bottom: 30px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow-pop); padding: 22px 26px; text-align: left;
+}
+.pst { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 12px; opacity: 0; transform: translateY(6px); }
+.pst3 { opacity: 1; transform: none; }   /* the still (reduced motion / seam) shows the judging moment */
+.pst1 { animation: pipe-s1 16s linear infinite; }
+.pst2 { animation: pipe-s2 16s linear infinite; }
+.pst3 { animation: pipe-s3 16s linear infinite; }
+.pst4 { animation: pipe-s4 16s linear infinite; }
+@keyframes pipe-s1 { 0%, 22% { opacity: 1; transform: none; } 25%, 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes pipe-s2 { 0%, 23% { opacity: 0; transform: translateY(6px); } 26%, 47% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes pipe-s3 { 0%, 48% { opacity: 0; transform: translateY(6px); } 51%, 72% { opacity: 1; transform: none; } 75%, 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes pipe-s4 { 0%, 73% { opacity: 0; transform: translateY(6px); } 76%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+/* per-stage eyebrow, colored by its petal */
+.pst-eyebrow { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.pst-eyebrow.eg { color: #3e8a2e; }
+.pst-eyebrow.ei { color: var(--petal-indigo); }
+.pst-eyebrow.ey { color: #a37b00; }
+.pst-eyebrow.et { color: var(--verify); }
+
+.pst-lead { display: flex; align-items: center; gap: 14px; }
+.pst-lead .pl-av { width: 44px; height: 44px; font-size: 14px; }
+.pst-who b { display: block; font-size: 17px; color: var(--ink); line-height: 1.25; }
+.pst-who span { font-size: 13px; color: var(--muted); }
+.pst-lead .badge { margin-left: auto; }
+.pst-meta { font-size: 12.5px; color: var(--faint); margin-top: auto; }
+
+.pst-fact { display: flex; align-items: baseline; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--petal-indigo); border-radius: 8px; padding: 10px 14px; }
+.pst-fact i { font-style: normal; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--petal-indigo); white-space: nowrap; }
+.pst-fact q { quotes: none; font-size: 13.5px; color: var(--text-2); }
+.pst-fact em { font-style: normal; margin-left: auto; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--verify); border: 1px solid color-mix(in srgb, var(--verify) 50%, transparent); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+.pst-subj { font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.pst-body { font-size: 13.5px; line-height: 1.75; color: var(--text-2); margin: 0; max-width: 58em; }
+.pst-body mark { background: #d9f0e8; color: var(--text); border-radius: 3px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.pst-body sup { font-size: 9.5px; font-weight: 700; color: var(--verify); }
+.pst-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: auto; }
+.pst-actions .btn { padding: 6px 14px; font-size: 12.5px; pointer-events: none; }
+.pst-fups { display: flex; gap: 8px; flex-wrap: wrap; }
+.pst-fups span { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+.pst-fups span.stop { color: #005343; background: #04b49229; border-color: transparent; }
 
 .pipe-track { position: relative; height: 14px; }
 .pipe-line { position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); background: var(--line-strong); border-radius: 99px; }
 .pipe-fill {
   position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); border-radius: 99px;
   background: linear-gradient(90deg, var(--petal-green) 12.5%, var(--petal-indigo) 37.5%, var(--petal-yellow) 62.5%, var(--petal-teal) 87.5%);
-  clip-path: inset(0 12.5% 0 0);
+  clip-path: inset(0 37.5% 0 0);   /* the still shows stage 3 — you, approving */
   animation: pipe-fill 16s linear infinite;
 }
 @keyframes pipe-fill {
@@ -1125,7 +1171,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .pnode.n1 { left: 12.5%; background: var(--petal-green); }
 .pnode.n2 { left: 37.5%; background: var(--petal-indigo); animation: pipe-n2 16s linear infinite; }
 .pnode.n3 { left: 62.5%; background: var(--petal-yellow); animation: pipe-n3 16s linear infinite; }
-.pnode.n4 { left: 87.5%; background: var(--petal-teal); animation: pipe-n4 16s linear infinite; }
+.pnode.n4 { left: 87.5%; background: var(--line-strong); animation: pipe-n4 16s linear infinite; }
 @keyframes pipe-n2 { 0%, 25% { background: var(--line-strong); } 27% { transform: translate(-50%, -50%) scale(1.5); } 29%, 100% { background: var(--petal-indigo); transform: translate(-50%, -50%) scale(1); } }
 @keyframes pipe-n3 { 0%, 50% { background: var(--line-strong); } 52% { transform: translate(-50%, -50%) scale(1.5); } 54%, 100% { background: var(--petal-yellow); transform: translate(-50%, -50%) scale(1); } }
 @keyframes pipe-n4 { 0%, 75% { background: var(--line-strong); } 77% { transform: translate(-50%, -50%) scale(1.5); } 79%, 100% { background: var(--petal-teal); transform: translate(-50%, -50%) scale(1); } }
@@ -1134,66 +1180,27 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .pipe-labels b { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); }
 .pipe-labels span { font-size: 11px; color: var(--faint); }
 
-/* the traveling lead card — stacked state layers crossfade at each petal */
-.pipe-card {
-  position: absolute; top: 0; left: 87.5%; transform: translateX(-50%);
-  display: grid; width: 300px; min-height: 118px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: var(--shadow-pop); padding: 13px 15px;
-  animation: pipe-travel 16s ease-in-out infinite;
-}
-.pipe-card::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-@keyframes pipe-travel {
-  0% { left: 12.5%; opacity: 0; }
-  2%, 16% { left: 12.5%; opacity: 1; }
-  26%, 41% { left: 37.5%; opacity: 1; }
-  51%, 66% { left: 62.5%; opacity: 1; }
-  76%, 96% { left: 87.5%; opacity: 1; }
-  99%, 100% { left: 87.5%; opacity: 0; }
-}
-.pl { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 8px; opacity: 0; }
-.pl1 { animation: pipe-l1 16s linear infinite; }
-.pl2 { animation: pipe-l2 16s linear infinite; }
-.pl3 { animation: pipe-l3 16s linear infinite; }
-.pl4 { opacity: 1; animation: pipe-l4 16s linear infinite; }
-@keyframes pipe-l1 { 0%, 18% { opacity: 1; } 23%, 100% { opacity: 0; } }
-@keyframes pipe-l2 { 0%, 24% { opacity: 0; } 28%, 43% { opacity: 1; } 48%, 100% { opacity: 0; } }
-@keyframes pipe-l3 { 0%, 49% { opacity: 0; } 53%, 68% { opacity: 1; } 73%, 100% { opacity: 0; } }
-@keyframes pipe-l4 { 0%, 74% { opacity: 0; } 78%, 97% { opacity: 1; } 100% { opacity: 0; } }
-
-.pl-top { display: flex; align-items: center; gap: 10px; text-align: left; }
 .pl-av { width: 32px; height: 32px; border-radius: 50%; background: #e5f6de; color: #3e8a2e; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; flex: none; }
-.pl-top b { display: block; font-size: 13.5px; color: var(--ink); line-height: 1.2; }
-.pl-top span { font-size: 11.5px; color: var(--muted); }
-.pl-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 10.5px; color: var(--faint); text-align: left; }
-.pl-chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.pl-chip.green { background: #e5f6de; color: #3e8a2e; }
-.pl-chip.indigo { background: var(--signal-pill); color: var(--petal-indigo); }
-.pl-chip.teal { background: #04b49229; color: #005343; }
-.pl-fact { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--text-2); text-align: left; }
-.pl-fact i { font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--petal-indigo); }
-.pl-fact em { font-style: normal; color: var(--verify); margin-left: auto; }
-.pl-subj { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
-.pl-body { font-size: 12px; color: var(--muted); line-height: 1.5; text-align: left; }
 .pl-stamp {
-  position: absolute; right: 12px; bottom: 10px; transform: rotate(-6deg);
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
-  color: var(--verify); border: 2px solid var(--verify); border-radius: 4px; padding: 2px 8px;
+  position: absolute; right: 22px; top: 20px; transform: rotate(-6deg);
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--verify); border: 2.5px solid var(--verify); border-radius: 5px; padding: 3px 11px;
   animation: pipe-stamp 16s linear infinite;
 }
 @keyframes pipe-stamp {
-  0%, 55% { opacity: 0; transform: rotate(-6deg) scale(1.6); }
-  58%, 100% { opacity: 1; transform: rotate(-6deg) scale(1); }
+  0%, 57% { opacity: 0; transform: rotate(-6deg) scale(1.7); }
+  60%, 100% { opacity: 1; transform: rotate(-6deg) scale(1); }
 }
-.pl-sent { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--verify); text-align: left; }
-.pl-sent em { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #04b49229; }
+.pl-sent { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; color: var(--verify); }
+.pl-sent em { font-style: normal; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #04b49229; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pipe *, .pipe { animation: none !important; }   /* statics = the final state */
+  .pipe *, .pipe { animation: none !important; }   /* the still: stage 3, you approving */
 }
 @media (max-width: 720px) {
-  .pipe { padding-top: 0; margin-top: 26px; }
-  .pipe-card { display: none; }                    /* the track + labels tell the story */
+  .pipe { margin-top: 26px; }
+  .pipe-window { padding: 16px; min-height: 0; }
+  .pst-lead .badge { display: none; }
   .pipe-labels { grid-template-columns: repeat(2, 1fr); gap: 12px 8px; }
 }
 
