@@ -24,37 +24,24 @@ function PipelineHero() {
   return (
     <div className="pipe" role="img"
       aria-label="A lead travels the pipeline: pulled in, researched and drafted by the AI with quote-verified claims, approved by you, then sent with automatic follow-ups.">
-      {/* the STAGE: one full-size product window that transforms in place —
-          the petal track below shows where in the lifecycle it is */}
-      <div className="pipe-window" aria-hidden="true">
-        <div className="pst pst1">
-          <div className="pst-eyebrow eg">Step 1 · Lead pulled</div>
-          <div className="pst-lead">
-            <span className="pl-av">MC</span>
-            <div className="pst-who"><b>Maria Chen</b><span>VP Operations · Meridian Logistics · Dayton, OH</span></div>
-            <span className="badge s-approved">verified email</span>
-          </div>
-          <div className="pst-meta">from Apollo · matches your ICP — logistics · 50–500 employees · United States</div>
+      <div className="pipe-card" aria-hidden="true">
+        <div className="pl pl1">
+          <div className="pl-top"><span className="pl-av">MC</span><div><b>Maria Chen</b><span>VP Operations · Meridian Logistics</span></div></div>
+          <div className="pl-foot"><span className="pl-chip green">new lead</span><span>pulled from Apollo</span></div>
         </div>
-        <div className="pst pst2">
-          <div className="pst-eyebrow ei">Step 2 · AI researches &amp; drafts</div>
-          <div className="pst-fact"><i>[1] news</i><q>“Meridian Logistics opens second Dayton distribution hub.”</q><em>verified</em></div>
-          <div className="pst-fact"><i>[2] hiring</i><q>“Operations Coordinator (2 openings) — Dayton, OH.”</q><em>verified</em></div>
-          <div className="pst-meta">7 facts found · the draft is written from sources only — nothing invented</div>
+        <div className="pl pl2">
+          <div className="pl-fact"><i>[1]</i> opened a second Dayton hub <em>✓</em></div>
+          <div className="pl-fact"><i>[2]</i> hiring 2 ops coordinators <em>✓</em></div>
+          <div className="pl-foot"><span className="pl-chip indigo">draft written</span><span>every claim sourced</span></div>
         </div>
-        <div className="pst pst3">
-          <div className="pst-eyebrow ey">Step 3 · You approve</div>
-          <div className="pst-subj">Your new Dayton hub</div>
-          <p className="pst-body">Hi Maria — saw that Meridian <mark>opened a second distribution hub in Dayton</mark><sup>1</sup> and
-            is <mark>hiring two operations coordinators</mark><sup>2</sup>. Standing up a second site usually means processes split
-            across spreadsheets — that&apos;s the exact gap we close…</p>
-          <div className="pst-actions"><span className="btn">Edit</span><span className="btn approve">✓ Approve</span></div>
+        <div className="pl pl3">
+          <div className="pl-subj">Your new Dayton hub</div>
+          <div className="pl-body">Hi Maria — saw that Meridian opened a second distribution hub…</div>
           <span className="pl-stamp">approved</span>
         </div>
-        <div className="pst pst4">
-          <div className="pst-eyebrow et">Step 4 · Sent</div>
-          <div className="pl-sent"><em>✓</em> Sent from your own mailbox</div>
-          <div className="pst-fups"><span>follow-up · day 3</span><span>follow-up · day 7</span><span className="stop">exits the moment they reply</span></div>
+        <div className="pl pl4">
+          <div className="pl-sent"><em>✓</em> Sent</div>
+          <div className="pl-foot"><span className="pl-chip teal">via your mailbox</span><span>follow-ups armed · exits on reply</span></div>
         </div>
       </div>
       <div className="pipe-track" aria-hidden="true">
