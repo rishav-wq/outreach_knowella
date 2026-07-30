@@ -58,9 +58,10 @@ function mergeFound(found) {
 // ---------- UI ----------
 function renderCount(delta) {
   $('n').textContent = captured.length
+  $('delta').className = delta > 0 ? 'delta plus' : 'delta'   // teal pill only for growth
   $('delta').textContent = delta > 0 ? `+${delta} new` : (captured.length
     ? (watching ? 'auto-scanning — just scroll' : 'scroll & scan again to add more')
-      + (lockActivity ? ' · locked to this post (Clear list to switch)' : '')
+      + (lockActivity ? ' · locked to this post' : '')
     : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
@@ -257,8 +258,9 @@ async function toggleWatch() {
     await saveState()
     renderCount(added)
   }
-  $('watch').textContent = watching ? 'Auto-scan: ON — just scroll' : 'Auto-scan while I scroll: OFF'
+  $('watchLabel').textContent = watching ? 'Auto-scan on — just scroll' : 'Auto-scan while I scroll'
   $('watch').classList.toggle('on', watching)
+  document.body.classList.toggle('watching', watching)   // the pinwheel mark spins while watching
   renderCount(0)
 }
 
