@@ -209,7 +209,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .auth-gate-brand-sub { font-weight: 500; color: var(--muted); }
 .auth-gate-tag { margin: 12px 0 0; color: var(--text-2); font-size: 14.5px; max-width: 380px; }
 
-.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0 20px 20px 8px; }
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 6px 20px 20px 8px; }
 /* full-width product header: logo → page title → register pills → user */
 .topbar {
   display: flex; align-items: center; gap: 22px;
@@ -219,9 +219,12 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .topbar .register { margin-left: auto; }
 .page-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); padding-left: 22px; border-left: 1px solid var(--line-strong); line-height: 1.3; }
 .topbar-side { display: flex; align-items: center; gap: 10px; }
-/* THE product move: all content lives in one white 16px card on the gray field */
+/* THE product move: all content lives in one white 16px card on the gray field.
+   min-height: 0 is what keeps the card INSIDE the viewport (scrolling internally)
+   so the gray field frames it on all four sides — without it the card overflows
+   the page and the chrome/card contrast disappears. */
 .content {
-  flex: 1; overflow-y: auto; padding: 28px 32px 44px;
+  flex: 1; min-height: 0; overflow-y: auto; padding: 28px 32px 44px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg);
 }
 .content::-webkit-scrollbar { width: 5px; }
