@@ -88,12 +88,12 @@ export default function App({ onHome }) {
     <div className="layout">
       {/* full-width header, the product's anatomy: logo in the bar, sidebar below */}
       <header className="topbar">
+        {/* single-line brand, like the product's header wordmark — everything in
+            the bar shares one optical line */}
         <button className="brand" onClick={onHome} title="Back to home">
           <span className="logo"><Logo /></span>
-          <div>
-            <div className="brand-name">Knowella</div>
-            <div className="brand-sub">Outreach</div>
-          </div>
+          <span className="brand-name">Knowella</span>
+          <span className="brand-sub">Outreach</span>
         </button>
         <div className="page-title">{tab}</div>
         {/* the instrument register: live send state, always in view */}
@@ -113,7 +113,7 @@ export default function App({ onHome }) {
             <span className={`dot ${status.sendable ? 'd-ok' : 'd-held'}`} title={status.sendable ? 'Sending enabled' : 'Sending not wired'} />
           </div>
         )}
-        <UserMenu />
+        <span className="topbar-user"><UserMenu /></span>
       </header>
 
       <div className="shell">
