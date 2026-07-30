@@ -1,10 +1,12 @@
 // Knowella Outreach — LinkedIn commenter capture.
 //
-// Risk posture (deliberate): NOTHING runs on LinkedIn except at the moment you
-// click "Scan" (activeTab + scripting — no content scripts, no host permissions,
-// no background access, no auto-scroll, no auto-clicking). The scan reads ONLY
-// the comment blocks you already loaded by scrolling yourself. LinkedIn is used
-// as a pointer (name + profile URL + headline); contact data comes from Apollo.
+// Risk posture (deliberate): the page is only ever READ — no DOM writes, no
+// synthetic events, no LinkedIn API calls, no injected UI. Reads happen in
+// Chrome's isolated world (invisible to the page's own scripts), either once
+// per "Scan" click or — when you toggle auto-scan — via a passive
+// MutationObserver that accumulates commenters while YOU scroll. You do all
+// the scrolling and clicking; nothing is automated. LinkedIn is a pointer
+// (name + profile URL + headline); contact data comes from Apollo.
 
 const $ = (id) => document.getElementById(id)
 
@@ -12,6 +14,7 @@ let cfg = { appUrl: '', token: '' }
 let tabId = null
 let captured = []          // [{name, profile_url, headline}] accumulated across scans
 let postUrl = ''
+let watching = false
 
 const norm = (u) => (u || '').toLowerCase().split('?')[0].split('#')[0]
   .replace('https://', '').replace('http://', '').replace(/^www\./, '').replace(/\/$/, '')
@@ -21,23 +24,36 @@ const sessionKey = () => `cap_${tabId}`
 const loadState = async () => {
   const d = await chrome.storage.session.get(sessionKey())
   const s = d[sessionKey()]
-  if (s) { captured = s.items || []; postUrl = s.postUrl || '' }
+  captured = s?.items || []
+  postUrl = s?.postUrl || ''
   renderCount(0)
 }
 const saveState = () =>
   chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl } })
 
+// merge a scrape result into the accumulated list; returns how many were new
+function mergeFound(found) {
+  const known = new Set(captured.map((c) => norm(c.profile_url)))
+  let added = 0
+  for (const c of found || []) {
+    const k = norm(c.profile_url)
+    if (!k || known.has(k)) continue
+    known.add(k); captured.push(c); added++
+  }
+  return added
+}
+
 // ---------- UI ----------
 function renderCount(delta) {
   $('n').textContent = captured.length
-  $('delta').textContent = delta > 0 ? `+${delta} new this scan` : (captured.length ? 'scroll & scan again to add more' : '')
+  $('delta').textContent = delta > 0 ? `+${delta} new` : (captured.length ? (watching ? 'auto-scanning — just scroll' : 'scroll & scan again to add more') : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
   $('send').textContent = `Send ${captured.length} to campaign`
   const list = $('list')
   list.hidden = captured.length === 0
   list.innerHTML = ''
-  for (const c of captured.slice(-60).reverse()) {
+  for (const c of captured.slice(-80).reverse()) {
     const row = document.createElement('div')
     row.textContent = c.name || c.profile_url
     if (c.headline) {
@@ -58,8 +74,10 @@ function msg(text, cls = '') {
   $('msg').appendChild(d)
 }
 
-// ---------- the page-side scan (serialized into the tab on click) ----------
-function scrapeComments() {
+// ---------- the page-side agent (serialized into the tab; self-contained) ----------
+// mode: 'scan' = one-shot scrape · 'watch' = install a passive MutationObserver that
+// re-scrapes (debounced) as content loads and messages the panel · 'stop' = remove it.
+function pageAgent(mode) {
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim()
   const badgeRe = /^(•|·|✓|Author|Following|Follow|Premium|Verified|Edited|\(edited\)|(1st|2nd|3rd)\+?$|\d+\s?(mo|[smhdwy])\b|Like|Reply|React|See translation|View|Load)/i
   const foldDup = (s) => {   // LinkedIn duplicates names via aria spans ("Jane DoeJane Doe")
@@ -67,150 +85,122 @@ function scrapeComments() {
     return half > 2 && s.slice(0, half).trim() === s.slice(half).trim() ? s.slice(0, half).trim() : s
   }
   const cleanName = (s) => foldDup(clean(s)).replace(/\s*[•·✓].*$/, '')
-    .replace(/\s*\((He|She|They)[^)]*\)/i, '').replace(/\s*(1st|2nd|3rd\+?|Author|Premium)\s*$/i, '').trim()
-  const items = []
-  // Layered selectors, most-precise first:
-  //  1. componentkey="replaceableComment_urn:li:comment:…" — the new obfuscated DOM
-  //     names its components even though every class is hashed (live-verified 2026-07-30).
-  //  2. classic comments-comment-* class names (older markup).
-  //  3. data-view-name variants (intermediate rollouts).
-  const containers = document.querySelectorAll(
-    '[componentkey*="replaceableComment"], ' +
-    'article[class*="comments-comment"], div[class*="comments-comment-entity"], div[class*="comments-comment-item"], ' +
-    '[data-view-name*="comment-entity"], [data-view-name="comment"], [data-view-name*="comments-comment"]')
-  for (const el of containers) {
-    const cls = String(el.className || '')
-    if (/comment-box|texteditor|comment-social/.test(cls)) continue   // the reply editor, not a comment
-    const a = el.querySelector('a[href*="/in/"]')
-    if (!a) continue
-    const href = (a.href || '').split('?')[0].split('#')[0]
-    if (!href.includes('/in/')) continue
-    const nameEl = el.querySelector('[class*="description-title"], [class*="actor-name"], [class*="__name"]')
-    // In the new DOM the author anchor wraps only the avatar IMAGE — the name and
-    // headline are the container's first text lines instead.
-    const aLines = (a.innerText || '').split('\n').map(clean).filter(Boolean)
-    const boxLines = (el.innerText || '').split('\n').map(clean).filter(Boolean)
-    let name = cleanName(nameEl ? nameEl.textContent : (aLines[0] || boxLines[0] || ''))
-    if (!name) continue
-    const headEl = el.querySelector('[class*="description-subtitle"], [class*="actor-headline"], [class*="__headline"]')
-    let headline = clean(headEl ? headEl.textContent : '')
-    if (!headline) {   // first non-badge line after the name, from anchor text or the container
-      const pool = aLines.length > 1 ? aLines : boxLines
-      const iName = pool.findIndex((l) => cleanName(l) === name)
-      headline = pool.slice(iName + 1, iName + 5).find((l) => l.length > 11 && !badgeRe.test(l) && cleanName(l) !== name) || ''
-    }
-    items.push({ name, profile_url: href, headline })
-  }
-  let blocks = containers.length
+    .replace(/\s*\((He|She|They)[^)]*\)/i, '')
+    .replace(/\s*(Verified|Premium)(\s+Profile)?\s*$/i, '')     // a11y suffix: "Jane Doe Verified Profile"
+    .replace(/\s*(1st|2nd|3rd\+?|Author|Premium)\s*$/i, '').trim()
 
-  // Layer 3 — structural fallback for LinkedIn's fully-obfuscated markup (no semantic
-  // classes, no data-view-name). Shape of a comment that survives any renaming:
-  // a VISIBLE profile link whose text is a person's name, inside a small block that
-  // also carries a relative-time token ("5d", "23h"). That block ≈ one comment.
-  if (!blocks) {
-    const seenHref = new Set()
-    const timeRe = /(^|\s)\d+\s?(mo|[smhdwy])(\b|$)/
-    const badgeRe = /^(•|·|Author|Following|Follow|Premium|Verified|Edited|\(edited\)|(1st|2nd|3rd)\+?$|\d+\s?(mo|[smhdwy])\b|Like|Reply|React|See translation)/i
-    for (const a of document.querySelectorAll('a[href*="/in/"]')) {
-      let name = clean(a.innerText)
-      if (!name || name.length > 80) continue                    // avatar-only or junk anchors
-      if (!(a.offsetWidth || a.offsetHeight)) continue           // hidden (menus, overlays)
+  // the post this page is about (post pages + highlighted-update views carry it);
+  // comments name their post in componentkey, so we can drop other posts' comments.
+  const pageActivity = (decodeURIComponent(location.href).match(/activity[:%](\d{8,})/) || [])[1] || ''
+
+  function scrape() {
+    const items = []
+    const containers = document.querySelectorAll(
+      '[componentkey*="replaceableComment"], ' +
+      'article[class*="comments-comment"], div[class*="comments-comment-entity"], div[class*="comments-comment-item"], ' +
+      '[data-view-name*="comment-entity"], [data-view-name="comment"], [data-view-name*="comments-comment"]')
+    for (const el of containers) {
+      const cls = String(el.className || '')
+      if (/comment-box|texteditor|comment-social/.test(cls)) continue   // the reply editor, not a comment
+      // scope to THIS post: a comment's componentkey carries its activity id
+      const ck = el.getAttribute('componentkey') || ''
+      const ckActivity = (ck.match(/activity[:%](\d{8,})/) || [])[1] || ''
+      if (pageActivity && ckActivity && ckActivity !== pageActivity) continue
+      const a = el.querySelector('a[href*="/in/"]')
+      if (!a) continue
       const href = (a.href || '').split('?')[0].split('#')[0]
-      if (!href.includes('/in/') || seenHref.has(href)) continue
-      // smallest ancestor that reads like ONE comment (has a time token, isn't the whole feed)
-      let node = a.parentElement, box = null
-      for (let d = 0; node && d < 7; d++, node = node.parentElement) {
-        const t = node.innerText || ''
-        if (t.length > 4000) break                               // crossed into the post/feed level
-        if (timeRe.test(t)) { box = node; break }
+      if (!href.includes('/in/')) continue
+      const nameEl = el.querySelector('[class*="description-title"], [class*="actor-name"], [class*="__name"]')
+      // in the obfuscated DOM the author anchor wraps only the avatar image — the
+      // name/headline are the container's first text lines instead
+      const aLines = (a.innerText || '').split('\n').map(clean).filter(Boolean)
+      const boxLines = (el.innerText || '').split('\n').map(clean).filter(Boolean)
+      let name = cleanName(nameEl ? nameEl.textContent : (aLines[0] || boxLines[0] || ''))
+      if (!name) continue
+      const headEl = el.querySelector('[class*="description-subtitle"], [class*="actor-headline"], [class*="__headline"]')
+      let headline = clean(headEl ? headEl.textContent : '')
+      if (!headline) {
+        const pool = aLines.length > 1 ? aLines : boxLines
+        const iName = pool.findIndex((l) => cleanName(l) === name)
+        headline = pool.slice(iName + 1, iName + 6).find((l) =>
+          l.length > 11 && !badgeRe.test(l) && cleanName(l) !== name && !name.startsWith(cleanName(l))) || ''
       }
-      if (!box) continue
-      const half = Math.floor(name.length / 2)
-      if (half > 2 && name.slice(0, half).trim() === name.slice(half).trim()) name = name.slice(0, half).trim()
-      name = name.replace(/\s*[•·].*$/, '').replace(/\s*\((He|She|They)[^)]*\)/i, '').trim()
-      const lines = (box.innerText || '').split('\n').map(clean).filter(Boolean)
-      const iName = lines.findIndex((l) => l === name || l.startsWith(name))
-      let headline = ''
-      for (let j = iName + 1; j >= 0 && j < Math.min(iName + 5, lines.length); j++) {
-        const l = lines[j]
-        if (l === name || badgeRe.test(l)) continue
-        if (l.length < 6) continue
-        headline = l; break
-      }
-      seenHref.add(href)
       items.push({ name, profile_url: href, headline })
     }
-    blocks = items.length
+    return items
   }
 
-  const out = { url: location.href.split('?')[0], found: items, blocks }
-  if (!blocks) {
-    // Debug probe: what does the markup look like HERE? Shown in the panel so
-    // selector updates never need guesswork.
-    const dbg = { viewNames: {}, classes: {}, ariaComment: {}, roles: {},
-                  articles: document.querySelectorAll('article').length,
-                  profileLinks: document.querySelectorAll('a[href*="/in/"]').length,
-                  anchorSamples: [] }
+  if (mode === 'stop') {
+    if (window.__knowellaWatch) { window.__knowellaWatch.disconnect(); window.__knowellaWatch = null }
+    return { watching: false }
+  }
+  if (mode === 'watch') {
+    if (!window.__knowellaWatch) {
+      let t = null
+      const push = () => {
+        try {
+          chrome.runtime.sendMessage({ type: 'knowella-commenters',
+            url: location.href.split('?')[0], found: scrape() })
+        } catch (e) { /* panel closed — observer keeps quietly deduping later */ }
+      }
+      const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(push, 700) })
+      obs.observe(document.body, { childList: true, subtree: true })
+      window.__knowellaWatch = obs
+    }
+    return { watching: true, url: location.href.split('?')[0], found: scrape() }
+  }
+
+  // one-shot scan (+ debug when nothing matches, so selector fixes never need guesswork)
+  const found = scrape()
+  const out = { url: location.href.split('?')[0], found, blocks: found.length }
+  if (!found.length) {
+    const dbg = { viewNames: {}, classes: {}, componentkeys: {}, articles: document.querySelectorAll('article').length,
+                  profileLinks: document.querySelectorAll('a[href*="/in/"]').length }
+    document.querySelectorAll('[componentkey]').forEach((e) => {
+      const v = (e.getAttribute('componentkey') || '').replace(/urn:li:[^)]*\)?/g, 'URN').slice(0, 40)
+      dbg.componentkeys[v] = (dbg.componentkeys[v] || 0) + 1
+    })
     document.querySelectorAll('[data-view-name]').forEach((e) => {
       const v = e.getAttribute('data-view-name') || ''
       if (/comment/i.test(v)) dbg.viewNames[v] = (dbg.viewNames[v] || 0) + 1
     })
     document.querySelectorAll('[class*="omment"]').forEach((e) => {
-      String(e.className).split(/\s+/).forEach((c) => {
-        if (/omment/i.test(c)) dbg.classes[c] = (dbg.classes[c] || 0) + 1
-      })
+      String(e.className).split(/\s+/).forEach((c) => { if (/omment/i.test(c)) dbg.classes[c] = (dbg.classes[c] || 0) + 1 })
     })
-    document.querySelectorAll('[aria-label]').forEach((e) => {
-      const v = e.getAttribute('aria-label') || ''
-      if (/comment/i.test(v)) dbg.ariaComment[v.slice(0, 60)] = (dbg.ariaComment[v.slice(0, 60)] || 0) + 1
-    })
-    document.querySelectorAll('[role]').forEach((e) => {
-      const v = e.getAttribute('role')
-      dbg.roles[v] = (dbg.roles[v] || 0) + 1
-    })
-    // three visible named profile anchors + their 5-level ancestry text heads
-    let n = 0
-    for (const a of document.querySelectorAll('a[href*="/in/"]')) {
-      if (n >= 3) break
-      const nm = clean(a.innerText)
-      if (!nm || !(a.offsetWidth || a.offsetHeight)) continue
-      const chain = []
-      let p = a.parentElement
-      for (let d = 0; p && d < 5; d++, p = p.parentElement) {
-        chain.push(`${p.tagName}:${(p.innerText || '').slice(0, 80).replace(/\n/g, '¶')}`)
-      }
-      dbg.anchorSamples.push({ name: nm.slice(0, 40), chain })
-      n++
-    }
     out.debug = dbg
   }
   return out
 }
 
 // ---------- actions ----------
-async function scan() {
-  msg('')
+async function activeTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab) { msg('No active tab found.', 'err'); return }
-  // tab.url is only visible while activeTab is granted (per toolbar click, lapses on
-  // navigation) — so an unreadable URL is NOT proof we're off LinkedIn. Only block when
-  // we can positively see a non-LinkedIn site; otherwise try the scan and let Chrome's
-  // permission error tell us to re-grant.
+  return tab
+}
+
+async function runAgent(mode) {
+  const tab = await activeTab()
+  if (!tab) { msg('No active tab found.', 'err'); return null }
   if (tab.url && !/linkedin\.com/.test(tab.url)) {
-    msg('This isn’t LinkedIn — open the post there, then Scan.', 'err'); return
+    msg('This isn’t LinkedIn — open the post there first.', 'err'); return null
   }
   if (tab.id !== tabId) { tabId = tab.id; await loadState() }   // panel stayed open across a tab switch
-  let res
   try {
-    const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scrapeComments })
-    res = r?.result
+    const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: pageAgent, args: [mode] })
+    return r?.result ?? null
   } catch (e) {
-    msg(`Could not read the page: ${e.message}. Reload the LinkedIn tab and Scan again.`, 'err')
-    return
+    msg(`Could not read the page: ${e.message}. Reload the LinkedIn tab and try again.`, 'err')
+    return null
   }
-  if (!res || res.blocks === 0) {
+}
+
+async function scan() {
+  msg('')
+  const res = await runAgent('scan')
+  if (!res) return
+  if (!res.blocks) {
     msg('No comment blocks found. Open the post itself and expand its comments — or LinkedIn changed its markup (the extension needs a selector update).', 'err')
-    if (res?.debug) {   // show what the page's comment markup actually looks like
+    if (res.debug) {
       const list = $('list')
       list.hidden = false
       const pre = document.createElement('div')
@@ -222,16 +212,37 @@ async function scan() {
     return
   }
   postUrl = res.url
-  const known = new Set(captured.map((c) => norm(c.profile_url)))
-  let added = 0
-  for (const c of res.found) {
-    const k = norm(c.profile_url)
-    if (!k || known.has(k)) continue
-    known.add(k); captured.push(c); added++
-  }
+  const added = mergeFound(res.found)
   await saveState()
   renderCount(added)
 }
+
+async function toggleWatch() {
+  msg('')
+  if (watching) {
+    await runAgent('stop')
+    watching = false
+  } else {
+    const res = await runAgent('watch')
+    if (!res) return
+    watching = true
+    postUrl = res.url
+    const added = mergeFound(res.found)
+    await saveState()
+    renderCount(added)
+  }
+  $('watch').textContent = watching ? 'Auto-scan: ON — just scroll' : 'Auto-scan while I scroll: OFF'
+  $('watch').classList.toggle('on', watching)
+  renderCount(0)
+}
+
+// live results from the watcher as the user scrolls
+chrome.runtime.onMessage.addListener((m, sender) => {
+  if (m?.type !== 'knowella-commenters' || sender.tab?.id !== tabId) return
+  postUrl = m.url || postUrl
+  const added = mergeFound(m.found)
+  if (added > 0) { saveState(); renderCount(added) }
+})
 
 async function send() {
   const campaign = $('campaign').value
@@ -291,7 +302,7 @@ async function init() {
   if (!cfg.appUrl || !cfg.token) document.body.classList.add('setup')
   else { await loadCampaigns() }
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = await activeTab()
   if (tab) { tabId = tab.id; await loadState() }
 
   $('gear').onclick = () => document.body.classList.toggle('setup')
@@ -302,6 +313,7 @@ async function init() {
     await loadCampaigns()
   }
   $('scan').onclick = scan
+  $('watch').onclick = toggleWatch
   $('send').onclick = send
   $('clear').onclick = async () => { captured = []; await saveState(); renderCount(0); msg('') }
 }

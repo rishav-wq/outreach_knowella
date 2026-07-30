@@ -22,6 +22,8 @@
   .primary { background: var(--violet); color: #fff; width: 100%; margin-top: 10px; }
   .primary:hover:not(:disabled) { background: var(--violet-dark); }
   .send { background: var(--teal); color: #fff; width: 100%; margin-top: 8px; }
+  .watch { background: #fff; color: var(--violet); border: 1px solid var(--violet); width: 100%; margin-top: 8px; }
+  .watch.on { background: var(--violet); color: #fff; }
   .ghost { background: transparent; color: var(--muted); font-weight: 500; padding: 4px 6px; }
   .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
   .count { font-size: 22px; font-weight: 700; margin-top: 10px; }
@@ -60,7 +62,8 @@
     <select id="campaign"></select>
 
     <button id="scan" class="primary">Scan visible comments</button>
-    <div class="hint">Open the post, expand its comments, then Scan. Scroll / click “Load more comments” yourself and Scan again — the list accumulates (no double counting).</div>
+    <button id="watch" class="watch">Auto-scan while I scroll: OFF</button>
+    <div class="hint">Open the post and expand its comments. Scan grabs what’s loaded; with auto-scan ON, just scroll / click “Load more comments” and the list grows by itself (no double counting). Only this post’s commenters are captured.</div>
 
     <div class="count"><span id="n">0</span><small id="delta"></small></div>
     <div class="list" id="list" hidden></div>
