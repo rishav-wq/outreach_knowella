@@ -474,8 +474,8 @@ export default function Review({ campaign }) {
                       placeholder="ask AI for a change — “make it shorter”, “lead with their hiring”, “warmer tone” (updates the follow-ups too)"
                       onChange={(e) => setRefineText(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') doRefine() }} />
-                    <button className="btn" onClick={doRefine} disabled={refining || !refineText.trim()}>
-                      {refining ? <><span className="spinner spinner-dark" /> revising…</> : 'Revise'}
+                    <button className="btn ella" onClick={doRefine} disabled={refining || !refineText.trim()}>
+                      {refining ? <><span className="spinner" /> revising…</> : 'Revise'}
                     </button>
                     <button className="icon-btn" onClick={() => setReviseOpen(false)} aria-label="Close revise"><Icon name="x" size={14} /></button>
                   </div>
