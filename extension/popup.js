@@ -64,7 +64,6 @@ function renderCount(delta) {
     : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
-  $('skipfWrap').hidden = captured.length === 0
   $('send').textContent = `Send ${captured.length} to campaign`
   const list = $('list')
   list.hidden = captured.length === 0
@@ -271,47 +270,74 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   if (added > 0) { saveState(); renderCount(added) }
 })
 
-async function send() {
+async function sendBatch(commenters, skipFilter) {
   const campaign = $('campaign').value
-  if (!campaign) { msg('Pick a campaign first.', 'err'); return }
+  if (!campaign) { msg('Pick a campaign first.', 'err'); return null }
+  const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
+    body: JSON.stringify({ campaign, post_url: postUrl, commenters, skip_filter: skipFilter }),
+  })
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200))
+  return r.json()
+}
+
+function resultLine(d, campaign) {
+  return `Added ${d.added} lead${d.added === 1 ? '' : 's'} to ${campaign} — ${d.with_email} with email, ${d.no_email} without` +
+    `${d.off_icp ? `, ${d.off_icp} skipped (didn’t match the campaign’s targeting)` : ''}` +
+    `${d.duplicates ? `, ${d.duplicates} already captured` : ''}${d.suppressed ? `, ${d.suppressed} suppressed` : ''}` +
+    `${d.credits_used ? ` · ${d.credits_used} Apollo credits` : ''}. Review them in the app.`
+}
+
+// never lose a skip silently: list who the filter dropped, with a ONE-CLICK rescue —
+// "Add these anyway" re-sends exactly the skipped people with the filter bypassed.
+function showSkipped(skipped, offIcp) {
+  const list = $('list')
+  list.hidden = false
+  list.innerHTML = ''
+  const head = document.createElement('div')
+  head.style.cssText = 'color:var(--muted);font-style:italic'
+  head.textContent = `skipped by the targeting filter (${offIcp}):`
+  list.appendChild(head)
+  for (const s of skipped) {
+    const row = document.createElement('div')
+    row.textContent = s.name
+    const sp = document.createElement('span')
+    sp.textContent = ` — ${s.headline}`
+    row.appendChild(sp)
+    list.appendChild(row)
+  }
+  const btn = document.createElement('button')
+  btn.className = 'rescue'
+  btn.textContent = `Add these ${skipped.length} anyway`
+  btn.onclick = async () => {
+    btn.disabled = true
+    try {
+      const d = await sendBatch(skipped.map((s) => ({ name: s.name, profile_url: s.profile_url, headline: s.headline })), true)
+      if (d) {
+        list.hidden = true
+        list.innerHTML = ''
+        msg(resultLine(d, $('campaign').value), 'ok')
+      }
+    } catch (e) {
+      msg(`Could not add them: ${e.message}`, 'err')
+      btn.disabled = false
+    }
+  }
+  list.appendChild(btn)
+}
+
+async function send() {
   $('send').disabled = true
   msg('Sending…')
   try {
-    const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
-      body: JSON.stringify({ campaign, post_url: postUrl, commenters: captured,
-                             skip_filter: $('skipFilter').checked }),
-    })
-    if (!r.ok) throw new Error((await r.text()).slice(0, 200))
-    const d = await r.json()
+    const d = await sendBatch(captured, false)
+    if (!d) return
     captured = []
     await saveState()
     renderCount(0)
-    msg(`Added ${d.added} lead${d.added === 1 ? '' : 's'} to ${campaign} — ${d.with_email} with email, ${d.no_email} without` +
-        `${d.off_icp ? `, ${d.off_icp} skipped (didn’t match the campaign’s targeting)` : ''}` +
-        `${d.duplicates ? `, ${d.duplicates} already captured` : ''}${d.suppressed ? `, ${d.suppressed} suppressed` : ''}` +
-        `${d.credits_used ? ` · ${d.credits_used} Apollo credits` : ''}. Review them in the app.`, 'ok')
-    // never lose a skip silently: list who the filter dropped, so a wrongly-skipped
-    // warm lead is visible — rescue = re-scan, tick "capture everyone", Send again
-    // (already-added people dedup server-side, so only the skipped get through).
-    if (d.skipped?.length) {
-      const list = $('list')
-      list.hidden = false
-      list.innerHTML = ''
-      const head = document.createElement('div')
-      head.style.cssText = 'color:var(--muted);font-style:italic'
-      head.textContent = `skipped by the targeting filter (${d.off_icp}) — re-scan + “capture everyone” to rescue:`
-      list.appendChild(head)
-      for (const s of d.skipped) {
-        const row = document.createElement('div')
-        row.textContent = s.name
-        const sp = document.createElement('span')
-        sp.textContent = ` — ${s.headline}`
-        row.appendChild(sp)
-        list.appendChild(row)
-      }
-    }
+    msg(resultLine(d, $('campaign').value), 'ok')
+    if (d.skipped?.length) showSkipped(d.skipped, d.off_icp)
   } catch (e) {
     msg(`Send failed: ${e.message}`, 'err')
   } finally {

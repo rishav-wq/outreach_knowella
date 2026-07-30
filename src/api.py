@@ -1345,8 +1345,9 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         for c in fresh:
             if _fits_icp(c["headline"], toks) is False:
                 off_icp += 1
-                if len(skipped) < 40:
-                    skipped.append({"name": c["name"], "headline": c["headline"][:80]})
+                if len(skipped) < 40:   # profile_url included so the panel can one-click rescue
+                    skipped.append({"name": c["name"], "profile_url": c["profile_url"],
+                                    "headline": c["headline"][:80]})
             else:
                 kept.append(c)
         fresh = kept
@@ -1382,7 +1383,8 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         if toks and _fits_icp(f"{lead.title} {c['headline']}", toks) is False:
             off_icp += 1
             if len(skipped) < 40:
-                skipped.append({"name": c["name"], "headline": (lead.title or c["headline"])[:80]})
+                skipped.append({"name": c["name"], "profile_url": c["profile_url"],
+                                "headline": (lead.title or c["headline"])[:80]})
             continue
         lead.source = "linkedin_comment"
         lead.raw = {**(lead.raw or {}),
