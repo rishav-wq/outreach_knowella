@@ -144,8 +144,13 @@ function pageAgent(mode) {
       if (!headline) {
         const pool = aLines.length > 1 ? aLines : boxLines
         const iName = pool.findIndex((l) => cleanName(l) === name)
-        headline = pool.slice(iName + 1, iName + 6).find((l) =>
-          l.length > 11 && !badgeRe.test(l) && cleanName(l) !== name && !name.startsWith(cleanName(l))) || ''
+        // the headline sits between the name and the timestamp; anything after the
+        // timestamp is the comment body — never pick from there (author replies have
+        // no Follow button, so the body used to leak in as the 'headline')
+        let end = pool.findIndex((l, i) => i > iName && /^(\(edited\)\s*)?\d+\s?(mo|[smhdwy])\b/.test(l))
+        if (end === -1) end = Math.min(iName + 6, pool.length)
+        headline = pool.slice(iName + 1, end).find((l) =>
+          l.length > 6 && !badgeRe.test(l) && cleanName(l) !== name && !name.startsWith(cleanName(l))) || ''
       }
       items.push({ name, profile_url: href, headline, activity: ckActivity })
     }
