@@ -832,6 +832,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 /* do-not-contact list (Settings) + thread tools (Inbox) */
 .supp-list { list-style: none; margin: 4px 0 0; padding: 0; }
+
+/* LinkedIn-capture token: shown once after generation */
+.token-reveal { margin-bottom: 12px; }
+.token-value { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding: 7px 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--panel-2, rgba(110, 99, 255, 0.06)); font-size: 12px; margin-right: 8px; }
 .supp-list li { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-top: 1px solid var(--line); font-size: 13px; }
 .supp-list li code { font-size: 12px; }
 .supp-list li .icon-btn { margin-left: auto; }

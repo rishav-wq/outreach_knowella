@@ -6,15 +6,18 @@ The engine logic lives in pipeline/; this just exposes it as JSON endpoints.
 from __future__ import annotations
 
 import glob
+import hashlib
+import hmac
 import html
 import os
+import secrets
 import re
 import tempfile
 import threading
 import time
 
 import yaml
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +26,7 @@ from pydantic import BaseModel
 from . import auth, config, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich
+from .models import Lead
 from .store import open_store
 
 config.load_env()  # so Clerk/CORS env is available at app-construction time
@@ -41,6 +45,11 @@ _origins += [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
+    # The LinkedIn-capture extension's popup calls the API from a chrome-extension://
+    # origin (unknowable in advance — ids vary per install). Letting the browser make
+    # the request is safe: those routes still authenticate via the capture token /
+    # Clerk — CORS was never the security boundary, the token is.
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1192,6 +1201,134 @@ def apollo_schools(q: str):
         return {"schools": apollo.search_schools(q.strip())}
     except Exception as e:
         raise HTTPException(502, str(e))
+
+
+# --- LinkedIn commenter capture (browser extension) ---------------------------
+# The extension reads commenters off a post YOU are viewing (name + profile URL +
+# headline — LinkedIn as a pointer only) and posts them here; all contact data
+# comes from Apollo's database. It authenticates with a per-user capture token
+# (Clerk sessions don't travel into extensions); only its SHA-256 hash is stored.
+_CAPTURE_TOKEN_KEY = "linkedin_capture_token_sha256"
+
+
+def _capture_auth(request: Request) -> None:
+    """Allow either a valid capture token (the extension) or a normal Clerk session
+    (the web app / open local dev). 401 otherwise."""
+    tok = request.headers.get("x-capture-token") or ""
+    if tok:
+        stored = open_store().get_setting(_CAPTURE_TOKEN_KEY)
+        if stored and hmac.compare_digest(hashlib.sha256(tok.encode()).hexdigest(), stored):
+            return
+        raise HTTPException(401, "invalid capture token — generate one in Settings and paste it into the extension")
+    if auth.enabled() and not getattr(request.state, "user", None):
+        raise HTTPException(401, "missing capture token")
+
+
+@app.get("/api/capture_token")
+def capture_token_status():
+    return {"exists": bool(open_store().get_setting(_CAPTURE_TOKEN_KEY))}
+
+
+@app.post("/api/capture_token")
+def create_capture_token():
+    """Mint the capture token for the browser extension. Shown ONCE (only the hash
+    is kept); generating again replaces the old token everywhere."""
+    token = "olc_" + secrets.token_urlsafe(32)   # olc = outreach linkedin capture
+    open_store().set_setting(_CAPTURE_TOKEN_KEY, hashlib.sha256(token.encode()).hexdigest())
+    return {"token": token}
+
+
+@app.delete("/api/capture_token")
+def revoke_capture_token():
+    open_store().delete_setting(_CAPTURE_TOKEN_KEY)
+    return {"ok": True}
+
+
+@app.get("/api/linkedin/campaigns")
+def linkedin_campaigns(request: Request):
+    """Campaign names for the extension's target-campaign dropdown (names only)."""
+    _capture_auth(request)
+    return {"campaigns": open_store().campaign_names()}
+
+
+class Commenter(BaseModel):
+    name: str = ""
+    profile_url: str = ""
+    headline: str = ""
+
+
+class LinkedInCapture(BaseModel):
+    campaign: str
+    post_url: str = ""
+    commenters: list[Commenter] = []
+
+
+@app.post("/api/linkedin/capture")
+def linkedin_capture(r: LinkedInCapture, request: Request):
+    """Ingest commenters captured from a LinkedIn post into a campaign.
+
+    Per commenter: dedup by profile URL (batch + already-in-campaign — a repeat
+    capture never re-spends credits), enrich via Apollo bulk_match keyed on the
+    profile URL (~1 credit per match), honor the do-not-contact list, then upsert
+    as a normal 'new' lead (source linkedin_comment) for the standard pipeline —
+    nothing is drafted or sent without the usual review."""
+    _capture_auth(request)
+    cfg = _load(r.campaign)
+    store = open_store()
+    if len(r.commenters) > 200:
+        raise HTTPException(400, "too many commenters in one capture (max 200) — send in batches")
+
+    # dedup: within this batch, and against everyone already in the campaign
+    existing = {apollo.normalize_linkedin_url(l.linkedin_url)
+                for l in store.leads(cfg["name"]) if l.linkedin_url}
+    fresh, seen, duplicates = [], set(), 0
+    for c in r.commenters:
+        url = apollo.normalize_linkedin_url(c.profile_url)
+        if not url or "/in/" not in url:     # no profile link = nothing to match on
+            continue
+        if url in seen or url in existing:
+            duplicates += 1
+            continue
+        seen.add(url)
+        fresh.append({"name": c.name.strip(), "profile_url": c.profile_url.strip(),
+                      "headline": c.headline.strip()})
+    if not fresh:
+        return {"received": len(r.commenters), "added": 0, "with_email": 0, "no_email": 0,
+                "duplicates": duplicates, "suppressed": 0, "credits_used": 0,
+                "counts": store.counts(cfg["name"])}
+
+    # enrich from Apollo's database (LinkedIn contributed only the pointer)
+    credits = 0
+    if apollo.has_key():
+        try:
+            leads, credits = apollo.match_commenters(fresh)
+        except Exception as e:
+            raise HTTPException(502, f"Apollo match failed: {e}")
+    else:   # no key: keep captured skeletons; downstream enrichment may fill emails
+        leads = []
+        for c in fresh:
+            title, company = apollo.parse_headline(c["headline"])
+            first, _, last = c["name"].partition(" ")
+            leads.append(Lead(first_name=first, last_name=last, title=title,
+                              company=company, linkedin_url=c["profile_url"]))
+
+    topics = tagging.topics_of(cfg)
+    added = with_email = suppressed = 0
+    for c, lead in zip(fresh, leads):
+        if lead.email and store.is_suppressed(lead.email):
+            suppressed += 1
+            continue
+        lead.source = "linkedin_comment"
+        lead.raw = {**(lead.raw or {}),
+                    "linkedin_capture": {"post_url": r.post_url, "headline": c["headline"]}}
+        store.upsert_lead(lead, cfg["name"], topics)
+        added += 1
+        if lead.email:
+            with_email += 1
+    return {"received": len(r.commenters), "added": added, "with_email": with_email,
+            "no_email": added - with_email, "duplicates": duplicates,
+            "suppressed": suppressed, "credits_used": credits,
+            "counts": store.counts(cfg["name"])}
 
 
 class LookalikeReq(BaseModel):

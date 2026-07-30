@@ -52,6 +52,54 @@ function SendingHealth({ campaign }) {
   )
 }
 
+// Token for the LinkedIn-capture browser extension. Clerk sessions can't travel
+// into an extension, so it authenticates with this instead. Only the hash is
+// stored server-side — the token is shown once, here, on generation.
+function LinkedInCapture() {
+  const [exists, setExists] = useState(null)
+  const [token, setToken] = useState('')      // plaintext, only right after generating
+  const [copied, setCopied] = useState(false)
+  useEffect(() => { api.getCaptureToken().then((d) => setExists(!!d.exists)).catch(() => setExists(false)) }, [])
+  const generate = async () => {
+    if (exists && !window.confirm('Generate a new token? The old one stops working everywhere it was pasted.')) return
+    const r = await api.createCaptureToken()
+    setToken(r.token); setExists(true); setCopied(false)
+  }
+  const revoke = async () => {
+    if (!window.confirm('Revoke the capture token? The extension stops working until you generate and paste a new one.')) return
+    await api.revokeCaptureToken()
+    setExists(false); setToken('')
+  }
+  const copy = () => { navigator.clipboard.writeText(token).then(() => setCopied(true)).catch(() => {}) }
+  return (
+    <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="drawer-label">LinkedIn capture extension</div>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+        The browser extension captures commenters from a LinkedIn post you're viewing into a campaign
+        (enriched via Apollo, deduped, landing as normal leads for review). It signs its requests with
+        this token — generate it once and paste it into the extension's settings.
+      </div>
+      {token ? (
+        <div className="token-reveal">
+          <code className="token-value">{token}</code>
+          <button className="btn" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Shown once — it's stored hashed. If you lose it, generate a new one.
+          </div>
+        </div>
+      ) : (
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          {exists === null ? '…' : exists ? 'A token is active (hidden). Generating a new one replaces it.' : 'No token yet.'}
+        </div>
+      )}
+      <div className="ready-form">
+        <button className="btn" onClick={generate}>{exists ? 'Generate new token' : 'Generate token'}</button>
+        {exists && <button className="btn reject" onClick={revoke}>Revoke</button>}
+      </div>
+    </motion.section>
+  )
+}
+
 // Global do-not-contact list (compliance): emails + whole domains, enforced at
 // pull, pipeline, and send. Shared across all campaigns.
 function Suppression() {
@@ -144,6 +192,7 @@ export default function Settings({ campaign }) {
       </div>
 
       <SendingHealth campaign={campaign} />
+      <LinkedInCapture />
       <Suppression />
     </div>
   )

@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  /* Knowella register: violet primary, mono labels, calm surfaces */
+  :root {
+    --violet: #6e63ff; --violet-dark: #5a50e6; --teal: #04b492;
+    --ink: #1d2130; --muted: #6b7086; --line: #e4e6ef; --bg: #fafbfe; --danger: #d64545;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { min-width: 280px; font: 13px/1.45 system-ui, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }  /* side panel: full height, browser-set width */
+  .list { max-height: 40vh; }
+  .wrap { padding: 14px 14px 12px; }
+  h1 { font-size: 13.5px; display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+  h1 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--violet); }
+  .label { font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 12px 0 5px; }
+  input, select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid var(--violet); outline-offset: -1px; }
+  button { border: 0; border-radius: 8px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .primary { background: var(--violet); color: #fff; width: 100%; margin-top: 10px; }
+  .primary:hover:not(:disabled) { background: var(--violet-dark); }
+  .send { background: var(--teal); color: #fff; width: 100%; margin-top: 8px; }
+  .ghost { background: transparent; color: var(--muted); font-weight: 500; padding: 4px 6px; }
+  .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .count { font-size: 22px; font-weight: 700; margin-top: 10px; }
+  .count small { font-size: 11.5px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .list { max-height: 130px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .list div { padding: 5px 9px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list div:last-child { border-bottom: 0; }
+  .list span { color: var(--muted); }
+  .msg { margin-top: 9px; font-size: 12px; padding: 8px 10px; border-radius: 8px; background: #eef1ff; }
+  .msg.err { background: #fdecec; color: var(--danger); }
+  .msg.ok { background: #e2f6f1; color: #04665a; }
+  .setup-note { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+  a { color: var(--violet); }
+  #settings { display: none; }
+  body.setup #settings { display: block; }
+  body.setup #capture { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="dot"></span> LinkedIn capture <button id="gear" class="ghost" style="margin-left:auto" title="Settings">⚙</button></h1>
+
+  <div id="settings">
+    <div class="label">App URL</div>
+    <input id="appUrl" placeholder="https://outreach.knowella.com" />
+    <div class="label">Capture token</div>
+    <input id="token" type="password" placeholder="olc_…" />
+    <div class="setup-note">Generate the token in the app: <b>Settings → LinkedIn capture extension</b>, then paste it here. Stored only in this browser.</div>
+    <button id="save" class="primary">Save</button>
+    <div id="setupMsg"></div>
+  </div>
+
+  <div id="capture">
+    <div class="label">Into campaign</div>
+    <select id="campaign"></select>
+
+    <button id="scan" class="primary">Scan visible comments</button>
+    <div class="hint">Open the post, expand its comments, then Scan. Scroll / click “Load more comments” yourself and Scan again — the list accumulates (no double counting).</div>
+
+    <div class="count"><span id="n">0</span><small id="delta"></small></div>
+    <div class="list" id="list" hidden></div>
+
+    <div class="row" style="margin-top:6px">
+      <button id="clear" class="ghost" hidden>Clear list</button>
+    </div>
+    <button id="send" class="send" hidden>Send to campaign</button>
+    <div id="msg"></div>
+  </div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

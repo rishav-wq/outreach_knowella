@@ -21,6 +21,12 @@ _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 # The health check stays open even when auth is on (for platform probes).
 _OPEN_API_PATHS = {"/api/health", "/api/unsubscribe"}   # public: health check + one-click unsubscribe
 
+# The browser extension can't carry a Clerk session, so these routes authenticate
+# with a per-user capture token instead (X-Capture-Token header). Requests carrying
+# that header skip the bearer check here; THE ENDPOINTS THEMSELVES verify the token
+# against its stored hash and 401 on mismatch — this is a re-route, not a hole.
+_CAPTURE_TOKEN_PATHS = {"/api/linkedin/capture", "/api/linkedin/campaigns"}
+
 
 def _issuer() -> str | None:
     """The Clerk token issuer URL, from CLERK_ISSUER or derived from the publishable key.
@@ -129,6 +135,8 @@ async def require_auth(request: Request):
     # stay public — the app gates itself via Clerk, and every /api call carries a token.
     if request.method == "OPTIONS" or not path.startswith("/api/") or path in _OPEN_API_PATHS:
         return None
+    if path in _CAPTURE_TOKEN_PATHS and request.headers.get("x-capture-token"):
+        return None  # the endpoint validates the capture token itself
     import logging
     log = logging.getLogger("uvicorn.error")
     authz = request.headers.get("authorization") or ""

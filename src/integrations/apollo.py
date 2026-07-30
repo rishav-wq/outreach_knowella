@@ -219,6 +219,80 @@ def _reveal(previews: list[dict], hdr: dict) -> tuple[list[Lead], int]:
     return leads, credits
 
 
+def normalize_linkedin_url(url: str) -> str:
+    """Canonical form of a LinkedIn profile URL for dedup/matching:
+    lowercase host+path, no protocol, no query, no trailing slash.
+    'https://www.linkedin.com/in/Jane-Doe-123/?miniProfile=x' -> 'linkedin.com/in/jane-doe-123'."""
+    u = (url or "").strip().lower()
+    u = u.split("?", 1)[0].split("#", 1)[0]
+    u = u.replace("https://", "").replace("http://", "")
+    if u.startswith("www."):
+        u = u[4:]
+    return u.rstrip("/")
+
+
+def parse_headline(headline: str) -> tuple[str, str]:
+    """(title, company) from a LinkedIn headline. Headlines are freeform —
+    'VP Ops at Acme Logistics | Dad | Speaker' — so take the first segment and
+    split on the last ' at ' / ' @ '. Best-effort: bad parses only weaken the
+    Apollo match (the profile URL is the primary key), never corrupt the lead."""
+    seg = (headline or "").split("|")[0].split("·")[0].strip()
+    for sep in (" at ", " @ "):
+        if sep in seg:
+            title, company = seg.rsplit(sep, 1)
+            return title.strip(), company.strip()
+    return seg, ""
+
+
+def match_commenters(commenters: list[dict]) -> tuple[list[Lead], int]:
+    """Enrich LinkedIn-captured people via bulk_match keyed on their PROFILE URL —
+    the highest-fidelity match key Apollo accepts (name/company only assist it).
+    LinkedIn is used purely as a pointer; all contact data comes from Apollo's
+    own database (~1 credit per matched person, like any reveal).
+
+    commenters: [{name, profile_url, headline}]. Returns (leads, credits) — one
+    Lead per input, in order. Unmatched people become skeleton Leads built from
+    the captured name/headline (no email; downstream enrichment may fill gaps)."""
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    leads: list[Lead] = []
+    credits = 0
+    for i in range(0, len(commenters), MATCH_CHUNK):
+        chunk = commenters[i:i + MATCH_CHUNK]
+        details = []
+        for c in chunk:
+            title, company = parse_headline(c.get("headline") or "")
+            d: dict = {"linkedin_url": c.get("profile_url") or ""}
+            if c.get("name"):
+                d["name"] = c["name"]
+            if company:
+                d["organization_name"] = company
+            details.append(d)
+        r = httpx.post(MATCH_ENDPOINT, json={"details": details, "reveal_personal_emails": False},
+                       headers=hdr, timeout=60.0)
+        _raise_for_status(r)
+        j = r.json()
+        credits += int(j.get("credits_consumed") or 0)
+        matches = j.get("matches") or []
+        for pos, c in enumerate(chunk):
+            m = matches[pos] if pos < len(matches) else None
+            if m:
+                lead = _person_to_lead(m)
+                if not lead.linkedin_url:
+                    lead.linkedin_url = c.get("profile_url") or ""
+            else:
+                # Apollo doesn't know this person — keep what the capture saw
+                title, company = parse_headline(c.get("headline") or "")
+                name = (c.get("name") or "").strip()
+                first, _, last = name.partition(" ")
+                lead = Lead(first_name=first, last_name=last, title=title, company=company,
+                            linkedin_url=c.get("profile_url") or "")
+            leads.append(lead)
+    return leads, credits
+
+
 COMPANY_ENDPOINT = "https://api.apollo.io/api/v1/mixed_companies/search"
 
 

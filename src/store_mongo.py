@@ -342,6 +342,17 @@ class MongoStore:
         """Re-key every lead from one campaign name to another. Returns leads moved."""
         return self.db.leads.update_many({"campaign": old}, {"$set": {"campaign": new}}).modified_count
 
+    # --- app settings (single-value, e.g. the LinkedIn-capture token hash) ---
+    def set_setting(self, key: str, value: str) -> None:
+        self.db.settings.replace_one({"_id": key}, {"_id": key, "value": value}, upsert=True)
+
+    def get_setting(self, key: str) -> str | None:
+        d = self.db.settings.find_one({"_id": key})
+        return d["value"] if d else None
+
+    def delete_setting(self, key: str) -> None:
+        self.db.settings.delete_one({"_id": key})
+
     # --- suppression (do-not-contact) ----------------------------------------
     # Global compliance list: emails and whole domains that must never be
     # contacted again. Enforced at pull, pipeline, and send.
