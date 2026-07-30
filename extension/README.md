@@ -11,8 +11,10 @@ review → approve → send flow. Nothing is emailed without review.
 
 ## Risk posture (why it's built this way)
 
-- **No content scripts, no host permissions, no background access.** The page is
-  read only at the moment you click **Scan** (`activeTab` + `scripting`).
+- **No content scripts, no background reading.** The page is read only at the
+  moment you click **Scan**. Site access to `www.linkedin.com` is a standing
+  *capability* (so Scan works without a permission dance) — but no code runs
+  there except on your click.
 - **No automation.** It never scrolls, never clicks "Load more", never visits
   profiles. You load the comments yourself; it reads what's on screen.
 - **Keep usage human-paced.** A few posts here and there — this is a capture aid,

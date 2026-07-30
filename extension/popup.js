@@ -103,8 +103,7 @@ async function scan() {
     const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: scrapeComments })
     res = r?.result
   } catch (e) {
-    // activeTab lapsed (navigation) or was never granted on this tab
-    msg('Chrome needs a fresh grant: click the extension’s toolbar icon once (panel may blink), then Scan again.', 'err')
+    msg(`Could not read the page: ${e.message}. Reload the LinkedIn tab and Scan again.`, 'err')
     return
   }
   if (!res || res.blocks === 0) {
