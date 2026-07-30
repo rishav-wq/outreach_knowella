@@ -650,12 +650,17 @@ def _msg_text(m: dict) -> str:
     if isinstance(b, dict):
         b = b.get("html") or b.get("text") or ""
     b = b or ""
-    # Prefer the HTML body and convert it ourselves — Apollo's plaintext (body_text) collapses
-    # the signature onto one line. Fall back to plaintext only when there's no HTML to work from.
+    # Apollo populates body / body_text / body_html inconsistently per message — and
+    # 'body' is sometimes only a SNIPPET. Convert the HTML ourselves (their plaintext
+    # collapses the signature onto one line) and return the LONGEST candidate, so a
+    # snippet field can never shadow the full message.
     html_body = m.get("body_html") or (b if ("<" in b and ">" in b) else "")
-    if html_body:
-        return _html_to_text(html_body)
-    return (b or m.get("body_text") or "").strip()
+    candidates = [
+        _html_to_text(html_body) if html_body else "",
+        (b if not ("<" in b and ">" in b) else "").strip(),
+        (m.get("body_text") or "").strip(),
+    ]
+    return max(candidates, key=len)
 
 
 _SENT_STATUSES = {"completed", "delivered", "sent", "opened", "clicked",
