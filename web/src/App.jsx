@@ -86,7 +86,8 @@ export default function App({ onHome }) {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      {/* full-width header, the product's anatomy: logo in the bar, sidebar below */}
+      <header className="topbar">
         <button className="brand" onClick={onHome} title="Back to home">
           <span className="logo"><Logo /></span>
           <div>
@@ -94,7 +95,29 @@ export default function App({ onHome }) {
             <div className="brand-sub">Outreach</div>
           </div>
         </button>
+        <div className="page-title">{tab}</div>
+        {/* the instrument register: live send state, always in view */}
+        {campaign && (
+          <div className="register">
+            {sendFrom && <span className="reg-item" title="This campaign sends from">{sendFrom}</span>}
+            {status.guardrails && (
+              <span className="reg-item" title="Sent today / daily cap">
+                sent {status.guardrails.sent_today ?? 0}/{status.guardrails.daily_cap || '∞'}
+              </span>
+            )}
+            {queued > 0 && (
+              <button className="reg-item reg-link" onClick={() => setTab('Review')} title="Drafts waiting for your sign-off">
+                {queued} to review
+              </button>
+            )}
+            <span className={`dot ${status.sendable ? 'd-ok' : 'd-held'}`} title={status.sendable ? 'Sending enabled' : 'Sending not wired'} />
+          </div>
+        )}
+        <UserMenu />
+      </header>
 
+      <div className="shell">
+      <aside className="sidebar">
         <div className="side-campaign">
           <label htmlFor="campaign-select">Campaign</label>
           {campaigns?.length > 0 && (
@@ -136,31 +159,10 @@ export default function App({ onHome }) {
             <span className={`dot ${error ? 'd-error' : 'd-ok'}`} />
             {error ? 'backend offline' : campaign || 'no campaign'}
           </div>
-          <UserMenu />
         </div>
       </aside>
 
       <div className="main">
-        <header className="topbar">
-          <div className="page-title">{tab}</div>
-          {/* the instrument register: live send state, always in view */}
-          {campaign && (
-            <div className="register">
-              {sendFrom && <span className="reg-item" title="This campaign sends from">{sendFrom}</span>}
-              {status.guardrails && (
-                <span className="reg-item" title="Sent today / daily cap">
-                  sent {status.guardrails.sent_today ?? 0}/{status.guardrails.daily_cap || '∞'}
-                </span>
-              )}
-              {queued > 0 && (
-                <button className="reg-item reg-link" onClick={() => setTab('Review')} title="Drafts waiting for your sign-off">
-                  {queued} to review
-                </button>
-              )}
-              <span className={`dot ${status.sendable ? 'd-ok' : 'd-held'}`} title={status.sendable ? 'Sending enabled' : 'Sending not wired'} />
-            </div>
-          )}
-        </header>
         <div className="content">
           <AnimatePresence mode="wait">
             <motion.div key={tab + campaign} {...(reduce ? {} : pageTransition)}>
@@ -169,6 +171,7 @@ export default function App({ onHome }) {
           </AnimatePresence>
         </div>
       </div>
+      </div>{/* /shell */}
 
       <AnimatePresence>
         {wizard && (
