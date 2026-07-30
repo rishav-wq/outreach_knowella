@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
 import Logo from './Logo'
@@ -15,151 +14,48 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// The two cited claims: highlighted phrase in the draft, footnote number, and
-// the margin note (source card) it traces to. One place, so mark/note/line agree.
-const CLAIMS = [
-  {
-    text: 'opened a second distribution hub in Dayton last month',
-    tag: 'news',
-    quote: '“Meridian Logistics opens second Dayton distribution hub.”',
-    meta: 'local news · last month',
-  },
-  {
-    text: 'hiring two operations coordinators there',
-    tag: 'hiring',
-    quote: '“Operations Coordinator (2 openings) — Dayton, OH.”',
-    meta: 'careers page · 11 days ago',
-  },
-]
-
-// Hero signature: the TRACE. A draft whose claims carry footnote markers, with
-// each source docked as a margin note and a hairline leader line drawn from
-// claim to note — the page doing literally what the eyebrow says. Lines are
-// measured from the real DOM (so they survive resize/font-load) and drawn with
-// a pathLength animation; hovering a claim lights its source and vice versa.
-function TracedDraft() {
-  const reduce = useReducedMotion()
-  const on = (from) => (reduce ? false : from)
-  const wrap = useRef(null)
-  const markRefs = [useRef(null), useRef(null)]
-  const noteRefs = [useRef(null), useRef(null)]
-  const [paths, setPaths] = useState([])
-  const [hot, setHot] = useState(0)   // 0 = none, 1/2 = linked pair highlighted
-
-  useLayoutEffect(() => {
-    const el = wrap.current
-    if (!el) return
-    const measure = () => {
-      const c = el.getBoundingClientRect()
-      setPaths(markRefs.map((m, i) => {
-        const a = m.current?.getBoundingClientRect()
-        const b = noteRefs[i].current?.getBoundingClientRect()
-        if (!a || !b) return null
-        // note 1 sits LEFT of the draft, note 2 RIGHT — line runs note-edge to claim-edge
-        const left = i === 0
-        if (left ? a.left <= b.right : b.left <= a.right) return null   // stacked layout: no lines
-        const x1 = (left ? b.right : b.left) - c.left + (left ? 3 : -3)
-        const y1 = b.top + 20 - c.top
-        const x2 = (left ? a.left : a.right) - c.left + (left ? -3 : 3)
-        const y2 = a.top + a.height / 2 - c.top
-        const mx = (x1 + x2) / 2
-        return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`
-      }))
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    if (document.fonts?.ready) document.fonts.ready.then(measure).catch(() => {})
-    return () => ro.disconnect()
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // load sequence: claim sweeps → line draws → note lands, one trace at a time
-  const T = (i) => ({ claim: 0.9 + i * 0.9, line: 1.15 + i * 0.9, note: 1.3 + i * 0.9 })
-  const link = (i) => ({
-    onMouseEnter: () => setHot(i + 1), onMouseLeave: () => setHot(0),
-  })
-
-  const claimSpan = (i) => (
-    <span className="ev2" {...link(i)}>
-      <motion.mark ref={markRefs[i]} className={hot === i + 1 ? 'on' : ''}
-        initial={on({ backgroundSize: '0% 100%' })} animate={{ backgroundSize: '100% 100%' }}
-        transition={{ delay: T(i).claim, duration: 0.5, ease: EASE }}>
-        {CLAIMS[i].text}
-      </motion.mark>
-      <sup className="fn">{i + 1}</sup>
-    </span>
-  )
-
+// Hero signature: THE PINWHEEL PIPELINE. The four petals of the logo become the
+// lifecycle itself — green (lead in), indigo (the AI researches + drafts),
+// yellow (you approve), teal (sent) — and one lead card travels the line,
+// changing state at every petal. Pure CSS timeline (16s loop) so it runs
+// forever at zero cost; the non-animated default IS the final state, which is
+// exactly what prefers-reduced-motion and small screens show.
+function PipelineHero() {
   return (
-    <motion.div className="trace" ref={wrap}
-      initial={on({ opacity: 0, y: 26 })} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.15, duration: 0.6, ease: EASE }}>
-      <div className="trace-side left">{note(0)}</div>
-      <div className="receipt">
-        <div className="receipt-head">
-          <b>Draft · Meridian Logistics</b>
-          <span className="receipt-status">
-            <motion.span className="rs-working" initial={on({ opacity: 1 })} animate={{ opacity: 0 }} transition={{ delay: 3.1, duration: 0.3 }}>
-              verifying<span className="rs-dots">…</span>
-            </motion.span>
-            <motion.span className="rs-done" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 3.2, duration: 0.3 }}>
-              <Icon name="check" size={12} /> quote-verified
-            </motion.span>
-          </span>
+    <div className="pipe" role="img"
+      aria-label="A lead travels the pipeline: pulled in, researched and drafted by the AI with quote-verified claims, approved by you, then sent with automatic follow-ups.">
+      <div className="pipe-card" aria-hidden="true">
+        <div className="pl pl1">
+          <div className="pl-top"><span className="pl-av">MC</span><div><b>Maria Chen</b><span>VP Operations · Meridian Logistics</span></div></div>
+          <div className="pl-foot"><span className="pl-chip green">new lead</span><span>pulled from Apollo</span></div>
         </div>
-        <div className="receipt-body">
-          <div className="receipt-subject">Your new Dayton hub</div>
-          <p style={{ margin: 0 }}>
-            Hi Maria — saw that Meridian {claimSpan(0)} and is {claimSpan(1)}.
-            Standing up a second site usually means processes split across spreadsheets —
-            that&apos;s the exact gap we close…
-          </p>
+        <div className="pl pl2">
+          <div className="pl-fact"><i>[1]</i> opened a second Dayton hub <em>✓</em></div>
+          <div className="pl-fact"><i>[2]</i> hiring 2 ops coordinators <em>✓</em></div>
+          <div className="pl-foot"><span className="pl-chip indigo">draft written</span><span>every claim sourced</span></div>
         </div>
-        <div className="receipt-foot">
-          <motion.span className="facts" initial={on({ opacity: 0 })} animate={{ opacity: 1 }} transition={{ delay: 3.2, duration: 0.4 }}>
-            7 facts · 3 sources
-          </motion.span>
-          <div className="actions">
-            <span className="btn">Edit</span>
-            <span className="btn approve"><Icon name="check" size={13} /> Approve</span>
-          </div>
+        <div className="pl pl3">
+          <div className="pl-subj">Your new Dayton hub</div>
+          <div className="pl-body">Hi Maria — saw that Meridian opened a second distribution hub…</div>
+          <span className="pl-stamp">approved</span>
+        </div>
+        <div className="pl pl4">
+          <div className="pl-sent"><em>✓</em> Sent</div>
+          <div className="pl-foot"><span className="pl-chip teal">via your mailbox</span><span>follow-ups armed · exits on reply</span></div>
         </div>
       </div>
-
-      <div className="trace-side right">{note(1)}</div>
-      <svg className="trace-svg" aria-hidden="true">
-        {paths.map((d, i) => (d &&
-          <motion.path key={i} d={d} className={hot === i + 1 ? 'on' : ''}
-            initial={on({ pathLength: 0 })} animate={{ pathLength: 1 }}
-            transition={{ delay: T(i).line, duration: 0.45, ease: EASE }} />
-        ))}
-      </svg>
-    </motion.div>
+      <div className="pipe-track" aria-hidden="true">
+        <i className="pipe-line" /><i className="pipe-fill" />
+        <span className="pnode n1" /><span className="pnode n2" /><span className="pnode n3" /><span className="pnode n4" />
+      </div>
+      <div className="pipe-labels" aria-hidden="true">
+        <div><b>Lead pulled</b><span>Apollo · CSV · LinkedIn</span></div>
+        <div><b>AI researches &amp; drafts</b><span>claims quote-verified</span></div>
+        <div><b>You approve</b><span>nothing sends without you</span></div>
+        <div><b>Sent</b><span>follow-ups until reply</span></div>
+      </div>
+    </div>
   )
-
-  function note(i) {
-    const cl = CLAIMS[i]
-    // entrance animates an outer wrapper so the note's CSS tilt + hover lift
-    // (inline transforms would clash with framer's) stay on the card itself
-    return (
-      <motion.div key={cl.tag}
-        initial={on({ opacity: 0, x: i === 0 ? -10 : 10 })} animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: T(i).note, duration: 0.4, ease: EASE }}>
-        <div ref={noteRefs[i]} {...link(i)} className={`trace-note ${hot === i + 1 ? 'on' : ''}`}>
-          <div className="tn-head">
-            <i>[{i + 1}]</i> {cl.tag}
-            <motion.span className="tn-stamp"
-              initial={on({ opacity: 0, scale: 0.5, rotate: -10 })} animate={{ opacity: 1, scale: 1, rotate: -3 }}
-              transition={{ delay: T(i).note + 0.15, type: 'spring', stiffness: 520, damping: 17 }}>
-              verified
-            </motion.span>
-          </div>
-          <div className="tn-quote">{cl.quote}</div>
-          <div className="tn-meta">{cl.meta}</div>
-        </div>
-      </motion.div>
-    )
-  }
 }
 
 export default function Landing({ onLaunch }) {
@@ -194,7 +90,7 @@ export default function Landing({ onLaunch }) {
             <p>Every lead researched against real sources. Every claim quote-verified. Every send approved by you — then followed up automatically until they reply.</p>
           </motion.div>
 
-          <TracedDraft />
+          <PipelineHero />
 
           <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.45, duration: 0.5, ease: EASE } })} className="lp-cta lp-cta-hero">
             <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>

@@ -1100,6 +1100,103 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .tn-quote { font-size: 12px; line-height: 1.5; color: var(--text); margin: 8px 0 6px; }
 .tn-meta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
 
+/* ============ hero signature: THE PINWHEEL PIPELINE ============
+   The logo's four petals as the lifecycle — green (lead in), indigo (the AI
+   works), yellow (you approve), teal (sent) — with one lead card traveling
+   the line on a 16s pure-CSS loop. Base (non-animated) styles are the FINAL
+   state, so reduced-motion and mobile show a complete, truthful still. */
+.pipe { position: relative; z-index: 1; width: min(880px, 100%); margin: 40px auto 30px; padding-top: 148px; }
+
+.pipe-track { position: relative; height: 14px; }
+.pipe-line { position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); background: var(--line-strong); border-radius: 99px; }
+.pipe-fill {
+  position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); border-radius: 99px;
+  background: linear-gradient(90deg, var(--petal-green) 12.5%, var(--petal-indigo) 37.5%, var(--petal-yellow) 62.5%, var(--petal-teal) 87.5%);
+  clip-path: inset(0 12.5% 0 0);
+  animation: pipe-fill 16s linear infinite;
+}
+@keyframes pipe-fill {
+  0%, 16%  { clip-path: inset(0 87.5% 0 0); }
+  26%, 41% { clip-path: inset(0 62.5% 0 0); }
+  51%, 66% { clip-path: inset(0 37.5% 0 0); }
+  76%, 100% { clip-path: inset(0 12.5% 0 0); }
+}
+.pnode { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line-strong); }
+.pnode.n1 { left: 12.5%; background: var(--petal-green); }
+.pnode.n2 { left: 37.5%; background: var(--petal-indigo); animation: pipe-n2 16s linear infinite; }
+.pnode.n3 { left: 62.5%; background: var(--petal-yellow); animation: pipe-n3 16s linear infinite; }
+.pnode.n4 { left: 87.5%; background: var(--petal-teal); animation: pipe-n4 16s linear infinite; }
+@keyframes pipe-n2 { 0%, 25% { background: var(--line-strong); } 27% { transform: translate(-50%, -50%) scale(1.5); } 29%, 100% { background: var(--petal-indigo); transform: translate(-50%, -50%) scale(1); } }
+@keyframes pipe-n3 { 0%, 50% { background: var(--line-strong); } 52% { transform: translate(-50%, -50%) scale(1.5); } 54%, 100% { background: var(--petal-yellow); transform: translate(-50%, -50%) scale(1); } }
+@keyframes pipe-n4 { 0%, 75% { background: var(--line-strong); } 77% { transform: translate(-50%, -50%) scale(1.5); } 79%, 100% { background: var(--petal-teal); transform: translate(-50%, -50%) scale(1); } }
+
+.pipe-labels { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 14px; text-align: center; }
+.pipe-labels b { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.pipe-labels span { font-size: 11px; color: var(--faint); }
+
+/* the traveling lead card — stacked state layers crossfade at each petal */
+.pipe-card {
+  position: absolute; top: 0; left: 87.5%; transform: translateX(-50%);
+  display: grid; width: 300px; min-height: 118px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow-pop); padding: 13px 15px;
+  animation: pipe-travel 16s ease-in-out infinite;
+}
+.pipe-card::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+@keyframes pipe-travel {
+  0% { left: 12.5%; opacity: 0; }
+  2%, 16% { left: 12.5%; opacity: 1; }
+  26%, 41% { left: 37.5%; opacity: 1; }
+  51%, 66% { left: 62.5%; opacity: 1; }
+  76%, 96% { left: 87.5%; opacity: 1; }
+  99%, 100% { left: 87.5%; opacity: 0; }
+}
+.pl { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 8px; opacity: 0; }
+.pl1 { animation: pipe-l1 16s linear infinite; }
+.pl2 { animation: pipe-l2 16s linear infinite; }
+.pl3 { animation: pipe-l3 16s linear infinite; }
+.pl4 { opacity: 1; animation: pipe-l4 16s linear infinite; }
+@keyframes pipe-l1 { 0%, 18% { opacity: 1; } 23%, 100% { opacity: 0; } }
+@keyframes pipe-l2 { 0%, 24% { opacity: 0; } 28%, 43% { opacity: 1; } 48%, 100% { opacity: 0; } }
+@keyframes pipe-l3 { 0%, 49% { opacity: 0; } 53%, 68% { opacity: 1; } 73%, 100% { opacity: 0; } }
+@keyframes pipe-l4 { 0%, 74% { opacity: 0; } 78%, 97% { opacity: 1; } 100% { opacity: 0; } }
+
+.pl-top { display: flex; align-items: center; gap: 10px; text-align: left; }
+.pl-av { width: 32px; height: 32px; border-radius: 50%; background: #e5f6de; color: #3e8a2e; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; flex: none; }
+.pl-top b { display: block; font-size: 13.5px; color: var(--ink); line-height: 1.2; }
+.pl-top span { font-size: 11.5px; color: var(--muted); }
+.pl-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 10.5px; color: var(--faint); text-align: left; }
+.pl-chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.pl-chip.green { background: #e5f6de; color: #3e8a2e; }
+.pl-chip.indigo { background: var(--signal-pill); color: var(--petal-indigo); }
+.pl-chip.teal { background: #04b49229; color: #005343; }
+.pl-fact { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--text-2); text-align: left; }
+.pl-fact i { font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--petal-indigo); }
+.pl-fact em { font-style: normal; color: var(--verify); margin-left: auto; }
+.pl-subj { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+.pl-body { font-size: 12px; color: var(--muted); line-height: 1.5; text-align: left; }
+.pl-stamp {
+  position: absolute; right: 12px; bottom: 10px; transform: rotate(-6deg);
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--verify); border: 2px solid var(--verify); border-radius: 4px; padding: 2px 8px;
+  animation: pipe-stamp 16s linear infinite;
+}
+@keyframes pipe-stamp {
+  0%, 55% { opacity: 0; transform: rotate(-6deg) scale(1.6); }
+  58%, 100% { opacity: 1; transform: rotate(-6deg) scale(1); }
+}
+.pl-sent { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--verify); text-align: left; }
+.pl-sent em { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #04b49229; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pipe *, .pipe { animation: none !important; }   /* statics = the final state */
+}
+@media (max-width: 720px) {
+  .pipe { padding-top: 0; margin-top: 26px; }
+  .pipe-card { display: none; }                    /* the track + labels tell the story */
+  .pipe-labels { grid-template-columns: repeat(2, 1fr); gap: 12px 8px; }
+}
+
 .lp-section { padding: 96px 0; }
 .lp-section.alt { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .lp-head { max-width: 640px; margin: 0 0 48px; }
