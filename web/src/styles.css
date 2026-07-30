@@ -87,11 +87,11 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
 
-/* Mono data register — the signature: statuses, tags, counts all
-   read like entries in an inspection log. */
+/* Section eyebrows — the product's micro-label register:
+   12px SemiBold uppercase in #96A5B5, the only uppercase in the UI. */
 .section-label, .drawer-label {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 14px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-bottom: 14px;
 }
 
 /* ---------- app shell — the product's light flat chrome ----------
@@ -162,28 +162,33 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   border-radius: var(--radius); padding: 26px 28px 24px; margin-bottom: 20px;
   overflow: hidden;
 }
-.work-hero::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--signal); }
-.wh-eyebrow { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 10px; }
+/* the hero is where the AI gets put to work — it wears Ella's gradient */
+.work-hero::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--grad-ella); }
+.wh-eyebrow { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); margin-bottom: 10px; }
 .wh-title { font-family: var(--font-display); font-weight: 750; font-size: clamp(24px, 3.2vw, 33px); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 8px; color: var(--text); }
 .wh-sub { margin: 0 0 18px; color: var(--text-2); font-size: 14px; max-width: 560px; }
 .wh-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wh-secondary { display: flex; align-items: center; gap: 8px; margin-left: 4px; }
 .wh-running { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
 .wh-running-label { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
-.run-progress { position: relative; height: 6px; width: 280px; max-width: 100%; border-radius: 999px; background: var(--signal-tint); overflow: hidden; }
-.run-progress > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--signal); transition: width 0.4s ease; }
+.run-progress { position: relative; height: 6px; width: 280px; max-width: 100%; border-radius: 999px; background: var(--signal-pill); overflow: hidden; }
+.run-progress > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--grad-ella); transition: width 0.4s ease; }
 
-/* pipeline rail — lifecycle as a ledger line */
+/* pipeline rail — the lifecycle wearing the pinwheel's own colors:
+   green = leads in · indigo = the AI's work · yellow = waiting on you · teal = sent.
+   The logo's geometry as the product's information design. */
 .rail { display: flex; align-items: flex-start; gap: 0; padding: 18px 6px 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
-.rail-stage { position: relative; flex: 1; display: flex; flex-direction: column; gap: 3px; padding-left: 14px; }
-.rail-tick { position: absolute; left: 0; top: 4px; width: 7px; height: 7px; border-radius: 1px; background: var(--line-strong); }
-.rail-stage.on .rail-tick { background: var(--signal); }
-.rail-stage.done .rail-tick { background: var(--verify); }
-.rail-num { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--muted); line-height: 1; }
-.rail-stage.on .rail-num { color: var(--text); }
+.rail-stage { position: relative; flex: 1; display: flex; flex-direction: column; gap: 3px; padding-left: 16px; }
+.rail-tick { position: absolute; left: 0; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.rail-stage:nth-child(1).on .rail-tick { background: var(--petal-green); }
+.rail-stage:nth-child(2).on .rail-tick, .rail-stage:nth-child(3).on .rail-tick { background: var(--petal-indigo); }
+.rail-stage:nth-child(4).on .rail-tick { background: var(--petal-yellow); }
+.rail-stage:nth-child(5).on .rail-tick { background: var(--petal-teal); }
+.rail-num { font-size: 22px; font-weight: 600; color: var(--faint); line-height: 1; }
+.rail-stage.on .rail-num { color: var(--ink); }
 .rail-stage.done .rail-num { color: var(--verify); }
-.rail-label { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
-.rail-link { position: absolute; top: 7px; right: 12px; left: auto; width: calc(100% - 96px); max-width: 120px; height: 1px; background: var(--line-strong); }
+.rail-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); }
+.rail-link { position: absolute; top: 8px; right: 12px; left: auto; width: calc(100% - 96px); max-width: 120px; height: 1px; background: var(--line-strong); }
 @media (max-width: 760px) { .rail { flex-wrap: wrap; gap: 14px; } .rail-stage { min-width: 40%; } .rail-link { display: none; } }
 
 .sidebar-foot { margin-top: auto; padding: 12px 8px 0; font-size: 11px; letter-spacing: 0.02em; color: var(--faint); display: flex; align-items: center; justify-content: space-between; gap: 7px; }
@@ -290,7 +295,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .stage + .stage { border-left: 1px solid var(--line); }
 .stage-num { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--line-strong); }
 .stage.on .stage-num { color: var(--text); }
-.stage-label { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-top: 10px; }
+.stage-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-top: 10px; }
 .stage-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--line); }
 .stage-bar i { display: block; height: 100%; background: var(--signal); transition: width 0.5s ease; }
 .stage.done .stage-bar i { background: var(--verify); }
@@ -718,12 +723,12 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 /* A/B tile — signal-led vs plain control reply rate */
 .ab-row { display: flex; gap: 16px; margin-bottom: 26px; flex-wrap: wrap; }
-.ab-cell { flex: 1; min-width: 180px; background: var(--glass-strong); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm), var(--edge); padding: 20px 22px; }
+.ab-cell { flex: 1; min-width: 180px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
 .ab-cell.signal { border-left: 3px solid var(--signal); }
 .ab-cell.plain { border-left: 3px solid var(--line-strong); }
 .ab-rate { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .ab-cell.signal .ab-rate { color: var(--signal-deep); }
-.ab-label { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-top: 10px; }
+.ab-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-top: 10px; }
 .ab-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); margin-top: 4px; }
 
 @media (max-width: 900px) {

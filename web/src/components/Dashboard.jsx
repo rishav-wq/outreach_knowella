@@ -141,7 +141,8 @@ export default function Dashboard({ campaign, onNavigate }) {
                 <motion.button className="btn primary" onClick={() => onNavigate(step.go)} {...tap}>{step.cta}</motion.button>
               )}
               {step.go === 'run' && (
-                <motion.button className="btn primary" onClick={startRun} {...tap}><Icon name="play" size={15} /> Run pipeline</motion.button>
+                <motion.button className="btn ella" onClick={startRun} {...tap}
+                  title="Research + draft with Knowella's AI"><Icon name="play" size={15} /> Run pipeline</motion.button>
               )}
               <span className="wh-secondary">
                 {step.go !== 'run' && newCount > 0 && (
