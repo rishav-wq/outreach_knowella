@@ -1300,6 +1300,7 @@ class LinkedInCapture(BaseModel):
     campaign: str
     post_url: str = ""
     commenters: list[Commenter] = []
+    skip_filter: bool = False   # true = capture everyone; the targeting filter is bypassed
 
 
 @app.post("/api/linkedin/capture")
@@ -1334,20 +1335,25 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
 
     # ICP fit, pass 1 — the headline, BEFORE enrichment: a clear miss ("Software
     # Engineer" into a freight campaign) is skipped without spending a credit.
-    toks = _icp_tokens(cfg)
+    # Every skip is REPORTED back (name + headline), never silent — a warm lead
+    # wrongly skipped can be rescued by re-sending with skip_filter on.
+    toks = set() if r.skip_filter else _icp_tokens(cfg)
     off_icp = 0
+    skipped: list[dict] = []
     if toks:
         kept = []
         for c in fresh:
             if _fits_icp(c["headline"], toks) is False:
                 off_icp += 1
+                if len(skipped) < 40:
+                    skipped.append({"name": c["name"], "headline": c["headline"][:80]})
             else:
                 kept.append(c)
         fresh = kept
     if not fresh:
         return {"received": len(r.commenters), "added": 0, "with_email": 0, "no_email": 0,
-                "duplicates": duplicates, "off_icp": off_icp, "suppressed": 0,
-                "credits_used": 0, "counts": store.counts(cfg["name"])}
+                "duplicates": duplicates, "off_icp": off_icp, "skipped": skipped,
+                "suppressed": 0, "credits_used": 0, "counts": store.counts(cfg["name"])}
 
     # enrich from Apollo's database (LinkedIn contributed only the pointer)
     credits = 0
@@ -1375,6 +1381,8 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         # BOTH title and headline is skipped rather than added to the campaign.
         if toks and _fits_icp(f"{lead.title} {c['headline']}", toks) is False:
             off_icp += 1
+            if len(skipped) < 40:
+                skipped.append({"name": c["name"], "headline": (lead.title or c["headline"])[:80]})
             continue
         lead.source = "linkedin_comment"
         lead.raw = {**(lead.raw or {}),
@@ -1385,8 +1393,8 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
             with_email += 1
     return {"received": len(r.commenters), "added": added, "with_email": with_email,
             "no_email": added - with_email, "duplicates": duplicates,
-            "off_icp": off_icp, "suppressed": suppressed, "credits_used": credits,
-            "counts": store.counts(cfg["name"])}
+            "off_icp": off_icp, "skipped": skipped, "suppressed": suppressed,
+            "credits_used": credits, "counts": store.counts(cfg["name"])}
 
 
 class LookalikeReq(BaseModel):

@@ -64,6 +64,7 @@ function renderCount(delta) {
     : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
+  $('skipfWrap').hidden = captured.length === 0
   $('send').textContent = `Send ${captured.length} to campaign`
   const list = $('list')
   list.hidden = captured.length === 0
@@ -274,7 +275,8 @@ async function send() {
     const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
-      body: JSON.stringify({ campaign, post_url: postUrl, commenters: captured }),
+      body: JSON.stringify({ campaign, post_url: postUrl, commenters: captured,
+                             skip_filter: $('skipFilter').checked }),
     })
     if (!r.ok) throw new Error((await r.text()).slice(0, 200))
     const d = await r.json()
@@ -285,6 +287,26 @@ async function send() {
         `${d.off_icp ? `, ${d.off_icp} skipped (didn’t match the campaign’s targeting)` : ''}` +
         `${d.duplicates ? `, ${d.duplicates} already captured` : ''}${d.suppressed ? `, ${d.suppressed} suppressed` : ''}` +
         `${d.credits_used ? ` · ${d.credits_used} Apollo credits` : ''}. Review them in the app.`, 'ok')
+    // never lose a skip silently: list who the filter dropped, so a wrongly-skipped
+    // warm lead is visible — rescue = re-scan, tick "capture everyone", Send again
+    // (already-added people dedup server-side, so only the skipped get through).
+    if (d.skipped?.length) {
+      const list = $('list')
+      list.hidden = false
+      list.innerHTML = ''
+      const head = document.createElement('div')
+      head.style.cssText = 'color:var(--muted);font-style:italic'
+      head.textContent = `skipped by the targeting filter (${d.off_icp}) — re-scan + “capture everyone” to rescue:`
+      list.appendChild(head)
+      for (const s of d.skipped) {
+        const row = document.createElement('div')
+        row.textContent = s.name
+        const sp = document.createElement('span')
+        sp.textContent = ` — ${s.headline}`
+        row.appendChild(sp)
+        list.appendChild(row)
+      }
+    }
   } catch (e) {
     msg(`Send failed: ${e.message}`, 'err')
   } finally {
