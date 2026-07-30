@@ -1107,23 +1107,24 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--signal-deep); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; }
 .lp-head h2 { font-family: var(--font-display); font-size: clamp(27px, 3.5vw, 37px); font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; }
 
-.lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); box-shadow: var(--shadow-md), var(--edge); }
-.lp-step { padding: 34px 30px 38px; position: relative; transition: background 0.15s ease; }
+.lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); }
+.lp-step { padding: 34px 30px 38px; position: relative; transition: background 0.2s ease-in-out; }
 .lp-step + .lp-step { border-left: 1px solid var(--line); }
-.lp-step:hover { background: #fafbf8; }
+.lp-step:hover { background: var(--bg); }
 .lp-step-num { font-family: var(--font-mono); font-size: 11px; color: var(--signal-deep); letter-spacing: 0.08em; }
 .lp-step h3 { font-size: 18px; margin: 16px 0 9px; }
 .lp-step p, .lp-feature p { color: var(--text-2); line-height: 1.65; font-size: 14px; margin: 0; }
 
 .lp-features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-.lp-feature { display: flex; gap: 16px; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow-sm); transition: transform 0.16s ease, box-shadow 0.16s ease; }
-.lp-feature:hover { transform: translateY(-4px); box-shadow: var(--shadow-md), var(--edge); }
+.lp-feature { display: flex; gap: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+.lp-feature:hover { transform: translateY(-4px); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
 .lp-feature h3 { font-size: 16px; margin-bottom: 7px; }
 .lp-badge { width: 44px; height: 44px; border-radius: 12px; background: var(--grad-brand); color: #fff; display: grid; place-items: center; flex-shrink: 0; box-shadow: var(--shadow-glow); }
 
 .lp-band-stats { position: relative; background: var(--ink); color: var(--ink-text); padding: 72px 0; overflow: hidden; }
+/* the band's glow speaks brand: Ella's purple->teal, not the legacy orange */
 .lp-band-stats::before { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 79, 0, 0.08), transparent 55%); }
+  background: linear-gradient(120deg, rgba(110, 99, 255, 0.14), transparent 45%, rgba(4, 180, 146, 0.1)); }
 .lp-stats { position: relative; display: flex; justify-content: space-around; gap: 24px; flex-wrap: wrap; text-align: center; }
 .lp-stat-n { font-family: var(--font-display); font-size: clamp(48px, 6vw, 60px); font-weight: 700; letter-spacing: -0.03em; color: #fff; }
 .lp-stat-n .accent { color: var(--signal); }
@@ -1131,7 +1132,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 .lp-quotes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .lp-quote { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--verify); border-radius: var(--radius); padding: 28px 30px; box-shadow: var(--shadow-sm); transition: transform 0.16s ease, box-shadow 0.16s ease; }
-.lp-quote:hover { transform: translateY(-3px); box-shadow: var(--shadow-md), var(--edge); }
+.lp-quote:hover { transform: translateY(-3px); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
 .lp-quote p { font-size: 15.5px; line-height: 1.7; color: var(--text); margin: 0; }
 .lp-quote-by { margin-top: 20px; display: flex; flex-direction: column; }
 .lp-quote-by strong { font-size: 13.5px; }
@@ -1140,7 +1141,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lp-band { position: relative; background: var(--ink); color: #fff; text-align: center; padding: 84px 0; overflow: hidden; }
 .lp-band-stripe { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--stripe); }
 .lp-band::before { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 79, 0, 0.06), transparent 55%); }
+  background: linear-gradient(120deg, rgba(110, 99, 255, 0.14), transparent 45%, rgba(4, 180, 146, 0.1)); }
 .lp-band .lp-inner { position: relative; }
 .lp-band h2 { font-family: var(--font-display); font-size: clamp(28px, 3.6vw, 37px); font-weight: 700; letter-spacing: -0.02em; }
 .lp-band p { font-size: 16px; color: var(--ink-muted); margin: 16px 0 30px; }
