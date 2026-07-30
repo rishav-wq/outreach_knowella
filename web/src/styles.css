@@ -7,49 +7,62 @@
    real logo as the accent + stripe system.
    ============================================================ */
 :root {
-  /* Palette: customerweb src/app/core/styles/_variable.scss */
-  --bg: #f9f9f9;                /* $white-light-gray */
-  --paper: #f9f9f9;
+  /* Palette: customerweb — the shipping product's real values.
+     The shell is LIGHT and FLAT: header + sidebar + page share one #F4F7FA
+     field; structure is 1px #E6ECF1 hairlines, not shadows. */
+  --bg: #f4f7fa;                /* the product's one flat field */
+  --paper: #f4f7fa;
   --panel: #ffffff;
-  --glass: rgba(255, 255, 255, 0.92);
+  --glass: #ffffff;
   --glass-strong: #ffffff;
-  --glass-border: #e0e2ec;
-  --ink: #242a32;               /* $header-black — dark bands & sidebar */
+  --glass-border: #e6ecf1;
+  --ink: #242a32;               /* headings */
   --ink-2: #2d3540;
   --ink-3: #3a434f;
   --ink-text: #eef0f4;
-  --ink-muted: #96a1af;         /* $nav-color */
-  --line: #e6ecf1;              /* $table-header-bg — hairlines */
-  --line-strong: #d5d9df;       /* $border-color */
+  --ink-muted: #96a5b5;         /* $notification-txt — placeholders, eyebrows */
+  --line: #e6ecf1;              /* THE house border (372 uses in the product) */
+  --line-strong: #d9e3ed;       /* dividers, input borders */
   --text: #242a32;
-  --text-2: #464e57;            /* $gray-dark */
+  --text-2: #464e57;            /* $gray-dark — dominant body color */
   --muted: #64707c;             /* $secondary-font-color */
+  --faint: #96a5b5;
   --signal: #6e63ff;            /* $primary-color / $cornflower */
-  --signal-deep: #5a52e0;       /* $hover-primary */
-  --signal-tint: #f8f7ff;       /* $sidebar-heightlight */
-  --signal-line: #dbd8fd;       /* $fileborderline */
-  --grad-brand: linear-gradient(135deg, #7a6fff 0%, #5a52e0 100%);
+  --signal-deep: #584fcc;       /* the de-facto hover in newer product UI */
+  --signal-tint: #f8f7ff;
+  --signal-pill: #e2e0ff;       /* nav hover/active pill + chips */
+  --signal-line: #dbd8fd;
+  --ring: 0 0 0 3px rgba(110, 99, 255, 0.1);   /* the product's focus ring */
+  --grad-brand: linear-gradient(135deg, #7a6fff 0%, #584fcc 100%);
+  /* Ella's gradient — purple→teal. RESERVED for AI moments only. */
+  --grad-ella: linear-gradient(90deg, #6e63ff 0%, #04b492 100%);
   /* The stripe IS the logo: the four pinwheel petals, in order. */
   --grad-bar: linear-gradient(90deg, #87dd75, #04b492, #6459ff, #ffd600);
+  /* The pinwheel petals, individually — the lifecycle's stage colors. */
+  --petal-green: #87dd75; --petal-indigo: #6459ff; --petal-yellow: #ffd600; --petal-teal: #04b492;
   --verify: #04b492;            /* $secondary-color — Knowella's confirm teal */
-  --verify-tint: #e6f8f4;       /* from $login-gradient-bg */
+  --verify-hover: #04a082;
+  --verify-tint: #e6f8f4;
   --caution: #fd750e;           /* $not-verified */
   --caution-tint: #ffeadb;
-  --alert: #d80000;             /* $error-color */
-  --alert-tint: #f8d7da;        /* $danger-shadow */
-  --info: #2e5bff;              /* $active */
+  --alert: #fb1e39;             /* $inactive-txt — the modern product error red */
+  --alert-tint: #fb1e3915;
+  --ok: #45a631;                /* $text-green — toast success */
+  --info: #2e5bff;
   --info-tint: #e2e8ff;
   --font-display: 'Poppins', system-ui, sans-serif;
   --font-body: 'Poppins', system-ui, sans-serif;
   --font-mono: 'Poppins', system-ui, sans-serif;
-  --radius: 12px;
-  --radius-sm: 8px;             /* customerweb button radius */
-  --radius-lg: 16px;            /* customerweb table/card radius */
-  --shadow-sm: 0 1px 2px rgba(36, 42, 50, 0.05), 0 1px 3px rgba(36, 42, 50, 0.04);
-  --shadow-md: 0 2px 6px rgba(36, 42, 50, 0.05), 0 14px 30px -14px rgba(36, 42, 50, 0.16);
-  --shadow-lg: 0 4px 10px rgba(36, 42, 50, 0.06), 0 32px 64px -24px rgba(36, 42, 50, 0.22);
-  --shadow-glow: 0 8px 22px -8px rgba(110, 99, 255, 0.5);
-  --edge: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --radius: 10px;
+  --radius-sm: 8px;             /* the product's universal radius */
+  --radius-lg: 16px;            /* the big page card */
+  /* Depth is for things that FLOAT (dropdowns, toasts) — never for cards. */
+  --shadow-sm: none;
+  --shadow-md: 0 3px 12px 0 rgba(24, 38, 75, 0.16);
+  --shadow-lg: 0 8px 24px rgba(24, 38, 75, 0.12);
+  --shadow-pop: 0 3px 12px 0 rgba(24, 38, 75, 0.16);
+  --shadow-glow: none;
+  --edge: none;
   --stripe: var(--grad-bar);
   --chev-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364707c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   --chev-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2396a1af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
@@ -59,18 +72,13 @@
 html, body, #root { height: 100%; margin: 0; }
 body {
   font-family: var(--font-body);
-  /* Knowella's login-page mist: soft lavender + mint, from $login-gradient-bg. */
-  background:
-    radial-gradient(1100px 600px at 85% -10%, rgba(226, 224, 255, 0.55), transparent 60%),
-    radial-gradient(900px 560px at 0% 8%, rgba(230, 248, 244, 0.5), transparent 55%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);   /* the product's one flat field — no mist, no gradients */
   color: var(--text);
   font-size: 14px; line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-a { color: var(--signal-deep); text-decoration: none; }
+a { color: var(--signal); text-decoration: none; }
 a:hover { text-decoration: underline; }
 h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 20px; }
 h3 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 8px; }
@@ -86,72 +94,72 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 14px;
 }
 
-/* ---------- app shell ---------- */
-.layout { display: grid; grid-template-columns: 248px 1fr; height: 100vh; }
+/* ---------- app shell — the product's light flat chrome ----------
+   Header, sidebar and page share ONE #F4F7FA field (no dark band, no
+   shadow); the content lives in a single white 16px-radius card. Nav
+   hover and active are identical: purple text on an #E2E0FF pill. */
+.layout { display: grid; grid-template-columns: 240px 1fr; height: 100vh; background: var(--bg); }
 
 .sidebar {
-  background: var(--ink); color: var(--ink-text);
-  display: flex; flex-direction: column; padding: 0 14px 18px;
-  border-top: 3px solid transparent; border-image: var(--stripe) 1;
+  background: var(--bg); color: var(--text-2);
+  display: flex; flex-direction: column; padding: 0 12px 16px;
 }
-.brand { display: flex; align-items: center; gap: 11px; padding: 22px 8px 8px; border: none; background: none; font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; }
-/* The logo is Knowella's real pinwheel mark (inline SVG) — no tile behind it. */
-.logo {
-  width: 34px; height: 34px; display: grid; place-items: center; flex-shrink: 0;
-}
+.brand { display: flex; align-items: center; gap: 10px; padding: 20px 8px 8px; border: none; background: none; font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; }
+/* The logo is Knowella's real pinwheel mark (inline SVG). */
+.logo { width: 30px; height: 30px; display: grid; place-items: center; flex-shrink: 0; }
 .logo svg { width: 100%; height: 100%; display: block; }
-.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.15; }
-.brand-sub { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-muted); }
+.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.15; color: var(--ink); }
+.brand-sub { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint); }
 
-.side-campaign { padding: 18px 8px 6px; }
+.side-campaign { padding: 16px 4px 4px; }
 .side-campaign label {
-  display: block; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.11em; color: var(--ink-muted); margin-bottom: 7px;
+  display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--faint); margin-bottom: 7px; padding-left: 4px;
 }
 .side-campaign select {
-  width: 100%; font: inherit; font-size: 13px; padding: 8px 30px 8px 10px;
-  background-color: var(--ink-2); color: var(--ink-text); border: 1px solid var(--ink-3);
-  border-radius: var(--radius-sm); cursor: pointer;
+  width: 100%; font: inherit; font-size: 13px; padding: 9px 30px 9px 11px;
+  background-color: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius); cursor: pointer;
   appearance: none; -webkit-appearance: none;
-  background-image: var(--chev-light); background-repeat: no-repeat; background-position: right 10px center; background-size: 12px;
+  background-image: var(--chev-dark); background-repeat: no-repeat; background-position: right 10px center; background-size: 12px;
 }
-.side-campaign select:hover { border-color: #45524a; }
-.side-campaign select option { background: var(--ink); color: var(--ink-text); }
+.side-campaign select:hover { border-color: var(--signal); }
+.side-campaign select:focus { outline: none; border-color: var(--signal); box-shadow: var(--ring); }
 
-.nav { display: flex; flex-direction: column; gap: 2px; padding-top: 16px; }
+.nav { display: flex; flex-direction: column; gap: 4px; padding-top: 16px; }
 .nav-item {
-  position: relative; display: flex; align-items: center; gap: 11px; padding: 10px 12px;
-  border-radius: var(--radius-sm); border: none; background: none; font: inherit; font-size: 14px;
-  font-weight: 500; color: var(--ink-muted); cursor: pointer; text-align: left; transition: color 0.12s ease;
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 6px; border: none; background: none; font: inherit; font-size: 14px;
+  font-weight: 500; color: var(--text-2); cursor: pointer; text-align: left; transition: color 0.2s ease-in-out;
 }
-.nav-item:hover { color: var(--ink-text); }
-.nav-item.active { color: #fff; }
+.nav-item:hover { color: var(--signal); background: var(--signal-pill); }
+.nav-item.active { color: var(--signal); }
 .nav-item > svg, .nav-item > span { position: relative; z-index: 1; }
-.nav-item .nav-count {
-  margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--ink);
-  background: var(--signal); padding: 0 7px; border-radius: 99px; color: #fff;
-}
-.nav-pill { position: absolute; inset: 0; z-index: 0; border-radius: var(--radius-sm); background: var(--ink-2); box-shadow: inset 2px 0 0 var(--signal); }
+.nav-pill { position: absolute; inset: 0; z-index: 0; border-radius: 6px; background: var(--signal-pill); }
 /* numbered lifecycle rail: the nav encodes the real sequence of the work */
-.nav-step { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--ink-muted); width: 20px; flex: none; position: relative; z-index: 1; }
-.nav-item.active .nav-step { color: var(--signal); }
-.nav-item .nav-count { background: var(--ink-3); color: var(--ink-text); }
+.nav-step { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--faint); width: 20px; flex: none; position: relative; z-index: 1; }
+.nav-item:hover .nav-step, .nav-item.active .nav-step { color: var(--signal); }
+.nav-item .nav-count { margin-left: auto; font-size: 11px; font-weight: 600; background: var(--signal-pill); color: var(--signal); padding: 0 8px; border-radius: 99px; position: relative; z-index: 1; }
 .nav-item .nav-count.hot { background: var(--signal); color: #fff; }
-.nav-op { margin-top: 14px; border-top: 1px solid var(--ink-2); border-radius: 0; padding-top: 14px; }
+.nav-op { margin-top: 14px; border-top: 1px solid var(--line-strong); border-radius: 0; padding-top: 14px; }
+.nav-op:hover { border-radius: 6px; border-top-color: transparent; }
 /* consecutive operational items (Library, Settings) share ONE divider, not stacked ones */
-.nav-op + .nav-op { margin-top: 0; border-top: none; padding-top: 2px; }
+.nav-op + .nav-op { margin-top: 0; border-top: none; padding-top: 9px; }
 
-/* topbar instrument register: live send state, always visible */
-.register { display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
-.reg-item { white-space: nowrap; }
-.reg-link { background: none; border: none; font: inherit; color: var(--signal-deep); cursor: pointer; padding: 0; text-decoration: underline dotted; text-underline-offset: 3px; }
-.reg-link:hover { color: var(--signal); }
+/* topbar instrument register: live send state as product pills */
+.register { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.reg-item {
+  white-space: nowrap; background: var(--panel); border: 1px solid rgba(110, 99, 255, 0.24);
+  color: var(--muted); padding: 5px 12px; border-radius: var(--radius-sm); font-weight: 500;
+}
+.reg-link { font: inherit; font-weight: 500; color: var(--signal); cursor: pointer; }
+.reg-link:hover { background: var(--signal-tint); }
 .register .dot { width: 8px; height: 8px; }
 
 /* work hero — the next action leads the page */
 .work-hero {
   position: relative; background: var(--panel); border: 1px solid var(--line-strong);
-  border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 26px 28px 24px; margin-bottom: 20px;
+  border-radius: var(--radius); padding: 26px 28px 24px; margin-bottom: 20px;
   overflow: hidden;
 }
 .work-hero::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--signal); }
@@ -178,7 +186,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .rail-link { position: absolute; top: 7px; right: 12px; left: auto; width: calc(100% - 96px); max-width: 120px; height: 1px; background: var(--line-strong); }
 @media (max-width: 760px) { .rail { flex-wrap: wrap; gap: 14px; } .rail-stage { min-width: 40%; } .rail-link { display: none; } }
 
-.sidebar-foot { margin-top: auto; padding: 12px 10px 0; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--ink-muted); display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.sidebar-foot { margin-top: auto; padding: 12px 8px 0; font-size: 11px; letter-spacing: 0.02em; color: var(--faint); display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 .sidebar-foot .foot-status { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-foot .dot { width: 7px; height: 7px; flex: none; }
 
@@ -195,15 +203,22 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .auth-gate-brand-sub { font-weight: 500; color: var(--muted); }
 .auth-gate-tag { margin: 12px 0 0; color: var(--text-2); font-size: 14.5px; max-width: 380px; }
 
-.main { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
+.main { display: flex; flex-direction: column; height: 100vh; min-width: 0; padding: 0 20px 20px 8px; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 0 36px; height: 60px; flex-shrink: 0;
-  border-bottom: 1px solid var(--line); background: var(--panel);
+  padding: 0 8px; height: 62px; flex-shrink: 0;
+  background: transparent;   /* the flat field runs through — no band, no border */
 }
-.page-title { font-family: var(--font-display); font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.page-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
 .topbar-side { display: flex; align-items: center; gap: 10px; }
-.content { flex: 1; overflow-y: auto; padding: 30px 36px 44px; }
+/* THE product move: all content lives in one white 16px card on the gray field */
+.content {
+  flex: 1; overflow-y: auto; padding: 28px 32px 44px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg);
+}
+.content::-webkit-scrollbar { width: 5px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: #96a5b5; border-radius: 10px; }
 
 /* ---------- generic ---------- */
 .banner {
@@ -214,35 +229,38 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: inherit;
-  font-size: 13.5px; font-weight: 600; cursor: pointer; padding: 9px 15px; border-radius: var(--radius-sm);
-  border: 1px solid var(--line-strong); background: var(--panel); color: var(--text);
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.1s ease;
+  font-size: 13.5px; font-weight: 500; cursor: pointer; padding: 9px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); background: var(--panel); color: var(--text-2);
+  transition: background 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
-.btn:hover { background: #efeee7; border-color: #bcc0b5; }
+.btn:hover { border-color: var(--signal); color: var(--signal); }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.btn.primary { background: var(--grad-brand); border-color: transparent; color: #fff; box-shadow: var(--shadow-glow); background-size: 140% 140%; transition: background-position 0.3s ease, box-shadow 0.15s ease, transform 0.1s ease; }
-.btn.primary:hover:not(:disabled) { background-position: 100% 0; box-shadow: 0 12px 30px -6px rgba(75, 64, 230, 0.55); }
-.btn.primary:disabled { opacity: 0.5; box-shadow: none; }
+/* primary: the product's solid cornflower, #584FCC hover — no gradient, no glow */
+.btn.primary { background: var(--signal); border-color: var(--signal); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--signal-deep); border-color: var(--signal-deep); color: #fff; }
+/* Ella's gradient — ONLY for buttons that set the AI working */
+.btn.ella { background: var(--grad-ella); border-color: transparent; color: #fff; background-size: 130% 100%; transition: background-position 0.3s ease-in-out; }
+.btn.ella:hover:not(:disabled) { background-position: 100% 0; color: #fff; }
 .btn.approve { background: var(--verify); border-color: var(--verify); color: #fff; }
-.btn.approve:hover { background: #10603a; border-color: #10603a; }
+.btn.approve:hover { background: var(--verify-hover); border-color: var(--verify-hover); color: #fff; }
 .btn.reject { background: var(--panel); border-color: var(--line-strong); color: var(--alert); }
-.btn.reject:hover { background: var(--alert-tint); border-color: #e3b6b1; }
+.btn.reject:hover { background: var(--alert-tint); border-color: var(--alert); color: var(--alert); }
 .btn.dark { background: var(--ink); border-color: var(--ink); color: #fff; }
-.btn.dark:hover { background: var(--ink-3); border-color: var(--ink-3); }
-.btn.lg { padding: 12px 22px; font-size: 15px; }
+.btn.dark:hover { background: var(--ink-3); border-color: var(--ink-3); color: #fff; }
+.btn.lg { padding: 12px 24px; font-size: 14.5px; }
 
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(255, 255, 255, 0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner-dark { border-color: rgba(20, 27, 23, 0.2); border-top-color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.skeleton { background: linear-gradient(90deg, #e7e8e3 25%, #f1f2ee 50%, #e7e8e3 75%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
+.skeleton { background: linear-gradient(90deg, #e6ecf1 25%, #f4f7fa 50%, #e6ecf1 75%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skel-row { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 
 /* ---------- empty state ---------- */
 .empty { text-align: center; padding: 64px 20px; max-width: 430px; margin: 40px auto 0; }
 .empty-icon {
-  width: 56px; height: 56px; border-radius: 14px; background: var(--ink); color: var(--signal);
+  width: 56px; height: 56px; border-radius: 14px; background: var(--signal-pill); color: var(--signal);
   display: grid; place-items: center; margin: 0 auto 20px;
 }
 .empty h3 { font-size: 20px; }
@@ -806,8 +824,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 /* campaign row: selector + edit-dialog trigger */
 .side-campaign-row { display: flex; align-items: center; gap: 6px; }
 .side-campaign-row select { flex: 1; min-width: 0; }
-.side-edit { color: var(--ink-muted); flex: none; }
-.side-edit:hover { color: var(--ink-text); }
+.side-edit { color: var(--faint); flex: none; }
+.side-edit:hover { color: var(--signal); }
 
 /* sending health (Settings) */
 .health-list { list-style: none; margin: 0; padding: 0; }
@@ -906,11 +924,11 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 
 .side-new {
   display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 8px; padding: 8px 10px;
-  border: 1px dashed var(--ink-3); border-radius: var(--radius-sm); background: none;
-  font: inherit; font-size: 12.5px; font-weight: 500; color: var(--ink-muted); cursor: pointer;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: none;
+  font: inherit; font-size: 12.5px; font-weight: 500; color: var(--muted); cursor: pointer;
   transition: color 0.12s ease, border-color 0.12s ease;
 }
-.side-new:hover { color: var(--ink-text); border-color: #45524a; }
+.side-new:hover { color: var(--signal); border-color: var(--signal); }
 
 .board-send { display: flex; align-items: center; gap: 14px; }
 .guard-note { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
