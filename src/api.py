@@ -749,6 +749,13 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
         lead_email = ((first_out or {}).get("to_email") or (inbound[0].get("from_email") if inbound else "") or "").lower()
         who = directory.get(lead_email, {})
         label = _classify_inbound(store, cfg, inbound, lead_email, who.get("key") or "")
+        # Apollo's messages API returns ONLY outbound sends (live-verified 2026-07-30:
+        # 234/234 type=outreach_automatic_email) — a reply exists solely as replied=True
+        # on our own message. So replies are counted from that flag; without the reply
+        # text they can't be sentiment-classified, so they land as 'other' in outcomes.
+        out_replied = any(m.get("replied") for m in msgs if not apollo_send.is_inbound(m))
+        if out_replied and not inbound and who.get("key") and not label:
+            store.mark_replied(who["key"], "other")
         # bounce handling: a bounced send marks the address undeliverable (blocks any
         # future send via the verification gate) and flags the lead
         bounced = any(m.get("bounce") for m in msgs if not apollo_send.is_inbound(m))
@@ -862,6 +869,18 @@ def inbox_thread(campaign: str, thread_id: str):
     lead_email = next((x["to"] for x in msgs if x["direction"] == "out" and x.get("to")), "")
     key = _lead_directory(store, cfg["name"]).get(lead_email.lower(), {}).get("key", "") if lead_email else ""
     _fill_scheduled(store, key, msgs)
+    # Apollo's API never returns the reply message itself — only replied=True on our
+    # send. Surface the reply honestly as a marker instead of showing nothing.
+    replied_flag = any(m.get("replied") for m in raw
+                       if (m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")) == thread_id
+                       and not apollo_send.is_inbound(m))
+    if replied_flag and not any(x["direction"] == "in" for x in msgs):
+        msgs.append({
+            "id": "reply-marker", "direction": "in", "note": True, "sent": True,
+            "subject": "", "from": lead_email, "to": "",
+            "text": "They replied ✓ — Apollo’s API doesn’t share the reply text, so read it in Apollo or the sending mailbox. It’s already counted in your reply stats.",
+            "ts": (msgs[-1]["ts"] if msgs else ""),
+        })
     return {"connected": True, "messages": msgs}
 
 

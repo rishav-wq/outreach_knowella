@@ -269,7 +269,7 @@ export default function Inbox({ campaign }) {
               </div>
               <div className="thread-msgs">
                 {thread.messages.map((m) => (
-                  <div key={m.id} className={`msg ${m.direction}`}>
+                  <div key={m.id} className={`msg ${m.direction} ${m.note ? 'note' : ''}`}>
                     <div className="msg-meta">
                       {m.direction === 'in' ? current.name : 'You'} · {when(m.ts)}
                       {m.scheduled && <span className="msg-scheduled" title="Not sent yet — Apollo drip-sends the sequence. This is the copy staged to go out.">scheduled</span>}

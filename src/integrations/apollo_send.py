@@ -222,7 +222,7 @@ def sequence_stats(sequence_id: str) -> dict:
     return {}
 
 
-def list_messages(sequence_id: str, limit: int = 200) -> list[dict]:
+def list_messages(sequence_id: str, limit: int = 1000) -> list[dict]:
     """All emailer messages for a sequence (sent + received), raw from Apollo.
 
     Outbound messages carry email_account_id + type 'outreach_automatic_email';
