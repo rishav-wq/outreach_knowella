@@ -68,6 +68,12 @@ function renderCount(delta) {
   const list = $('list')
   list.hidden = captured.length === 0
   list.innerHTML = ''
+  if (captured.length > 80) {   // preview cap — everything is still captured & sent
+    const note = document.createElement('div')
+    note.style.cssText = 'color:var(--muted);font-style:italic'
+    note.textContent = `showing the 80 most recent of ${captured.length} captured — all ${captured.length} will be sent`
+    list.appendChild(note)
+  }
   for (const c of captured.slice(-80).reverse()) {
     const row = document.createElement('div')
     row.textContent = c.name || c.profile_url
@@ -100,7 +106,7 @@ function pageAgent(mode) {
     return half > 2 && s.slice(0, half).trim() === s.slice(half).trim() ? s.slice(0, half).trim() : s
   }
   // a11y/badge suffixes stack ("Jane Doe Premium Profile Following") — strip until stable
-  const suffixRe = /(\s*[•·✓].*|\s*\((He|She|They)[^)]*\)|\s+(Verified|Premium)(\s+Profile)?|\s+(Following|Follow|Author|Connect|Message)|\s+(1st|2nd|3rd\+?))$/i
+  const suffixRe = /(\s*[•·✓].*|\s*\((He|She|They)[^)]*\)|,?\s+Open to work|\s+(Verified|Premium)(\s+Profile)?|\s+(Following|Follow|Author|Connect|Message)|\s+(1st|2nd|3rd\+?))$/i
   const cleanName = (s) => {
     let out = foldDup(clean(s)), prev
     do { prev = out; out = out.replace(suffixRe, '').trim() } while (out !== prev)
