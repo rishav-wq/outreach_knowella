@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import { stagger } from './anim'
+import { avatarTint, initials } from './avatar'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
@@ -97,7 +98,7 @@ export default function LeadsLibrary() {
             <motion.tbody variants={stagger} initial="hidden" animate="show">
               {shown.map((l) => (
                 <motion.tr key={l.key} variants={rowVar}>
-                  <td><div className="avatar sm">{(l.name || '?').slice(0, 1)}</div></td>
+                  <td><div className="avatar sm" style={avatarTint(l.name)}>{initials(l.name)}</div></td>
                   <td>{l.name || '—'}</td>
                   <td className="muted">{l.title || '—'}</td>
                   <td>{l.company || '—'}</td>

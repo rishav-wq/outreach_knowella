@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import { fadeUp, stagger } from './anim'
+import { avatarTint, initials } from './avatar'
 
 // Multi-select mailbox dropdown: tick one or more of the Apollo mailboxes and the
 // inbox combines exactly those. Empty selection = all mailboxes.
@@ -210,7 +211,7 @@ export default function Inbox({ campaign }) {
               {items.map((it) => (
                 <motion.button key={it.thread_id} variants={fadeUp}
                   className={`inbox-item ${it.thread_id === sel ? 'sel' : ''}`} onClick={() => setSel(it.thread_id)}>
-                  <div className="avatar sm">{(it.name || '?').slice(0, 1)}</div>
+                  <div className="avatar sm" style={avatarTint(it.name)}>{initials(it.name)}</div>
                   <div className="inbox-item-main">
                     <div className="inbox-item-top">
                       <span className="nm">{it.name}{it.unread && <span className="unread-dot" />}</span>

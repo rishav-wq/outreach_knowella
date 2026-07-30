@@ -367,12 +367,13 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .fn-operations { background: var(--info-tint); color: var(--info); }
 .fn-other { background: #e6ecf1; color: var(--muted); }
 
+/* the main app's avatar: round pastel tint, initials in the same hue */
 .avatar {
-  width: 30px; height: 30px; border-radius: 8px; background: var(--ink); color: var(--signal);
-  display: grid; place-items: center; font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+  width: 30px; height: 30px; border-radius: 50%; background: var(--signal-pill); color: var(--signal);
+  display: grid; place-items: center; font-weight: 600; font-size: 12px;
   text-transform: uppercase; flex-shrink: 0;
 }
-.avatar.sm { width: 26px; height: 26px; font-size: 11px; }
+.avatar.sm { width: 26px; height: 26px; font-size: 10.5px; }
 
 /* ---------- leads: import + table ---------- */
 .import-bar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }

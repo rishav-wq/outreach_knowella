@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
+import { avatarTint, initials } from './avatar'
 
 // Right slideout: full detail for one lead — email, facts, sending info, actions.
 export default function Drawer({ campaign, leadKey, onClose, onChange, onDecided }) {
@@ -74,7 +75,7 @@ export default function Drawer({ campaign, leadKey, onClose, onChange, onDecided
           <>
             <div className="drawer-head">
               <div className="drawer-who">
-                <div className="avatar">{(d.name || '?').slice(0, 1)}</div>
+                <div className="avatar" style={avatarTint(d.name)}>{initials(d.name)}</div>
                 <div>
                   <div className="drawer-name">{d.name}</div>
                   <div className="drawer-co">{d.company}</div>

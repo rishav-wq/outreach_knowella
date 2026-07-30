@@ -7,20 +7,7 @@ import { stagger, tap } from './anim'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
-// Monogram avatars in Knowella's palette: violet-led (the brand primary) with green + amber
-// accents from the pinwheel; a stable color per name so people read as distinct. Teal
-// (#04b492) is left out — it's reserved for verify/approve semantics.
-const AVATAR_COLORS = ['#6e63ff', '#4f46e5', '#7c3aed', '#3ea35c', '#d99b00']
-const initials = (name) => {
-  const p = (name || '').trim().split(/\s+/).filter(Boolean)
-  if (!p.length) return '?'
-  return (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase()
-}
-const avatarColor = (name) => {
-  let h = 0
-  for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return AVATAR_COLORS[h % AVATAR_COLORS.length]
-}
+import { avatarTint, initials } from './avatar'
 
 // Where leads come in and live. Apollo is the primary source (pulled directly by
 // the campaign's ICP); CSV import stays for any hand-built or external list.
@@ -219,7 +206,7 @@ export default function Leads({ campaign, onNavigate }) {
               <motion.tr key={l.key} variants={rowVar} className={sel.has(l.key) ? 'row-sel' : ''}>
                 <td className="chk-col"><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggleSel(l.key)} /></td>
                 <td className="muted" title={l.pulled_at ? new Date(l.pulled_at).toLocaleString() : 'pulled before dates were tracked'}>{fmtDate(l.pulled_at)}</td>
-                <td><div className="avatar sm" style={{ background: avatarColor(l.name), color: '#fff' }}>{initials(l.name)}</div></td>
+                <td><div className="avatar sm" style={avatarTint(l.name)}>{initials(l.name)}</div></td>
                 <td>{l.name}</td>
                 <td className="muted">{l.title || '—'}</td>
                 <td>{l.company}</td>
