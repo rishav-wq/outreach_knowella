@@ -378,6 +378,7 @@ async function init() {
   $('token').value = cfg.token
   if (!cfg.appUrl || !cfg.token) document.body.classList.add('setup')
   else { await loadCampaigns() }
+  if (cfg.appUrl) $('appLink').href = cfg.appUrl   // the eyebrow opens the app
 
   const tab = await activeTab()
   if (tab) { tabId = tab.id; await loadState() }

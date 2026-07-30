@@ -3,8 +3,20 @@
   "name": "Knowella Outreach — LinkedIn Capture",
   "version": "0.1.0",
   "description": "Capture the commenters of a LinkedIn post you're viewing into a Knowella Outreach campaign. Reads the page only when you click Scan — no background access, no automation.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
-    "default_title": "Capture commenters into Knowella Outreach"
+    "default_title": "Capture commenters into Knowella Outreach",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "side_panel": {
     "default_path": "popup.html"
