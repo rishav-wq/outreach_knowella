@@ -273,6 +273,7 @@ export default function Inbox({ campaign }) {
                     <div className="msg-meta">
                       {m.direction === 'in' ? current.name : 'You'} · {when(m.ts)}
                       {m.scheduled && <span className="msg-scheduled" title="Not sent yet — Apollo drip-sends the sequence. This is the copy staged to go out.">scheduled</span>}
+                      {m.restored && <span className="msg-scheduled" title="Apollo truncates a message's stored body once the thread is replied to — this is the exact copy you sent.">full copy</span>}
                     </div>
                     <pre className="msg-text">{m.text || '(no text body)'}</pre>
                   </div>

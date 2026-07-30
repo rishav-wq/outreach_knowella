@@ -691,10 +691,16 @@ def _fill_scheduled(store, lead_key: str, msgs: list[dict]) -> None:
         if m.get("direction") != "out":
             continue
         step += 1
-        if m.get("sent"):                       # already gone out — never mask its real content
+        staged = (ob.get("body") if step == 1 else ob.get(f"body_{step}", "")) or ""
+        if m.get("sent"):
+            # Apollo TRUNCATES the stored body once a thread is replied to (live-verified:
+            # every body field cut mid-sentence). When our sent copy is clearly longer,
+            # show it — visibly tagged, so a genuinely broken send is never masked.
+            if m.get("text") and staged and len(staged) > len(m["text"]) + 20:
+                m["text"] = staged
+                m["restored"] = True
             continue
         if not m.get("text"):
-            staged = ob.get("body") if step == 1 else ob.get(f"body_{step}", "")
             if staged:
                 m["text"] = staged
                 m["scheduled"] = True           # a preview of a not-yet-sent message
