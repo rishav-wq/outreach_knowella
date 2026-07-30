@@ -62,27 +62,52 @@ function msg(text, cls = '') {
 function scrapeComments() {
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim()
   const items = []
+  // Layered selectors: classic class names + LinkedIn's newer data-view-name markup
+  // (they're rolling out obfuscated classes, so attributes are the stabler hook).
   const containers = document.querySelectorAll(
-    'article[class*="comments-comment"], div[class*="comments-comment-entity"], div[class*="comments-comment-item"]')
+    'article[class*="comments-comment"], div[class*="comments-comment-entity"], div[class*="comments-comment-item"], ' +
+    '[data-view-name*="comment-entity"], [data-view-name="comment"], [data-view-name*="comments-comment"]')
   for (const el of containers) {
-    const cls = el.className || ''
+    const cls = String(el.className || '')
     if (/comment-box|texteditor|comment-social/.test(cls)) continue   // the reply editor, not a comment
     const a = el.querySelector('a[href*="/in/"]')
     if (!a) continue
     const href = (a.href || '').split('?')[0].split('#')[0]
     if (!href.includes('/in/')) continue
     const nameEl = el.querySelector('[class*="description-title"], [class*="actor-name"], [class*="__name"]')
-    let name = clean(nameEl ? nameEl.textContent : a.textContent)
+    // anchor text lines (new markup has no name/headline classes): ["Jane Doe", "• 3rd+", "Headline…"]
+    const lines = (a.innerText || '').split('\n').map(clean).filter(Boolean)
+    let name = clean(nameEl ? nameEl.textContent : (lines[0] || a.textContent))
     // LinkedIn duplicates names via aria spans ("Jane DoeJane Doe") — fold them
     const half = Math.floor(name.length / 2)
     if (half > 2 && name.slice(0, half).trim() === name.slice(half).trim()) name = name.slice(0, half).trim()
     name = name.replace(/\s*[•·].*$/, '').replace(/\s*\((He|She|They)[^)]*\)/i, '')
                .replace(/\s*(1st|2nd|3rd\+?|Author|Premium)\s*$/i, '').trim()
     const headEl = el.querySelector('[class*="description-subtitle"], [class*="actor-headline"], [class*="__headline"]')
-    const headline = clean(headEl ? headEl.textContent : '')
+    let headline = clean(headEl ? headEl.textContent : '')
+    if (!headline) {   // fallback: the longest non-name, non-badge line of the anchor block
+      headline = lines.slice(1).find((l) => l.length > 12 &&
+        !/^[•·]|^(1st|2nd|3rd\+?|Author|Following|Premium|Verified)/i.test(l) && l !== name) || ''
+    }
     items.push({ name, profile_url: href, headline })
   }
-  return { url: location.href.split('?')[0], found: items, blocks: containers.length }
+  const out = { url: location.href.split('?')[0], found: items, blocks: containers.length }
+  if (!containers.length) {
+    // Debug probe: what does comment markup look like HERE? Shown in the panel so
+    // selector updates never need guesswork.
+    const dbg = { viewNames: {}, classes: {}, profileLinks: document.querySelectorAll('a[href*="/in/"]').length }
+    document.querySelectorAll('[data-view-name]').forEach((e) => {
+      const v = e.getAttribute('data-view-name') || ''
+      if (/comment/i.test(v)) dbg.viewNames[v] = (dbg.viewNames[v] || 0) + 1
+    })
+    document.querySelectorAll('[class*="omment"]').forEach((e) => {
+      String(e.className).split(/\s+/).forEach((c) => {
+        if (/omment/i.test(c)) dbg.classes[c] = (dbg.classes[c] || 0) + 1
+      })
+    })
+    out.debug = dbg
+  }
+  return out
 }
 
 // ---------- actions ----------
@@ -108,6 +133,15 @@ async function scan() {
   }
   if (!res || res.blocks === 0) {
     msg('No comment blocks found. Open the post itself and expand its comments — or LinkedIn changed its markup (the extension needs a selector update).', 'err')
+    if (res?.debug) {   // show what the page's comment markup actually looks like
+      const list = $('list')
+      list.hidden = false
+      const pre = document.createElement('div')
+      pre.style.cssText = 'white-space:pre-wrap;font-family:monospace;font-size:10.5px;user-select:text'
+      pre.textContent = 'DEBUG (copy this):\n' + JSON.stringify(res.debug, null, 1)
+      list.innerHTML = ''
+      list.appendChild(pre)
+    }
     return
   }
   postUrl = res.url
