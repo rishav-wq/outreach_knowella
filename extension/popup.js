@@ -15,6 +15,7 @@ let tabId = null
 let captured = []          // [{name, profile_url, headline}] accumulated across scans
 let postUrl = ''
 let watching = false
+let lockActivity = ''      // capture locks to the post scanned FIRST; Clear list unlocks
 
 const norm = (u) => (u || '').toLowerCase().split('?')[0].split('#')[0]
   .replace('https://', '').replace('http://', '').replace(/^www\./, '').replace(/\/$/, '')
@@ -26,19 +27,30 @@ const loadState = async () => {
   const s = d[sessionKey()]
   captured = s?.items || []
   postUrl = s?.postUrl || ''
+  lockActivity = s?.lock || ''
   renderCount(0)
 }
 const saveState = () =>
-  chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl } })
+  chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl, lock: lockActivity } })
 
-// merge a scrape result into the accumulated list; returns how many were new
+// merge a scrape result into the accumulated list; returns how many were new.
+// The first batch with activity ids locks capture to that post (majority id), so
+// scrolling past other feed posts never sweeps in their commenters.
 function mergeFound(found) {
+  if (!lockActivity) {
+    const counts = {}
+    for (const c of found || []) if (c.activity) counts[c.activity] = (counts[c.activity] || 0) + 1
+    lockActivity = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || [])[0] || ''
+  }
   const known = new Set(captured.map((c) => norm(c.profile_url)))
   let added = 0
   for (const c of found || []) {
+    if (lockActivity && c.activity && c.activity !== lockActivity) continue   // another post's comment
     const k = norm(c.profile_url)
     if (!k || known.has(k)) continue
-    known.add(k); captured.push(c); added++
+    known.add(k)
+    captured.push({ name: c.name, profile_url: c.profile_url, headline: c.headline })
+    added++
   }
   return added
 }
@@ -46,7 +58,10 @@ function mergeFound(found) {
 // ---------- UI ----------
 function renderCount(delta) {
   $('n').textContent = captured.length
-  $('delta').textContent = delta > 0 ? `+${delta} new` : (captured.length ? (watching ? 'auto-scanning — just scroll' : 'scroll & scan again to add more') : '')
+  $('delta').textContent = delta > 0 ? `+${delta} new` : (captured.length
+    ? (watching ? 'auto-scanning — just scroll' : 'scroll & scan again to add more')
+      + (lockActivity ? ' · locked to this post (Clear list to switch)' : '')
+    : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
   $('send').textContent = `Send ${captured.length} to campaign`
@@ -84,14 +99,13 @@ function pageAgent(mode) {
     const half = Math.floor(s.length / 2)
     return half > 2 && s.slice(0, half).trim() === s.slice(half).trim() ? s.slice(0, half).trim() : s
   }
-  const cleanName = (s) => foldDup(clean(s)).replace(/\s*[•·✓].*$/, '')
-    .replace(/\s*\((He|She|They)[^)]*\)/i, '')
-    .replace(/\s*(Verified|Premium)(\s+Profile)?\s*$/i, '')     // a11y suffix: "Jane Doe Verified Profile"
-    .replace(/\s*(1st|2nd|3rd\+?|Author|Premium)\s*$/i, '').trim()
-
-  // the post this page is about (post pages + highlighted-update views carry it);
-  // comments name their post in componentkey, so we can drop other posts' comments.
-  const pageActivity = (decodeURIComponent(location.href).match(/activity[:%](\d{8,})/) || [])[1] || ''
+  // a11y/badge suffixes stack ("Jane Doe Premium Profile Following") — strip until stable
+  const suffixRe = /(\s*[•·✓].*|\s*\((He|She|They)[^)]*\)|\s+(Verified|Premium)(\s+Profile)?|\s+(Following|Follow|Author|Connect|Message)|\s+(1st|2nd|3rd\+?))$/i
+  const cleanName = (s) => {
+    let out = foldDup(clean(s)), prev
+    do { prev = out; out = out.replace(suffixRe, '').trim() } while (out !== prev)
+    return out
+  }
 
   function scrape() {
     const items = []
@@ -102,10 +116,11 @@ function pageAgent(mode) {
     for (const el of containers) {
       const cls = String(el.className || '')
       if (/comment-box|texteditor|comment-social/.test(cls)) continue   // the reply editor, not a comment
-      // scope to THIS post: a comment's componentkey carries its activity id
+      // a comment's componentkey names its post's activity id — reported per item so the
+      // panel can lock capture to ONE post (URL activity ids are unreliable: share URNs
+      // differ from the comments' original-post URNs)
       const ck = el.getAttribute('componentkey') || ''
       const ckActivity = (ck.match(/activity[:%](\d{8,})/) || [])[1] || ''
-      if (pageActivity && ckActivity && ckActivity !== pageActivity) continue
       const a = el.querySelector('a[href*="/in/"]')
       if (!a) continue
       const href = (a.href || '').split('?')[0].split('#')[0]
@@ -125,7 +140,7 @@ function pageAgent(mode) {
         headline = pool.slice(iName + 1, iName + 6).find((l) =>
           l.length > 11 && !badgeRe.test(l) && cleanName(l) !== name && !name.startsWith(cleanName(l))) || ''
       }
-      items.push({ name, profile_url: href, headline })
+      items.push({ name, profile_url: href, headline, activity: ckActivity })
     }
     return items
   }
@@ -315,7 +330,7 @@ async function init() {
   $('scan').onclick = scan
   $('watch').onclick = toggleWatch
   $('send').onclick = send
-  $('clear').onclick = async () => { captured = []; await saveState(); renderCount(0); msg('') }
+  $('clear').onclick = async () => { captured = []; lockActivity = ''; await saveState(); renderCount(0); msg('') }
 }
 
 init()
