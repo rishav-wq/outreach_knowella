@@ -29,7 +29,7 @@ const apiForm = (p, fd) =>
 
 export const getCampaigns = () => apiGet('/api/campaigns')
 export const createCampaign = (payload) => apiSend('/api/campaigns', 'POST', payload)
-export const getStatus = (c) => apiGet(`/api/status?campaign=${encodeURIComponent(c)}`)
+export const getStatus = (c, light = false) => apiGet(`/api/status?campaign=${encodeURIComponent(c)}${light ? '&light=1' : ''}`)
 export const getLeads = (c) => apiGet(`/api/leads?campaign=${encodeURIComponent(c)}`)
 export const getReview = (c) => apiGet(`/api/review?campaign=${encodeURIComponent(c)}`)
 export const getBoard = (c) => apiGet(`/api/board?campaign=${encodeURIComponent(c)}`)

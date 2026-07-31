@@ -267,7 +267,25 @@ def sequence_stats(sequence_id: str) -> dict:
     return {}
 
 
+# Sequence messages are paginated 50/call — a 500-message sequence costs 10 sequential
+# HTTP round trips, which made the Inbox crawl on EVERY visit. Short-lived cache: the
+# Inbox, thread view and analytics all reuse one fetch; 45s staleness is invisible
+# against Apollo's own minutes-long delivery cadence.
+_msg_cache: dict[str, tuple[float, list]] = {}
+_MSG_TTL = 45.0
+
+
 def list_messages(sequence_id: str, limit: int = 1000) -> list[dict]:
+    import time as _time
+    hit = _msg_cache.get(sequence_id)
+    if hit and _time.time() - hit[0] < _MSG_TTL:
+        return hit[1][:limit]
+    out = _fetch_messages(sequence_id, limit)
+    _msg_cache[sequence_id] = (_time.time(), out)
+    return out
+
+
+def _fetch_messages(sequence_id: str, limit: int = 1000) -> list[dict]:
     """All emailer messages for a sequence (sent + received), raw from Apollo.
 
     Outbound messages carry email_account_id + type 'outreach_automatic_email';

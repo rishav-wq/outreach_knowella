@@ -197,18 +197,24 @@ class MongoStore:
         return {d["_id"]: d["c"] for d in agg}
 
     def lead_summaries(self, campaign: str) -> list[dict]:
+        # projection + raw dicts, no Pydantic — this backs the Leads tab AND the
+        # Inbox's lead directory, both of which list hundreds of rows
+        proj = {"status": 1, "error": 1, "pulled_at": 1, "lead.first_name": 1,
+                "lead.last_name": 1, "lead.title": 1, "lead.company": 1,
+                "lead.email": 1, "lead.source": 1, "lead.raw.id": 1}
         out = []
-        for d in self.db.leads.find({"campaign": campaign}):
-            lead = Lead.model_validate(d["lead"])
-            out.append({"key": d["_id"], "status": d["status"], "name": lead.full_name,
-                        "company": lead.company, "title": lead.title, "email": lead.email,
-                        "source": lead.source,
+        for d in self.db.leads.find({"campaign": campaign}, proj):
+            L = d.get("lead") or {}
+            out.append({"key": d["_id"], "status": d.get("status", ""),
+                        "name": f"{L.get('first_name', '')} {L.get('last_name', '')}".strip(),
+                        "company": L.get("company", ""), "title": L.get("title", ""),
+                        "email": L.get("email", ""), "source": L.get("source", ""),
                         # why the last pipeline attempt failed ('' when it didn't)
                         "error": d.get("error") or "",
                         # when the lead was first pulled in (None for leads pulled before this was tracked)
                         "pulled_at": d["pulled_at"].isoformat() if d.get("pulled_at") else None,
                         # Apollo person id — lets the UI offer "find more like this" (lookalike seed)
-                        "apollo_id": (lead.raw or {}).get("id") or ""})
+                        "apollo_id": (L.get("raw") or {}).get("id") or ""})
         return out
 
     def save_lead_error(self, key: str, reason: str) -> None:
@@ -313,6 +319,42 @@ class MongoStore:
              "verdict": verdict, "edited": False, "variant": variant},
             upsert=True,
         )
+
+    @staticmethod
+    def _shape_outbox(d: dict) -> dict:
+        out = {"subject": d["subject"], "body": d["body"], "angle": d.get("angle", ""),
+               "verdict": d["verdict"], "edited": bool(d.get("edited", False)),
+               "variant": d.get("variant", "signal"), "fu_hash": d.get("fu_hash", "")}
+        for k, v in d.items():
+            if (k.startswith("subject_") or k.startswith("body_")) and k.rsplit("_", 1)[-1].isdigit():
+                out[k] = v or ""
+        return out
+
+    def get_outboxes(self, keys: list[str]) -> dict:
+        """{key: shaped outbox} in ONE query — per-key lookups over a remote Mongo
+        turned the Review/Inbox tabs into thousands of sequential round trips."""
+        if not keys:
+            return {}
+        return {d["_id"]: self._shape_outbox(d) for d in self.db.outbox.find({"_id": {"$in": keys}})}
+
+    def get_reviews(self, keys: list[str]) -> dict:
+        if not keys:
+            return {}
+        return {d["_id"]: d.get("decision", "") for d in self.db.reviews.find({"_id": {"$in": keys}})}
+
+    def get_verifies(self, emails: list[str]) -> dict:
+        if not emails:
+            return {}
+        return {d["_id"]: d.get("status", "") for d in self.db.verify.find({"_id": {"$in": emails}})}
+
+    def get_research_facts(self, keys: list[str]) -> dict:
+        """{key: [raw fact dicts]} in one query, no Pydantic — display only."""
+        if not keys:
+            return {}
+        out = {}
+        for d in self.db.research.find({"_id": {"$in": keys}}, {"data.facts": 1}):
+            out[d["_id"]] = ((d.get("data") or {}).get("facts")) or []
+        return out
 
     def get_outbox(self, key: str) -> dict | None:
         d = self.db.outbox.find_one({"_id": key})

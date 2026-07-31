@@ -81,9 +81,10 @@ export default function App({ onHome }) {
 
   useEffect(() => {
     if (!campaign) return
-    api.getStatus(campaign).then(setStatus).catch(() => {})
+    api.getStatus(campaign, true).then(setStatus).catch(() => {})
     // keep the header pills honest while sends run: sent count + Apollo quota move live
-    const t = setInterval(() => api.getStatus(campaign).then(setStatus).catch(() => {}), 15000)
+    // (light: the header never shows tokens, so skip that aggregation every tick)
+    const t = setInterval(() => api.getStatus(campaign, true).then(setStatus).catch(() => {}), 15000)
     return () => clearInterval(t)
   }, [campaign, tab])
   useEffect(() => {

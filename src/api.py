@@ -536,7 +536,9 @@ def set_campaign_mailbox(m: MailboxSet):
 
 
 @app.get("/api/status")
-def status(campaign: str):
+def status(campaign: str, light: bool = False):
+    """light=1: skip the token aggregation — the header polls this every 15s and
+    its pills don't show tokens; the full version is for the Overview."""
     cfg = _load(campaign)
     store = open_store()
     send_cfg = cfg.get("sending") or {}
@@ -554,7 +556,7 @@ def status(campaign: str):
     sendable = not send_block
     return {
         "counts": store.counts(cfg["name"]),
-        "tokens": store.token_totals(cfg["name"]),
+        "tokens": {} if light else store.token_totals(cfg["name"]),
         "sendable": sendable,
         "send_block": send_block,
         "mailbox_id": mailbox_ids[0] if mailbox_ids else "",
@@ -644,15 +646,23 @@ def review(campaign: str):
     require_deliverable = bool((cfg.get("verify") or {}).get("require_deliverable"))
     signature = personalize.signature_text(cfg)   # appended to every send; shown as a footer
     verbatim = pipeline._is_verbatim(cfg)   # AI off + template: shown as-is, no A/B badge
+    # batched lookups: per-lead queries over a remote Mongo made a 483-deep queue
+    # cost ~2,000 sequential round trips
+    leads = store.leads(cfg["name"], "queued")
+    keys = [l.key for l in leads]
+    outboxes = store.get_outboxes(keys)
+    decisions = store.get_reviews(keys)
+    facts_map = store.get_research_facts(keys)
+    verifies = store.get_verifies([l.email for l in leads if l.email])
     out = []
-    for lead in store.leads(cfg["name"], "queued"):
-        ob = store.get_outbox(lead.key)
+    for lead in leads:
+        ob = outboxes.get(lead.key)
         if not ob:
             continue
-        res = store.get_research_any(lead.key)
-        facts = [{"claim": f.claim, "quote": f.quote, "source_url": f.source_url,
-                  "source_type": f.source_type, "published": f.published}
-                 for f in (res.facts if res else [])]
+        facts = [{"claim": f.get("claim", ""), "quote": f.get("quote", ""),
+                  "source_url": f.get("source_url", ""), "source_type": f.get("source_type", ""),
+                  "published": f.get("published")}
+                 for f in facts_map.get(lead.key, [])]
         out.append({
             "key": lead.key, "name": lead.full_name, "company": lead.company,
             "title": lead.title, "source": lead.source,
@@ -663,10 +673,10 @@ def review(campaign: str):
                           for n in sorted(int(k.rsplit("_", 1)[-1]) for k in ob
                                           if k.startswith("body_") and k.rsplit("_", 1)[-1].isdigit())
                           if ob.get(f"body_{n}")],
-            "facts": facts, "decision": store.get_review(lead.key) or "",
+            "facts": facts, "decision": decisions.get(lead.key, ""),
             "edited": bool(ob.get("edited")),
             "email": lead.email,
-            "verify": (store.get_verify(lead.email) or "") if lead.email else "",
+            "verify": verifies.get(lead.email, "") if lead.email else "",
             "verify_active": verify_active, "require_deliverable": require_deliverable,
         })
     return out
@@ -810,6 +820,10 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
     for m in raw:
         cid = m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")
         convs.setdefault(cid, []).append(m)
+    # batched: per-conversation outbox/meeting lookups were 2 round trips × N convos
+    all_keys = [v["key"] for v in directory.values() if v.get("key")]
+    outboxes = store.get_outboxes(all_keys)
+    met = store.meeting_keys(all_keys)
     items = []
     for cid, msgs in convs.items():
         msgs.sort(key=lambda m: m.get("created_at") or "")
@@ -836,7 +850,7 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
                 store.set_status(who["key"], "bounced")
         # scheduled sends aren't rendered by Apollo yet — fall back to our staged copy so the
         # list shows the subject/snippet instead of "(no subject)"/blank.
-        ob = store.get_outbox(who["key"]) if who.get("key") else None
+        ob = outboxes.get(who.get("key"))
         out_steps = sum(1 for mm in msgs if not apollo_send.is_inbound(mm))
         subject = (first_out or last).get("subject") or (ob or {}).get("subject") or "(no subject)"
         snippet = _msg_text(last)
@@ -844,7 +858,7 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
             snippet = (ob.get("body") if out_steps <= 1 else ob.get(f"body_{out_steps}", "")) or ""
         items.append({
             "bounced": bounced,
-            "meeting": bool(who.get("key")) and bool(store.meeting_keys([who["key"]])),
+            "meeting": who.get("key") in met,
             "thread_id": cid,
             "subject": subject,
             "snippet": snippet[:180],
