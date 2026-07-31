@@ -8,6 +8,7 @@ crash-safe: unchanged inputs return the stored output without re-paying for it.
 """
 from __future__ import annotations
 
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -288,8 +289,13 @@ def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_re
     try:
         return advance(store, lead, cfg, dry_run, require_review)
     except Exception as e:  # one bad lead must not kill the whole run
+        # persist WHY, or the mass-failure post-mortem is guesswork (as on 2026-07-31,
+        # when ~940 leads errored and the cause had to be inferred)
+        reason = f"{type(e).__name__}: {e}"[:500]
         store.set_status(lead.key, "error")
-        return {"lead": lead, "verdict": "error", "reason": str(e), "draft": None}
+        store.save_lead_error(lead.key, reason)
+        logging.getLogger("uvicorn.error").warning("[pipeline] %s errored: %s", lead.key, reason)
+        return {"lead": lead, "verdict": "error", "reason": reason, "draft": None}
 
 
 def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,

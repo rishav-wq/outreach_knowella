@@ -211,7 +211,7 @@ export default function Leads({ campaign, onNavigate }) {
                 <td className="muted">{l.title || '—'}</td>
                 <td>{l.company}</td>
                 <td className="muted">{l.email || '—'}</td>
-                <td><span className={`badge s-${l.status}`}>{l.status}</span></td>
+                <td><span className={`badge s-${l.status}`} title={l.status === 'error' ? (l.error || 'errored — reason not recorded (pre-fix run); retry from Overview') : undefined}>{l.status}</span></td>
               </motion.tr>
             ))}
           </motion.tbody>

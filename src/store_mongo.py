@@ -156,7 +156,10 @@ class MongoStore:
         return res.deleted_count
 
     def set_status(self, key: str, status: str) -> None:
-        self.db.leads.update_one({"_id": key}, {"$set": {"status": status}})
+        upd: dict = {"$set": {"status": status}}
+        if status != "error":
+            upd["$unset"] = {"error": ""}   # a success clears the stale failure reason
+        self.db.leads.update_one({"_id": key}, upd)
 
     def update_lead(self, lead: Lead) -> None:
         self.db.leads.update_one({"_id": lead.key}, {"$set": {"lead": lead.model_dump()}})
@@ -194,11 +197,17 @@ class MongoStore:
             out.append({"key": d["_id"], "status": d["status"], "name": lead.full_name,
                         "company": lead.company, "title": lead.title, "email": lead.email,
                         "source": lead.source,
+                        # why the last pipeline attempt failed ('' when it didn't)
+                        "error": d.get("error") or "",
                         # when the lead was first pulled in (None for leads pulled before this was tracked)
                         "pulled_at": d["pulled_at"].isoformat() if d.get("pulled_at") else None,
                         # Apollo person id — lets the UI offer "find more like this" (lookalike seed)
                         "apollo_id": (lead.raw or {}).get("id") or ""})
         return out
+
+    def save_lead_error(self, key: str, reason: str) -> None:
+        """Persist WHY a lead errored, so mass failures are diagnosable after the fact."""
+        self.db.leads.update_one({"_id": key}, {"$set": {"error": reason}})
 
     # --- research (cached by input_hash) ------------------------------------
     def get_research(self, key: str, input_hash: str) -> Research | None:
