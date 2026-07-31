@@ -159,14 +159,21 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
         store.set_status(lead.key, "invalid")
         return {"lead": lead, "verdict": "invalid", "reason": f"email {vstatus}", "draft": None}
 
-    res = ensure_research(store, lead, cfg)
+    # Verbatim mode sends the owner's template as-is — researched facts are never
+    # used (no AI draft, gate skipped, follow-ups deterministic), so don't spend a
+    # single research token. This is also what made 2026-07-31's ~940-lead burst
+    # error on rate limits: thousands of research calls whose output nobody read.
+    verbatim = _is_verbatim(cfg)
+    if verbatim:
+        res = Research()
+    else:
+        res = ensure_research(store, lead, cfg)
     store.set_status(lead.key, "researched")
 
     # A/B arm: assigned ONCE, then sticky. Changing the experiment slider only
     # affects leads that haven't been drafted yet — an already-reviewed draft never
     # silently flips arms (and regenerates) because the ratio moved.
     _ob = store.get_outbox(lead.key) or {}
-    verbatim = _is_verbatim(cfg)
     # verbatim mode has no A/B (one template for everyone) — force a single arm even for
     # leads whose stored variant predates verbatim, so nothing is mislabeled 'control'.
     variant = "signal" if verbatim else (_ob.get("variant") or variant_for(lead.key, cfg))
