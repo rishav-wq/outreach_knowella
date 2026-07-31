@@ -355,12 +355,16 @@ class MongoStore:
     def audience_leads(self, flt: dict) -> list[dict]:
         """Resolve an audience filter against the WHOLE Library, deduped by email.
 
-        flt: {topics: [..] any-match, statuses: [..], exclude_sent: bool}. Emailless
-        and suppressed people never make it in. exclude_sent drops anyone the sales
-        engine has already emailed in ANY campaign (the 'never pitched' audience).
+        flt: {topics: [..] any-match, statuses: [..], exclude_sent: bool,
+        engagement: ''|'opened'|'clicked'}. Emailless and suppressed people never make
+        it in. exclude_sent drops anyone the sales engine has already emailed in ANY
+        campaign (the 'never pitched' audience); engagement narrows to people who
+        opened/clicked a previous blast — the warm slice.
         Returns [{email, key, lead}] — lead is the full Lead for merge rendering."""
         topics = set(flt.get("topics") or [])
         statuses = set(flt.get("statuses") or [])
+        want_eng = flt.get("engagement") or ""
+        engaged = self.engagement_by_email() if want_eng else {}
         rows = list(self.db.leads.find({}))
         sent_emails = {(Lead.model_validate(d["lead"]).email or "").lower()
                        for d in rows if d.get("status") == "sent"} if flt.get("exclude_sent") else set()
@@ -374,6 +378,8 @@ class MongoStore:
                 continue
             if statuses and d.get("status") not in statuses:
                 continue
+            if want_eng and not engaged.get(email, {}).get(want_eng):
+                continue
             if self.is_suppressed(email):
                 continue
             out[email] = {"email": email, "key": d["_id"], "lead": lead}
@@ -381,6 +387,31 @@ class MongoStore:
 
     def library_topics(self) -> list[str]:
         return sorted(t for t in self.db.leads.distinct("topics") if t)
+
+    # saved audiences: named, reusable filters — resolved live at every use
+    def create_audience(self, name: str, flt: dict) -> str:
+        import uuid
+        aid = uuid.uuid4().hex[:10]
+        self.db.audiences.insert_one({"_id": aid, "name": name, "filter": flt,
+                                      "created_at": datetime.now(timezone.utc).isoformat()})
+        return aid
+
+    def list_audiences(self) -> list[dict]:
+        return list(self.db.audiences.find({}).sort("created_at", -1))
+
+    def delete_audience(self, aid: str) -> None:
+        self.db.audiences.delete_one({"_id": aid})
+
+    def engagement_by_email(self) -> dict:
+        """{email: {'opened': bool, 'clicked': bool}} from every blast's webhook events —
+        the marketing engine's intent signal, consumed by audiences and the Library."""
+        out: dict[str, dict] = {}
+        for d in self.db.blast_recipients.find({}, {"email": 1, "events": 1}):
+            ev = set(d.get("events") or [])
+            e = out.setdefault(d["email"], {"opened": False, "clicked": False})
+            e["opened"] = e["opened"] or bool({"opened", "clicked"} & ev)
+            e["clicked"] = e["clicked"] or "clicked" in ev
+        return out
 
     def create_blast(self, doc: dict) -> str:
         import uuid

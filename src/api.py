@@ -1090,10 +1090,77 @@ def all_leads():
         return _topic_cache[campaign]
 
     rows = store.all_leads()
+    engaged = store.engagement_by_email()   # marketing intent: opened/clicked any blast
     for row in rows:
         row["function"] = tagging.function_of(row.get("title", ""))
         row["topics"] = topics_for(row.get("campaign", ""), row.get("topics") or [])
+        e = engaged.get((row.get("email") or "").lower(), {})
+        row["engagement"] = "clicked" if e.get("clicked") else ("opened" if e.get("opened") else "")
     return {"leads": rows, "function_labels": tagging.FUNCTION_LABELS}
+
+
+class AudienceFilter(BaseModel):
+    topics: list[str] = []
+    statuses: list[str] = []
+    exclude_sent: bool = False
+    engagement: str = ""   # '' | 'opened' | 'clicked' — warm-slice narrowing
+
+
+class PromoteReq(BaseModel):
+    keys: list[str]
+    campaign: str
+
+
+@app.post("/api/library/promote")
+def promote_leads(r: PromoteReq):
+    """The flywheel's return path: move Library people (e.g. blast clickers) into a
+    sales campaign as fresh 'new' leads — the normal pipeline (research → draft →
+    review) takes over from there. Dedup is upsert_lead's job; suppressed skipped."""
+    cfg = _load(r.campaign)
+    store = open_store()
+    topics = tagging.topics_of(cfg)
+    added = skipped = 0
+    for key in r.keys[:500]:
+        d = store.db.leads.find_one({"_id": key})
+        if not d:
+            continue
+        lead = Lead.model_validate(d["lead"])
+        if lead.email and store.is_suppressed(lead.email):
+            skipped += 1
+            continue
+        lead.stored_key = ""   # re-key into the target campaign's scope
+        store.upsert_lead(lead, cfg["name"], topics)
+        added += 1
+    return {"added": added, "suppressed": skipped, "counts": store.counts(cfg["name"])}
+
+
+# --- saved audiences: named filters, resolved live at every use ----------------
+@app.get("/api/audiences")
+def list_audiences():
+    store = open_store()
+    out = []
+    for a in store.list_audiences():
+        out.append({"id": a["_id"], "name": a.get("name", ""), "filter": a.get("filter") or {},
+                    "count": len(store.audience_leads(a.get("filter") or {}))})
+    return out
+
+
+class AudienceCreate(BaseModel):
+    name: str
+    filter: AudienceFilter
+
+
+@app.post("/api/audiences")
+def create_audience(r: AudienceCreate):
+    if not r.name.strip():
+        raise HTTPException(400, "name is required")
+    return {"id": open_store().create_audience(r.name.strip(), r.filter.model_dump())}
+
+
+@app.delete("/api/audiences/{aid}")
+def delete_audience(aid: str):
+    open_store().delete_audience(aid)
+    return {"ok": True}
 
 
 class LeadEmail(BaseModel):
@@ -1312,12 +1379,6 @@ def marketing_test(r: MarketingTest):
     if first.get("ErrorCode"):
         raise HTTPException(502, f"Postmark rejected it: {first.get('Message')}")
     return {"ok": True, "message_id": first.get("MessageID", "")}
-
-
-class AudienceFilter(BaseModel):
-    topics: list[str] = []
-    statuses: list[str] = []
-    exclude_sent: bool = False
 
 
 class BlastBody(BaseModel):

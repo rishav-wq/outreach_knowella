@@ -115,6 +115,19 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .brand-sub { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint); margin-left: -1px; padding-top: 3px; }
 .topbar-user { display: flex; align-items: center; flex: none; }
 
+/* the engine switcher — Sales / Marketing, the product's workspace-switch pattern */
+.mode-seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 8px 4px 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px;
+}
+.mode-seg button {
+  border: none; background: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--muted); padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.mode-seg button:hover { color: var(--signal); }
+.mode-seg button.on { background: var(--signal-pill); color: var(--signal); }
+
 .side-campaign { padding: 10px 4px 4px; }
 .side-campaign label {
   display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase;
@@ -429,6 +442,10 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .mkt-side .list > div { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mkt-side .list > div:last-child { border-bottom: none; }
 .mkt-side .list span { color: var(--muted); font-weight: 400; }
+.mkt-aud-opts { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+.mkt-aud-count { font-size: 12px; color: var(--muted); margin-right: 6px; }
+.mkt-aud-count b { font-size: 16px; color: var(--ink); margin-right: 3px; }
+.lib-promote { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-2); }
 .mkt-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
 .mkt-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .mkt-card-actions { display: flex; align-items: center; gap: 6px; flex: none; }

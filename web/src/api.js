@@ -62,6 +62,11 @@ export const updateBlast = (id, b) => apiSend(`/api/blasts/${encodeURIComponent(
 export const deleteBlast = (id) => apiSend(`/api/blasts/${encodeURIComponent(id)}`, 'DELETE', {})
 export const testBlast = (id, to) => apiSend(`/api/blasts/${encodeURIComponent(id)}/test`, 'POST', { to })
 export const sendBlast = (id) => apiSend(`/api/blasts/${encodeURIComponent(id)}/send`, 'POST', {})
+export const listAudiences = () => apiGet('/api/audiences')
+export const createAudience = (name, filter) => apiSend('/api/audiences', 'POST', { name, filter })
+export const deleteAudience = (id) => apiSend(`/api/audiences/${encodeURIComponent(id)}`, 'DELETE', {})
+// the flywheel's return path: Library people -> a sales campaign as fresh leads
+export const promoteLeads = (keys, campaign) => apiSend('/api/library/promote', 'POST', { keys, campaign })
 // LinkedIn-capture token for the browser extension (hash-stored; shown once on create)
 export const getCaptureToken = () => apiGet('/api/capture_token')
 export const createCaptureToken = () => apiSend('/api/capture_token', 'POST', {})

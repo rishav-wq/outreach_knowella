@@ -8,26 +8,38 @@ import Review from './components/Review'
 import Leads from './components/Leads'
 import LeadsLibrary from './components/LeadsLibrary'
 import Marketing from './components/Marketing'
+import Audiences from './components/Audiences'
 import Inbox from './components/Inbox'
 import Settings from './components/Settings'
 import NewCampaign from './components/NewCampaign'
 import { UserMenu } from './auth'
 import { pageTransition } from './components/anim'
 
-// The nav IS the campaign lifecycle — a real sequence, so it's numbered like one:
-// see where things stand → fill the list → sign off drafts → work the replies.
-// Settings sits outside the sequence (operational, not lifecycle) — unnumbered.
-const NAV = [
+// TWO MODES, one shell — like the product's workspace switcher. Sales is
+// campaign-scoped (picker + the numbered lifecycle); Marketing is Library-scoped
+// (blasts + audiences). Library & Settings are shared: the Library is the bridge
+// between the engines (sales exhaust → marketing fuel → warm clicks → sales).
+const SALES_NAV = [
   { id: 'Overview', slug: 'overview', icon: 'dashboard', step: '01' },
   { id: 'Leads', slug: 'leads', icon: 'users', step: '02' },
   { id: 'Review', slug: 'review', icon: 'check', step: '03' },
   { id: 'Inbox', slug: 'inbox', icon: 'inbox', step: '04' },
-  // Library + Marketing + Settings sit outside the per-campaign lifecycle — cross-campaign / operational, unnumbered.
-  { id: 'Library', slug: 'library', icon: 'list' },
-  { id: 'Marketing', slug: 'marketing', icon: 'upload' },
-  { id: 'Settings', slug: 'settings', icon: 'gear' },
 ]
-const slugToId = (slug) => (NAV.find((n) => n.slug === slug) || NAV[0]).id
+const MKT_NAV = [
+  { id: 'Blasts', slug: 'blasts', icon: 'upload' },
+  { id: 'Audiences', slug: 'audiences', icon: 'users' },
+]
+const SHARED_NAV = [
+  { id: 'Library', slug: 'library', icon: 'list', shared: true },
+  { id: 'Settings', slug: 'settings', icon: 'gear', shared: true },
+]
+const NAV = [...SALES_NAV, ...MKT_NAV, ...SHARED_NAV]
+const MKT_IDS = new Set(MKT_NAV.map((n) => n.id))
+const SALES_IDS = new Set(SALES_NAV.map((n) => n.id))
+const slugToId = (slug) => {
+  if (slug === 'marketing') return 'Blasts'   // legacy URL from phase 1
+  return (NAV.find((n) => n.slug === slug) || NAV[0]).id
+}
 const idToSlug = (id) => (NAV.find((n) => n.id === id) || NAV[0]).slug
 const tabFromHash = () => slugToId((window.location.hash.split('/')[2] || '').toLowerCase())
 
@@ -35,6 +47,7 @@ export default function App({ onHome }) {
   const [campaigns, setCampaigns] = useState(null) // null = still loading
   const [campaign, setCampaign] = useState('')
   const [tab, setTabState] = useState(tabFromHash)
+  const [mode, setMode] = useState(() => (MKT_IDS.has(tabFromHash()) ? 'marketing' : 'sales'))
   const [status, setStatus] = useState({})         // counts + guardrails: feeds nav counts + register
   const [sendFrom, setSendFrom] = useState('')     // which mailbox this campaign sends from
   const [error, setError] = useState('')
@@ -50,6 +63,12 @@ export default function App({ onHome }) {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+  // mode follows the tab (shared tabs keep the current mode)
+  useEffect(() => {
+    if (MKT_IDS.has(tab)) setMode('marketing')
+    else if (SALES_IDS.has(tab)) setMode('sales')
+  }, [tab])
+  const switchMode = (m) => { setMode(m); setTab(m === 'marketing' ? 'Blasts' : 'Overview') }
 
   useEffect(() => {
     api.getCampaigns()
@@ -84,8 +103,9 @@ export default function App({ onHome }) {
     if (tab === 'Leads') return <Leads campaign={campaign} onNavigate={setTab} />
     if (tab === 'Review') return <Review campaign={campaign} />
     if (tab === 'Inbox') return <Inbox campaign={campaign} />
-    if (tab === 'Library') return <LeadsLibrary />
-    if (tab === 'Marketing') return <Marketing />
+    if (tab === 'Library') return <LeadsLibrary onPromoted={() => api.getStatus(campaign).then(setStatus).catch(() => {})} />
+    if (tab === 'Blasts') return <Marketing />
+    if (tab === 'Audiences') return <Audiences />
     if (tab === 'Settings') return <Settings campaign={campaign} />
     return null
   }
@@ -133,6 +153,13 @@ export default function App({ onHome }) {
 
       <div className="shell">
       <aside className="sidebar">
+        {/* the engine switcher — the product's workspace-switch pattern */}
+        <div className="mode-seg" role="tablist" aria-label="Engine">
+          <button role="tab" aria-selected={mode === 'sales'} className={mode === 'sales' ? 'on' : ''} onClick={() => switchMode('sales')}>Sales</button>
+          <button role="tab" aria-selected={mode === 'marketing'} className={mode === 'marketing' ? 'on' : ''} onClick={() => switchMode('marketing')}>Marketing</button>
+        </div>
+
+        {mode === 'sales' && (
         <div className="side-campaign">
           <label htmlFor="campaign-select">Campaign</label>
           {campaigns?.length > 0 && (
@@ -150,14 +177,15 @@ export default function App({ onHome }) {
             <Icon name="plus" size={14} /> New campaign
           </button>
         </div>
+        )}
 
         <nav className="nav">
-          {NAV.map((n) => {
+          {[...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...SHARED_NAV].map((n) => {
             // live register per lifecycle stage: what's waiting at each step
             const total = Object.values(counts).reduce((a, b) => a + b, 0)
             const navCount = n.id === 'Review' ? queued : n.id === 'Leads' ? total : 0
             return (
-              <button key={n.id} className={`nav-item ${n.id === tab ? 'active' : ''} ${n.step ? '' : 'nav-op'}`} onClick={() => setTab(n.id)}>
+              <button key={n.id} className={`nav-item ${n.id === tab ? 'active' : ''} ${n.shared ? 'nav-op' : ''}`} onClick={() => setTab(n.id)}>
                 {n.id === tab && (
                   <motion.span layoutId="navpill" className="nav-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />
                 )}

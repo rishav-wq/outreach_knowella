@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', audience: { topics: [], statuses: [], exclude_sent: true } }
+const EMPTY = { name: '', subject: '', body: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '' } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -18,6 +18,7 @@ export default function Marketing() {
   const [draft, setDraft] = useState(EMPTY)
   const [draftId, setDraftId] = useState(null)      // editing an existing draft
   const [topics, setTopics] = useState([])
+  const [audiences, setAudiences] = useState([])
   const [preview, setPreview] = useState(null)      // {count, sample}
   const [testTo, setTestTo] = useState('')
   const [busy, setBusy] = useState('')              // '', 'test', 'send', 'save'
@@ -29,6 +30,7 @@ export default function Marketing() {
   useEffect(() => {
     load()
     api.getMarketingMeta().then((d) => setTopics(d.topics || [])).catch(() => {})
+    api.listAudiences().then(setAudiences).catch(() => {})
     return () => { clearInterval(poll.current); clearTimeout(debounce.current) }
   }, [])
 
@@ -140,6 +142,17 @@ export default function Marketing() {
 
           <aside className="mkt-side">
             <div className="section-label">Audience — live from the Library</div>
+            {audiences.length > 0 && (
+              <select className="src-select" style={{ width: '100%', marginBottom: 12 }} value=""
+                title="Load a saved audience's filter into this blast"
+                onChange={(e) => {
+                  const a = audiences.find((x) => x.id === e.target.value)
+                  if (a) setDraft((d) => ({ ...d, audience: { topics: [], statuses: [], exclude_sent: true, engagement: '', ...a.filter } }))
+                }}>
+                <option value="">Load a saved audience…</option>
+                {audiences.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.count})</option>)}
+              </select>
+            )}
             <label className="use-ai-toggle" style={{ marginBottom: 12 }}>
               <input type="checkbox" checked={!!draft.audience.exclude_sent}
                 onChange={(e) => setDraft({ ...draft, audience: { ...draft.audience, exclude_sent: e.target.checked } })} />
@@ -153,6 +166,13 @@ export default function Marketing() {
               ))}
               {topics.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No topics tagged yet.</span>}
             </div>
+            <select className="src-select" style={{ width: '100%', marginTop: 12 }} value={draft.audience.engagement || ''}
+              onChange={(e) => setDraft({ ...draft, audience: { ...draft.audience, engagement: e.target.value } })}
+              title="Narrow to people who engaged with a previous blast">
+              <option value="">Any engagement</option>
+              <option value="opened">Opened a previous blast</option>
+              <option value="clicked">Clicked a previous blast</option>
+            </select>
             <div className="mkt-count">
               <b>{preview ? preview.count : '…'}</b> recipients
               <div className="muted" style={{ fontSize: 11 }}>emailless + unsubscribed already excluded · deduped across campaigns</div>
