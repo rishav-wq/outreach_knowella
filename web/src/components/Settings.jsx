@@ -152,14 +152,16 @@ function Suppression() {
   const [items, setItems] = useState(null)
   const [val, setVal] = useState('')
   const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
   useEffect(() => { api.getSuppression().then((d) => setItems(d.items || [])).catch(() => setItems([])) }, [])
   const add = async () => {
-    setErr('')
+    setErr(''); setNote('')
     const v = val.trim()
     if (!v) return
     try {
       const r = await api.addSuppression(v)
       setItems(r.items || []); setVal('')
+      if (r.stopped_in_apollo > 0) setNote(`Also cancelled the remaining scheduled Apollo emails for ${r.stopped_in_apollo} enrolled ${r.stopped_in_apollo === 1 ? 'contact' : 'contacts'}.`)
     } catch (e) { setErr(/email address or a domain/.test(String(e.message)) ? 'Enter an email address or a domain like acme.com.' : `Could not add: ${e.message}`) }
   }
   const remove = async (v) => {
@@ -178,6 +180,7 @@ function Suppression() {
         <button className="btn" onClick={add}>Add</button>
       </div>
       {err && <div className="ready-err">{err}</div>}
+      {note && <div className="banner" style={{ marginBottom: 10 }}>{note}</div>}
       {items === null ? <Skeleton w="60%" h={12} /> : items.length === 0
         ? <div className="muted" style={{ fontSize: 12.5 }}>Nothing suppressed yet.</div>
         : (

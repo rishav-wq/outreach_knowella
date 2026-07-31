@@ -238,6 +238,22 @@ def mailbox_health() -> list[dict]:
     return out
 
 
+def stop_contacts(sequence_id: str, contact_ids: list[str], mode: str = "mark_as_finished") -> int:
+    """Stop enrolled contacts' remaining sequence emails (mark_as_finished keeps the
+    history; 'remove' would erase it). The missing half of suppression: our list stops
+    OUR pushes, but Apollo drips autonomously — this reaches in and turns them off."""
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key or not sequence_id or not contact_ids:
+        return 0
+    stopped = 0
+    for i in range(0, len(contact_ids), 100):
+        chunk = contact_ids[i:i + 100]
+        _request("POST", f"/emailer_campaigns/{sequence_id}/remove_or_stop_contact_ids", key,
+                 {"contact_ids": chunk, "mode": mode})
+        stopped += len(chunk)
+    return stopped
+
+
 # --- read side: sequence stats + replies (powers Analytics + Inbox) ----------
 def sequence_stats(sequence_id: str) -> dict:
     """The Apollo sequence's delivery stats (unique_delivered/opened/replied/…)."""

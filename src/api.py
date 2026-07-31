@@ -9,6 +9,7 @@ import glob
 import hashlib
 import hmac
 import html
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -413,6 +414,38 @@ def suppression_list():
     return {"items": open_store().list_suppressed()}
 
 
+def _stop_sequenced(store, value: str) -> int:
+    """Suppression's second half: for a just-suppressed email or domain, STOP the
+    remaining scheduled sequence emails of everyone it covers, inside Apollo.
+    (Our list gates pull/pipeline/send, but Apollo drips already-enrolled contacts
+    autonomously — 'ff Venture Capital said no' must also silence their follow-ups.)
+    Returns how many enrolled contacts were stopped."""
+    v = (value or "").strip().lower().lstrip("@")
+    if not v:
+        return 0
+    is_domain = "@" not in v
+    by_campaign: dict[str, list[str]] = {}
+    for d in store.db.leads.find({}):
+        email = ((d.get("lead") or {}).get("email") or "").strip().lower()
+        if not email:
+            continue
+        if not (email.rsplit("@", 1)[-1] == v if is_domain else email == v):
+            continue
+        send = store.db.sends.find_one({"_id": d["_id"]})
+        cid = (send or {}).get("platform_id")
+        if cid:
+            by_campaign.setdefault(d.get("campaign") or "", []).append(cid)
+        store.set_status(d["_id"], "suppressed")
+    stopped = 0
+    for camp, cids in by_campaign.items():
+        try:
+            seq = ((store.get_campaign(camp) or {}).get("sending") or {}).get("sequence_id")
+            stopped += apollo_send.stop_contacts(seq, cids)
+        except Exception as e:
+            logging.getLogger("uvicorn.error").warning("[suppress] couldn't stop %s in Apollo (%s): %s", camp, cids, e)
+    return stopped
+
+
 @app.post("/api/suppression")
 def suppression_add(r: SuppressReq):
     v = (r.value or "").strip()
@@ -420,7 +453,8 @@ def suppression_add(r: SuppressReq):
         raise HTTPException(400, "enter an email address or a domain like acme.com")
     store = open_store()
     store.suppress(v, r.reason or "added manually")
-    return {"ok": True, "items": store.list_suppressed()}
+    stopped = _stop_sequenced(store, v)
+    return {"ok": True, "stopped_in_apollo": stopped, "items": store.list_suppressed()}
 
 
 @app.post("/api/suppression/remove")
@@ -759,6 +793,7 @@ def _classify_inbound(store, cfg: dict, inbound: list[dict], lead_email: str, le
     conv_label = next((l for l in _LABEL_PRIORITY if l in labels), "other")
     if conv_label == "opt_out" and lead_email and not store.is_suppressed(lead_email):
         store.suppress(lead_email, "opted out via reply (auto)")
+        _stop_sequenced(store, lead_email)   # also cancel their remaining Apollo follow-ups
         if lead_key:
             store.set_status(lead_key, "suppressed")
     if lead_key and conv_label != "ooo":   # an OOO auto-reply is not a real reply
@@ -1528,15 +1563,19 @@ async def postmark_events(request: Request):
             "subscriptionchange": "unsubs"}.get(kind)
     if bid and email and stat and store.mark_blast_event(bid, email, stat):
         store.inc_blast_stat(bid, stat)
-    # compliance: these three mean "never again", across BOTH engines
+    # compliance: these three mean "never again", across BOTH engines — including
+    # cancelling any remaining Apollo sequence emails already scheduled for them
     if email:
         if kind == "spamcomplaint":
             store.suppress(email, "spam complaint (Postmark)")
+            _stop_sequenced(store, email)
         elif kind == "subscriptionchange" and ev.get("SuppressSending"):
             store.suppress(email, "unsubscribed (Postmark)")
+            _stop_sequenced(store, email)
         elif kind == "bounce" and (ev.get("Type") or "") in ("HardBounce", "BadEmailAddress"):
             store.suppress(email, "hard bounce (Postmark)")
             store.save_verify(email, "undeliverable")
+            _stop_sequenced(store, email)
     return {"ok": True}
 
 
