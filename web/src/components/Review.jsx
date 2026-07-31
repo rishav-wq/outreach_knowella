@@ -208,8 +208,19 @@ export default function Review({ campaign }) {
   const sendApproved = async () => {
     if (!window.confirm(`Send ${approvedCount} approved ${approvedCount === 1 ? 'email' : 'emails'} through Apollo? This is the real send.`)) return
     setSending(true); setSendProgress({ sent: 0, done: 0, total: approvedCount })
-    const r = await api.runPipeline(campaign, true)
-    if (!r.started) { setSending(false); setSendProgress(null); return }
+    let r
+    try {
+      r = await api.runPipeline(campaign, true)
+    } catch (e) {   // a failed request must never fail SILENTLY (401, network, 500…)
+      setSending(false); setSendProgress(null)
+      window.alert(`Send failed to start: ${e.message || e}. If this mentions a session or 401, refresh the page and try again.`)
+      return
+    }
+    if (!r.started) {
+      setSending(false); setSendProgress(null)
+      window.alert(`Send didn't start: ${r.reason || 'unknown reason'}. If a run is already going, wait for it to finish (watch the Overview) and try again.`)
+      return
+    }
     poll.current = setInterval(async () => {
       const s = await api.getRunStatus(campaign)
       if (s.progress) setSendProgress(s.progress)
