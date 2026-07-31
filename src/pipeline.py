@@ -292,13 +292,23 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
             "pushed": pushed, "draft": send_draft}
 
 
+APOLLO_HOURLY = "Apollo hourly API limit reached"
+
+
 def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool) -> dict:
     try:
         return advance(store, lead, cfg, dry_run, require_review)
     except Exception as e:  # one bad lead must not kill the whole run
+        reason = f"{type(e).__name__}: {e}"[:500]
+        # Apollo's hard hourly quota (e.g. contacts/search 400/hr) is PACING, not
+        # failure: the lead is fine — hold it queued (approval kept) and let the
+        # caller stop the run instead of burning 429s against a dead quota.
+        if "429" in reason and "apollo" in reason.lower():
+            store.set_status(lead.key, "queued")
+            return {"lead": lead, "verdict": "held",
+                    "reason": f"{APOLLO_HOURLY} — still approved; click Send again after the hour resets", "draft": None}
         # persist WHY, or the mass-failure post-mortem is guesswork (as on 2026-07-31,
         # when ~940 leads errored and the cause had to be inferred)
-        reason = f"{type(e).__name__}: {e}"[:500]
         store.set_status(lead.key, "error")
         store.save_lead_error(lead.key, reason)
         logging.getLogger("uvicorn.error").warning("[pipeline] %s errored: %s", lead.key, reason)
@@ -355,4 +365,10 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
             sent += 1
         if on_progress:
             on_progress(sent, len(results), total)
+        if (r.get("reason") or "").startswith(APOLLO_HOURLY):
+            # a hard hourly quota won't reset mid-run — stop here; untouched leads
+            # stay approved+queued and the next Send picks them up
+            logging.getLogger("uvicorn.error").warning(
+                "[pipeline] stopping send after %d pushes: %s", sent, r["reason"])
+            break
     return results
