@@ -24,6 +24,16 @@ export default function LeadsLibrary({ onPromoted }) {
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [copied, setCopied] = useState('')   // lead key whose domain was just copied
+
+  const copyDomain = (l) => {
+    const domain = (l.email || '').split('@')[1]
+    if (!domain) return
+    navigator.clipboard.writeText(domain).then(() => {
+      setCopied(l.key)
+      setTimeout(() => setCopied(''), 1500)
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     api.getAllLeads().then(setData).catch(() => setData({ leads: [], function_labels: {} }))
@@ -139,7 +149,7 @@ export default function LeadsLibrary({ onPromoted }) {
             <thead>
               <tr>
                 <th><input type="checkbox" checked={sel.size > 0 && sel.size === shown.length} onChange={toggleAll} /></th>
-                <th></th><th>Name</th><th>Title</th><th>Company</th><th>Role</th><th>Topics</th><th>Campaign</th><th>Status</th>
+                <th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Role</th><th>Topics</th><th>Campaign</th><th>Status</th>
               </tr>
             </thead>
             <motion.tbody variants={stagger} initial="hidden" animate="show">
@@ -154,6 +164,17 @@ export default function LeadsLibrary({ onPromoted }) {
                   </td>
                   <td className="muted">{l.title || '—'}</td>
                   <td>{l.company || '—'}</td>
+                  <td className="muted">
+                    {l.email ? (
+                      <span className="lib-email">
+                        {l.email}
+                        <button className="icon-btn" onClick={() => copyDomain(l)}
+                          title={copied === l.key ? 'Domain copied!' : `Copy domain (${l.email.split('@')[1]}) — paste into Settings → Do not contact to block the whole company`}>
+                          <Icon name={copied === l.key ? 'check' : 'link'} size={12} />
+                        </button>
+                      </span>
+                    ) : '—'}
+                  </td>
                   <td><span className={`fn-tag fn-${l.function}`}>{labels[l.function] || l.function}</span></td>
                   <td>
                     <div className="lib-topics">
