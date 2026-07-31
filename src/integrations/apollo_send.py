@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import datetime, timezone
 
 import httpx
 
@@ -32,6 +33,33 @@ from ..models import Draft, Lead
 
 BASE = "https://api.apollo.io/api/v1"
 _field_cache: dict[str, str] = {}   # custom-field name -> id (per process)
+
+# Apollo reports per-endpoint quota state in response headers — harvested passively
+# from every call the app already makes (never probed), newest snapshot per endpoint.
+RATE_LIMITS: dict[str, dict] = {}
+
+
+def note_rate_headers(path: str, headers) -> None:
+    h = {k.lower(): v for k, v in headers.items()}
+
+    def num(*names):
+        for n in names:
+            if n in h:
+                try:
+                    return int(float(h[n]))
+                except (TypeError, ValueError):
+                    pass
+        return None
+
+    entry = {
+        "minute_left": num("x-minute-requests-left", "x-rate-limit-remaining-minute"),
+        "hourly_left": num("x-hourly-requests-left", "x-rate-limit-remaining-hourly", "x-rate-limit-remaining"),
+        "hourly_limit": num("x-hourly-requests-limit", "x-hourly-limit", "x-rate-limit-hourly", "x-rate-limit-limit"),
+        "day_left": num("x-24-hour-requests-left", "x-rate-limit-remaining-24-hour"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if any(v is not None for k, v in entry.items() if k != "at"):
+        RATE_LIMITS[path.split("?")[0]] = entry
 
 
 def has_key() -> bool:
@@ -44,6 +72,7 @@ def _hdr(key: str) -> dict:
 
 def _request(method: str, path: str, key: str, payload: dict | None = None) -> dict:
     r = httpx.request(method, f"{BASE}{path}", json=payload, headers=_hdr(key), timeout=60.0)
+    note_rate_headers(path, r.headers)   # even 429s carry the quota headers
     if r.status_code >= 400:
         try:
             reason = r.json().get("error") or r.text[:250]

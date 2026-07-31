@@ -11,6 +11,7 @@ import hmac
 import html
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 import re
 import tempfile
 import threading
@@ -529,7 +530,29 @@ def status(campaign: str):
             "sent_today": store.sent_today(cfg["name"]),
             "window": send_cfg.get("window") or {},
         },
+        "apollo_rate": _apollo_rate_summary(),
     }
+
+
+def _apollo_rate_summary() -> dict:
+    """Apollo API quota state, harvested passively from response headers (per endpoint,
+    hourly windows). 'worst' = the endpoint with the least hourly budget left — the one
+    that will stop a big send. Entries older than the current hour window are dropped."""
+    now = datetime.now(timezone.utc)
+    fresh: dict = {}
+    for path, e in apollo_send.RATE_LIMITS.items():
+        try:
+            seen = datetime.fromisoformat(e["at"])
+        except (KeyError, ValueError):
+            continue
+        if now - seen < timedelta(minutes=70):
+            fresh[path] = e
+    worst = None
+    for path, e in fresh.items():
+        left = e.get("hourly_left")
+        if left is not None and (worst is None or left < worst["left"]):
+            worst = {"path": path, "left": left, "limit": e.get("hourly_limit")}
+    return {"endpoints": fresh, "worst": worst}
 
 
 @app.get("/api/leads")

@@ -157,6 +157,7 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   color: var(--muted); padding: 5px 12px; border-radius: var(--radius-sm); font-weight: 500;
 }
 .reg-link { font: inherit; font-weight: 500; color: var(--signal); cursor: pointer; }
+.reg-item.reg-low { color: var(--alert); border-color: rgba(251, 30, 57, 0.35); }
 .reg-link:hover { background: var(--signal-tint); }
 .register .dot { width: 8px; height: 8px; }
 

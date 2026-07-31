@@ -147,6 +147,9 @@ def _person_to_lead(p: dict) -> Lead:
 
 
 def _raise_for_status(r: httpx.Response) -> None:
+    # harvest Apollo's per-endpoint quota headers from every response we get anyway
+    from . import apollo_send
+    apollo_send.note_rate_headers(str(r.request.url.path), r.headers)
     if r.status_code == 403:
         raise RuntimeError(
             "Apollo returned 403: this key can't use the people-search API. "

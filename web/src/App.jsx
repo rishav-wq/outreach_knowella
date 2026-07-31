@@ -105,6 +105,15 @@ export default function App({ onHome }) {
                 sent {status.guardrails.sent_today ?? 0}/{status.guardrails.daily_cap || '∞'}
               </span>
             )}
+            {status.apollo_rate?.worst && (
+              <span className={`reg-item ${status.apollo_rate.worst.left < 50 ? 'reg-low' : ''}`}
+                title={'Apollo API budget this hour, per endpoint (from Apollo’s own response headers):\n'
+                  + Object.entries(status.apollo_rate.endpoints)
+                      .map(([p, e]) => `${p}: ${e.hourly_left ?? '—'} left${e.hourly_limit ? `/${e.hourly_limit}` : ''}`)
+                      .join('\n')}>
+                apollo {status.apollo_rate.worst.left}{status.apollo_rate.worst.limit ? `/${status.apollo_rate.worst.limit}` : ''} left/hr
+              </span>
+            )}
             {queued > 0 && (
               <button className="reg-item reg-link" onClick={() => setTab('Review')} title="Drafts waiting for your sign-off">
                 {queued} to review
