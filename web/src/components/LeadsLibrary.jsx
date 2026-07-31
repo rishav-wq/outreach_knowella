@@ -55,7 +55,9 @@ export default function LeadsLibrary({ onPromoted }) {
     if (eng !== 'all' && l.engagement !== eng && !(eng === 'opened' && l.engagement === 'clicked')) return false
     if (q) {
       const hay = `${l.name} ${l.company} ${l.title} ${l.email} ${(l.topics || []).join(' ')}`.toLowerCase()
-      if (!hay.includes(q.toLowerCase())) return false
+      const needle = q.toLowerCase()
+      // space-insensitive too, so "ffventurecapital" still finds "ff Venture Capital"
+      if (!hay.includes(needle) && !hay.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''))) return false
     }
     return true
   })
