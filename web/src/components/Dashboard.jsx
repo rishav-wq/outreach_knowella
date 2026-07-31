@@ -66,6 +66,16 @@ export default function Dashboard({ campaign, onNavigate }) {
     beginPolling()
   }
 
+  // Retry errored leads: a full sweep — finished leads are cache-served no-ops, only
+  // failures actually re-run. Nothing sends.
+  const retryErrors = async () => {
+    setMsg('')
+    const r = await api.runPipeline(campaign, false, 0)
+    if (!r.started) { setMsg(r.reason || 'Could not start the retry.'); return }
+    setRunning(true)
+    beginPolling()
+  }
+
   // Re-draft EVERY lead (not just new ones) from the current templates — the fix for
   // "I edited a template / offer and the existing drafts are stale". Nothing sends.
   const regenerate = async () => {
@@ -82,12 +92,15 @@ export default function Dashboard({ campaign, onNavigate }) {
   const queued = c.queued || 0
   const newCount = c.new || 0
   const sent = c.sent || 0
+  const errCount = c.error || 0
   const railCount = (minRank) =>
     Object.entries(c).reduce((sum, [s, n]) => sum + ((RANK[s] ?? 0) >= minRank ? n : 0), 0)
 
   // The single most useful thing to do next, given where the campaign stands.
   const nextStep = () => {
     if (running) return { title: 'Pipeline is running', sub: 'Each lead is being researched against real sources and drafted. Drafts land on Review as they finish.', cta: null }
+    // errored leads outrank everything else — they block the campaign and are safe to retry
+    if (errCount > 0) return { title: `${errCount} ${errCount === 1 ? 'lead' : 'leads'} hit an error — retry them`, sub: 'Usually a temporary rate limit from a big batch. Retrying is safe: finished leads are cached and skipped; only the failed ones run again.', cta: 'Retry errored leads', go: 'retry' }
     if (queued > 0) return { title: `${queued} ${queued === 1 ? 'draft waits' : 'drafts wait'} for your sign-off`, sub: 'Read each draft and its verified sources, then approve the ones worth sending. Nothing sends without you.', cta: 'Review drafts', go: 'Review' }
     if (newCount > 0) return { title: `${newCount} ${newCount === 1 ? 'lead is' : 'leads are'} ready to research`, sub: 'Run the pipeline to research each lead and draft a grounded email for your review.', cta: 'Run pipeline', go: 'run' }
     if (sent > 0) return { title: 'All clear — watch for replies', sub: 'Everything reviewed and sent. Replies land in the Inbox, classified as they arrive.', cta: 'Open Inbox', go: 'Inbox' }
@@ -137,12 +150,17 @@ export default function Dashboard({ campaign, onNavigate }) {
             </div>
           ) : (
             <>
-              {step.cta && step.go !== 'run' && (
+              {step.cta && step.go !== 'run' && step.go !== 'retry' && (
                 <motion.button className="btn primary" onClick={() => onNavigate(step.go)} {...tap}>{step.cta}</motion.button>
               )}
               {step.go === 'run' && (
                 <motion.button className="btn ella" onClick={startRun} {...tap}
                   title="Research + draft with Knowella's AI"><Icon name="play" size={15} /> Run pipeline</motion.button>
+              )}
+              {step.go === 'retry' && (
+                <motion.button className="btn ella" onClick={retryErrors} {...tap}
+                  title="Safe to repeat — completed leads are cached and skipped; only failures re-run">
+                  <Icon name="refresh" size={15} /> Retry {errCount} leads</motion.button>
               )}
               <span className="wh-secondary">
                 {step.go !== 'run' && newCount > 0 && (
