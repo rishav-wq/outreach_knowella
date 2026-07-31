@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
-import { stagger } from './anim'
 import { avatarTint, initials } from './avatar'
 
-const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
+const PAGE = 250   // rows rendered at once — thousands of animated rows made the tab crawl
 
 // The master leads library: every lead we've EVER pulled, across all campaigns —
 // kept forever (excluding a lead from a campaign never deletes it, just marks it
@@ -25,6 +23,7 @@ export default function LeadsLibrary({ onPromoted }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [copied, setCopied] = useState('')   // lead key whose domain was just copied
+  const [limit, setLimit] = useState(PAGE)
 
   const copyDomain = (l) => {
     const domain = (l.email || '').split('@')[1]
@@ -154,9 +153,9 @@ export default function LeadsLibrary({ onPromoted }) {
                 <th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Role</th><th>Topics</th><th>Campaign</th><th>Status</th>
               </tr>
             </thead>
-            <motion.tbody variants={stagger} initial="hidden" animate="show">
-              {shown.map((l) => (
-                <motion.tr key={l.key} variants={rowVar}>
+            <tbody>
+              {shown.slice(0, limit).map((l) => (
+                <tr key={l.key}>
                   <td><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggle(l.key)} /></td>
                   <td><div className="avatar sm" style={avatarTint(l.name)}>{initials(l.name)}</div></td>
                   <td>
@@ -186,10 +185,17 @@ export default function LeadsLibrary({ onPromoted }) {
                   </td>
                   <td className="muted">{l.campaign || '—'}</td>
                   <td>{l.status === 'excluded' ? <span className="badge s-dropped">not a fit</span> : <span className={`badge s-${l.status}`}>{l.status}</span>}</td>
-                </motion.tr>
+                </tr>
               ))}
-            </motion.tbody>
+            </tbody>
           </table>
+          {shown.length > limit && (
+            <div className="lib-more">
+              <button className="btn" onClick={() => setLimit(shown.length)}>
+                Show all {shown.length.toLocaleString()} (first {limit} rendered)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

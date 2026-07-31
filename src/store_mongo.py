@@ -107,13 +107,19 @@ class MongoStore:
         kept for reuse. Returns raw rows; the API adds function bucket + topics.
         """
         q = {"status": status} if status else {}
+        # projection + raw dicts, no Pydantic: the library lists thousands of rows and
+        # only needs these eight fields — full-document validation made the tab crawl
+        proj = {"campaign": 1, "status": 1, "topics": 1, "lead.first_name": 1,
+                "lead.last_name": 1, "lead.title": 1, "lead.company": 1,
+                "lead.email": 1, "lead.source": 1}
         out = []
-        for d in self.db.leads.find(q):
-            lead = Lead.model_validate(d["lead"])
+        for d in self.db.leads.find(q, proj):
+            L = d.get("lead") or {}
             out.append({"key": d["_id"], "campaign": d.get("campaign", ""),
                         "status": d.get("status", ""), "topics": d.get("topics") or [],
-                        "name": lead.full_name, "title": lead.title, "company": lead.company,
-                        "email": lead.email, "source": lead.source})
+                        "name": f"{L.get('first_name', '')} {L.get('last_name', '')}".strip(),
+                        "title": L.get("title", ""), "company": L.get("company", ""),
+                        "email": L.get("email", ""), "source": L.get("source", "")})
         return out
 
     def exclude_lead(self, key: str) -> None:
