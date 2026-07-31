@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from . import auth, config, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
-from .integrations import apollo, apollo_send, csv_source, email_verify, enrich
+from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, postmark_send
 from .models import Lead
 from .store import open_store
 
@@ -1275,6 +1275,41 @@ def _capture_auth(request: Request) -> None:
         raise HTTPException(401, "invalid capture token — generate one in Settings and paste it into the extension")
     if auth.enabled() and not getattr(request.state, "user", None):
         raise HTTPException(401, "missing capture token")
+
+
+# --- marketing engine (Postmark, broadcast stream) -----------------------------
+@app.get("/api/marketing/status")
+def marketing_status():
+    return {"connected": postmark_send.has_key(), "from": postmark_send.from_address(),
+            "stream": os.environ.get("POSTMARK_STREAM", "broadcast")}
+
+
+class MarketingTest(BaseModel):
+    to: str
+
+
+@app.post("/api/marketing/test")
+def marketing_test(r: MarketingTest):
+    """Prove the marketing pipe end to end with one email to yourself — batching,
+    the broadcast stream, and the verified sender, before any audience exists."""
+    to = (r.to or "").strip()
+    if "@" not in to:
+        raise HTTPException(400, "enter a valid email address")
+    try:
+        res = postmark_send.send_batch([{
+            "to": to,
+            "subject": "Knowella Outreach — marketing pipe test",
+            "text_body": ("Hi,\n\nThis is a test from Knowella Outreach's marketing engine "
+                          "(Postmark, broadcast stream).\n\nIf you're reading this, the pipe works: "
+                          "batching, the message stream, and your verified sender are all wired.\n\n"
+                          "— Knowella Outreach"),
+        }])
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+    first = res[0] if res else {}
+    if first.get("ErrorCode"):
+        raise HTTPException(502, f"Postmark rejected it: {first.get('Message')}")
+    return {"ok": True, "message_id": first.get("MessageID", "")}
 
 
 @app.get("/api/capture_token")

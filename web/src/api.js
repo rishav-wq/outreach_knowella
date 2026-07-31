@@ -50,6 +50,9 @@ export const deleteCampaign = (campaign) => apiSend('/api/campaign/delete', 'POS
 export const setMailbox = (campaign, mailbox_ids) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_ids })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
+// marketing engine (Postmark broadcast stream)
+export const getMarketingStatus = () => apiGet('/api/marketing/status')
+export const sendMarketingTest = (to) => apiSend('/api/marketing/test', 'POST', { to })
 // LinkedIn-capture token for the browser extension (hash-stored; shown once on create)
 export const getCaptureToken = () => apiGet('/api/capture_token')
 export const createCaptureToken = () => apiSend('/api/capture_token', 'POST', {})

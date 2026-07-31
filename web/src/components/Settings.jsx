@@ -52,6 +52,52 @@ function SendingHealth({ campaign }) {
   )
 }
 
+// Marketing engine (Postmark broadcast stream) — connection state + a one-click
+// test send, so the pipe is proven against your own inbox before any blast exists.
+function MarketingSending() {
+  const [st, setSt] = useState(null)
+  const [to, setTo] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)   // {ok, text}
+  useEffect(() => { api.getMarketingStatus().then(setSt).catch(() => setSt({ connected: false })) }, [])
+  const test = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      await api.sendMarketingTest(to.trim())
+      setMsg({ ok: true, text: `Test sent to ${to.trim()} — check the inbox (and spam, first time).` })
+    } catch (e) {
+      setMsg({ ok: false, text: `Could not send: ${String(e.message).slice(0, 220)}` })
+    } finally { setBusy(false) }
+  }
+  if (!st) return null
+  return (
+    <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="drawer-label">Marketing email — Postmark</div>
+      {st.connected ? (
+        <>
+          <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+            Connected. Bulk sends (newsletters, announcements) go out via Postmark&apos;s <b>{st.stream}</b> stream,
+            from <code>{st.from || 'MARKETING_FROM not set'}</code> — fully separate from your sales mailboxes.
+          </div>
+          <div className="ready-form">
+            <input className="field-input" placeholder="you@knowella.com" value={to}
+              onChange={(e) => setTo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && to.includes('@') && test()} />
+            <button className="btn primary" disabled={busy || !to.includes('@')} onClick={test}>
+              {busy ? <><span className="spinner" /> Sending…</> : 'Send test email'}
+            </button>
+          </div>
+          {msg && <div className={`banner ${msg.ok ? '' : 'error'}`} style={{ marginTop: 12, marginBottom: 0 }}>{msg.text}</div>}
+        </>
+      ) : (
+        <div className="muted" style={{ fontSize: 12.5 }}>
+          Not connected. Set <code>POSTMARK_SERVER_TOKEN</code> and <code>MARKETING_FROM</code> (a sender verified in
+          Postmark) in <code>.env</code>, then restart the backend.
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
 // Token for the LinkedIn-capture browser extension. Clerk sessions can't travel
 // into an extension, so it authenticates with this instead. Only the hash is
 // stored server-side — the token is shown once, here, on generation.
@@ -192,6 +238,7 @@ export default function Settings({ campaign }) {
       </div>
 
       <SendingHealth campaign={campaign} />
+      <MarketingSending />
       <LinkedInCapture />
       <Suppression />
     </div>
