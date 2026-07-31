@@ -19,7 +19,9 @@ from fastapi import HTTPException, Request
 _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 
 # The health check stays open even when auth is on (for platform probes).
-_OPEN_API_PATHS = {"/api/health", "/api/unsubscribe"}   # public: health check + one-click unsubscribe
+# /api/postmark/events is Postmark's webhook (external caller, no Clerk session) —
+# it authenticates itself with the POSTMARK_WEBHOOK_TOKEN shared secret in its URL.
+_OPEN_API_PATHS = {"/api/health", "/api/unsubscribe", "/api/postmark/events"}
 
 # The browser extension can't carry a Clerk session, so these routes authenticate
 # with a per-user capture token instead (X-Capture-Token header). Requests carrying

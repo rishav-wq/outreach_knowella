@@ -415,6 +415,28 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .table tbody tr { transition: box-shadow 0.2s ease-in-out; }
 .table tbody tr:hover { background: var(--panel); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
 
+/* ---------- marketing: blasts & newsletters ---------- */
+.mkt-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.ghostlink { border: none; background: none; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; padding: 0; margin-bottom: 16px; }
+.ghostlink:hover { color: var(--signal); }
+.mkt-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.mkt-body { margin-top: 10px; resize: vertical; line-height: 1.6; font: inherit; }
+.mkt-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.mkt-side { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.mkt-count { margin-top: 14px; font-size: 13px; }
+.mkt-count b { font-size: 24px; font-weight: 600; color: var(--ink); margin-right: 6px; }
+.mkt-side .list { max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.mkt-side .list > div { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mkt-side .list > div:last-child { border-bottom: none; }
+.mkt-side .list span { color: var(--muted); font-weight: 400; }
+.mkt-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
+.mkt-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mkt-card-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.mkt-stats { display: flex; gap: 26px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.mkt-stats b { display: block; font-size: 18px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.mkt-stats span { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+@media (max-width: 900px) { .mkt-grid { grid-template-columns: 1fr; } }
+
 /* ---------- kanban board ---------- */
 .board-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
 .filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

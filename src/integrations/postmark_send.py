@@ -75,6 +75,8 @@ def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:
             out_headers = m.get("headers") or {}
             if out_headers:
                 entry["Headers"] = [{"Name": k, "Value": v} for k, v in out_headers.items()]
+            if m.get("metadata"):
+                entry["Metadata"] = m["metadata"]   # echoed back in every webhook event
             payload.append(entry)
         r = httpx.post(f"{BASE}/email/batch", json=payload, headers=_hdr(), timeout=60.0)
         if r.status_code >= 400:

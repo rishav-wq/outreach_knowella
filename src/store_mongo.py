@@ -351,6 +351,78 @@ class MongoStore:
         """Re-key every lead from one campaign name to another. Returns leads moved."""
         return self.db.leads.update_many({"campaign": old}, {"$set": {"campaign": new}}).modified_count
 
+    # --- marketing: audiences resolved live from the Library, blasts via Postmark ---
+    def audience_leads(self, flt: dict) -> list[dict]:
+        """Resolve an audience filter against the WHOLE Library, deduped by email.
+
+        flt: {topics: [..] any-match, statuses: [..], exclude_sent: bool}. Emailless
+        and suppressed people never make it in. exclude_sent drops anyone the sales
+        engine has already emailed in ANY campaign (the 'never pitched' audience).
+        Returns [{email, key, lead}] — lead is the full Lead for merge rendering."""
+        topics = set(flt.get("topics") or [])
+        statuses = set(flt.get("statuses") or [])
+        rows = list(self.db.leads.find({}))
+        sent_emails = {(Lead.model_validate(d["lead"]).email or "").lower()
+                       for d in rows if d.get("status") == "sent"} if flt.get("exclude_sent") else set()
+        out: dict[str, dict] = {}
+        for d in rows:
+            lead = Lead.model_validate(d["lead"])
+            email = (lead.email or "").strip().lower()
+            if not email or email in out or email in sent_emails:
+                continue
+            if topics and not (topics & set(d.get("topics") or [])):
+                continue
+            if statuses and d.get("status") not in statuses:
+                continue
+            if self.is_suppressed(email):
+                continue
+            out[email] = {"email": email, "key": d["_id"], "lead": lead}
+        return list(out.values())
+
+    def library_topics(self) -> list[str]:
+        return sorted(t for t in self.db.leads.distinct("topics") if t)
+
+    def create_blast(self, doc: dict) -> str:
+        import uuid
+        bid = uuid.uuid4().hex[:12]
+        doc = {**doc, "_id": bid, "status": "draft",
+               "created_at": datetime.now(timezone.utc).isoformat(),
+               "stats": {k: 0 for k in ("recipients", "accepted", "failed", "delivered",
+                                        "opened", "clicked", "bounced", "spam", "unsubs")},
+               "progress": {"done": 0, "total": 0}}
+        self.db.blasts.insert_one(doc)
+        return bid
+
+    def get_blast(self, bid: str) -> dict | None:
+        return self.db.blasts.find_one({"_id": bid})
+
+    def list_blasts(self) -> list[dict]:
+        return list(self.db.blasts.find({}).sort("created_at", -1))
+
+    def update_blast(self, bid: str, fields: dict) -> None:
+        self.db.blasts.update_one({"_id": bid}, {"$set": fields})
+
+    def delete_blast(self, bid: str) -> None:
+        self.db.blasts.delete_one({"_id": bid})
+        self.db.blast_recipients.delete_many({"blast": bid})
+
+    def add_blast_recipient(self, bid: str, email: str, key: str, message_id: str, ok: bool) -> None:
+        self.db.blast_recipients.replace_one(
+            {"_id": f"{bid}::{email}"},
+            {"_id": f"{bid}::{email}", "blast": bid, "email": email, "lead_key": key,
+             "message_id": message_id, "accepted": ok, "events": []}, upsert=True)
+
+    def mark_blast_event(self, bid: str, email: str, event: str) -> bool:
+        """Record a webhook event once per recipient; True only the FIRST time (so
+        stats count unique people, not repeat opens)."""
+        r = self.db.blast_recipients.update_one(
+            {"_id": f"{bid}::{email}", "events": {"$ne": event}},
+            {"$addToSet": {"events": event}})
+        return r.modified_count > 0
+
+    def inc_blast_stat(self, bid: str, field: str, n: int = 1) -> None:
+        self.db.blasts.update_one({"_id": bid}, {"$inc": {f"stats.{field}": n}})
+
     # --- app settings (single-value, e.g. the LinkedIn-capture token hash) ---
     def set_setting(self, key: str, value: str) -> None:
         self.db.settings.replace_one({"_id": key}, {"_id": key, "value": value}, upsert=True)

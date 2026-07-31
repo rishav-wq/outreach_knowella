@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, config, pipeline, tagging, unsubscribe
+from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, postmark_send
 from .models import Lead
@@ -1312,6 +1312,171 @@ def marketing_test(r: MarketingTest):
     if first.get("ErrorCode"):
         raise HTTPException(502, f"Postmark rejected it: {first.get('Message')}")
     return {"ok": True, "message_id": first.get("MessageID", "")}
+
+
+class AudienceFilter(BaseModel):
+    topics: list[str] = []
+    statuses: list[str] = []
+    exclude_sent: bool = False
+
+
+class BlastBody(BaseModel):
+    name: str
+    subject: str
+    body: str
+    audience: AudienceFilter = AudienceFilter()
+
+
+def _blast_out(b: dict) -> dict:
+    return {"id": b["_id"], "name": b.get("name", ""), "subject": b.get("subject", ""),
+            "body": b.get("body", ""), "audience": b.get("audience") or {},
+            "status": b.get("status", "draft"), "stats": b.get("stats") or {},
+            "progress": b.get("progress") or {}, "error": b.get("error", ""),
+            "created_at": b.get("created_at", ""), "sent_at": b.get("sent_at", "")}
+
+
+@app.get("/api/marketing/meta")
+def marketing_meta():
+    """Everything the audience builder needs: the Library's live topic vocabulary."""
+    return {"topics": open_store().library_topics()}
+
+
+@app.post("/api/marketing/preview")
+def marketing_preview(f: AudienceFilter):
+    """Who a filter reaches, RIGHT NOW: count + a peek — resolved live, suppression
+    and emailless already excluded, deduped by email across campaigns."""
+    people = open_store().audience_leads(f.model_dump())
+    return {"count": len(people),
+            "sample": [{"name": p["lead"].full_name, "company": p["lead"].company,
+                        "email": p["email"]} for p in people[:8]]}
+
+
+@app.get("/api/blasts")
+def list_blasts():
+    return [_blast_out(b) for b in open_store().list_blasts()]
+
+
+@app.post("/api/blasts")
+def create_blast(b: BlastBody):
+    if not b.name.strip() or not b.subject.strip() or not b.body.strip():
+        raise HTTPException(400, "name, subject and body are all required")
+    bid = open_store().create_blast({"name": b.name.strip(), "subject": b.subject.strip(),
+                                     "body": b.body, "audience": b.audience.model_dump()})
+    return {"id": bid}
+
+
+@app.get("/api/blasts/{bid}")
+def get_blast(bid: str):
+    b = open_store().get_blast(bid)
+    if not b:
+        raise HTTPException(404, "blast not found")
+    return _blast_out(b)
+
+
+@app.put("/api/blasts/{bid}")
+def update_blast(bid: str, body: BlastBody):
+    store = open_store()
+    b = store.get_blast(bid)
+    if not b:
+        raise HTTPException(404, "blast not found")
+    if b.get("status") != "draft":
+        raise HTTPException(400, "only drafts can be edited")
+    store.update_blast(bid, {"name": body.name.strip(), "subject": body.subject.strip(),
+                             "body": body.body, "audience": body.audience.model_dump()})
+    return {"ok": True}
+
+
+@app.delete("/api/blasts/{bid}")
+def delete_blast(bid: str):
+    store = open_store()
+    b = store.get_blast(bid)
+    if b and b.get("status") == "sending":
+        raise HTTPException(400, "can't delete a blast mid-send")
+    store.delete_blast(bid)
+    return {"ok": True}
+
+
+class BlastTest(BaseModel):
+    to: str
+
+
+@app.post("/api/blasts/{bid}/test")
+def test_blast(bid: str, r: BlastTest):
+    """The exact rendered email (merge fields + unsubscribe footer), to YOUR inbox —
+    the mandatory dress rehearsal before a real send."""
+    store = open_store()
+    b = store.get_blast(bid)
+    if not b:
+        raise HTTPException(404, "blast not found")
+    to = (r.to or "").strip()
+    if "@" not in to:
+        raise HTTPException(400, "enter a valid email address")
+    people = store.audience_leads(b.get("audience") or {})
+    sample = people[0]["lead"] if people else Lead(first_name="Maria", last_name="Chen",
+                                                  title="VP Operations", company="Meridian Logistics")
+    msg = marketing.render_message(b, sample, to)
+    msg["subject"] = f"[TEST] {msg['subject']}"
+    try:
+        res = postmark_send.send_batch([msg])
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
+    first = res[0] if res else {}
+    if first.get("ErrorCode"):
+        raise HTTPException(502, f"Postmark rejected it: {first.get('Message')}")
+    return {"ok": True, "rendered_for": people[0]["email"] if people else "(sample lead)",
+            "audience_count": len(people)}
+
+
+@app.post("/api/blasts/{bid}/send")
+def send_blast(bid: str):
+    store = open_store()
+    b = store.get_blast(bid)
+    if not b:
+        raise HTTPException(404, "blast not found")
+    if b.get("status") == "sending":
+        return {"started": False, "reason": "already sending"}
+    if not postmark_send.has_key():
+        raise HTTPException(400, "Postmark isn't configured — set POSTMARK_SERVER_TOKEN and MARKETING_FROM")
+    th = threading.Thread(target=marketing.run_blast, args=(store, bid), daemon=True)
+    th.start()
+    return {"started": True}
+
+
+@app.post("/api/postmark/events")
+async def postmark_events(request: Request):
+    """Postmark's webhook: delivery/open/click/bounce/spam/unsubscribe, one JSON
+    event per call. Joined to blasts via the Metadata we attach to every send.
+    Auth: shared token in the URL (?token=…) — set POSTMARK_WEBHOOK_TOKEN and use
+    https://…/api/postmark/events?token=THAT in Postmark's webhook settings.
+    Compliance side effects: hard bounces, spam complaints and unsubscribes go
+    straight onto the global do-not-contact list — sales included."""
+    want = os.environ.get("POSTMARK_WEBHOOK_TOKEN", "")
+    if want and request.query_params.get("token", "") != want:
+        raise HTTPException(401, "bad webhook token")
+    try:
+        ev = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON")
+    store = open_store()
+    kind = (ev.get("RecordType") or "").lower()
+    email = (ev.get("Recipient") or ev.get("Email") or "").strip().lower()
+    meta = ev.get("Metadata") or {}
+    bid = meta.get("blast_id") or ""
+    stat = {"delivery": "delivered", "open": "opened", "click": "clicked",
+            "bounce": "bounced", "spamcomplaint": "spam",
+            "subscriptionchange": "unsubs"}.get(kind)
+    if bid and email and stat and store.mark_blast_event(bid, email, stat):
+        store.inc_blast_stat(bid, stat)
+    # compliance: these three mean "never again", across BOTH engines
+    if email:
+        if kind == "spamcomplaint":
+            store.suppress(email, "spam complaint (Postmark)")
+        elif kind == "subscriptionchange" and ev.get("SuppressSending"):
+            store.suppress(email, "unsubscribed (Postmark)")
+        elif kind == "bounce" and (ev.get("Type") or "") in ("HardBounce", "BadEmailAddress"):
+            store.suppress(email, "hard bounce (Postmark)")
+            store.save_verify(email, "undeliverable")
+    return {"ok": True}
 
 
 @app.get("/api/capture_token")
