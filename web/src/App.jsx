@@ -61,6 +61,9 @@ export default function App({ onHome }) {
   useEffect(() => {
     if (!campaign) return
     api.getStatus(campaign).then(setStatus).catch(() => {})
+    // keep the header pills honest while sends run: sent count + Apollo quota move live
+    const t = setInterval(() => api.getStatus(campaign).then(setStatus).catch(() => {}), 15000)
+    return () => clearInterval(t)
   }, [campaign, tab])
   useEffect(() => {
     if (!campaign) return

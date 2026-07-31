@@ -545,7 +545,9 @@ def _apollo_rate_summary() -> dict:
             seen = datetime.fromisoformat(e["at"])
         except (KeyError, ValueError):
             continue
-        if now - seen < timedelta(minutes=70):
+        # short shelf life: Apollo's hourly window resets behind our back, so a
+        # 50-minute-old "0 left" is a lie — show nothing rather than stale numbers
+        if now - seen < timedelta(minutes=10):
             fresh[path] = e
     worst = None
     for path, e in fresh.items():
