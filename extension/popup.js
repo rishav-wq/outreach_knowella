@@ -245,6 +245,17 @@ async function scan() {
   renderCount(added)
 }
 
+// Tear down the page-side observer and sync the toggle's UI. Used by the toggle
+// itself and by Clear list — clearing while the watcher runs would be undone
+// instantly, since every mutation re-pushes the whole comment list.
+async function stopWatch() {
+  if (watching) await runAgent('stop')
+  watching = false
+  $('watchLabel').textContent = 'Auto-scan while I scroll'
+  $('watch').classList.remove('on')
+  document.body.classList.remove('watching')
+}
+
 async function toggleWatch() {
   msg('')
   if (watching) {
@@ -268,6 +279,12 @@ async function toggleWatch() {
 // live results from the watcher as the user scrolls
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (m?.type !== 'knowella-commenters' || sender.tab?.id !== tabId) return
+  // Moved to a different post with a list still open: the old post's lock would
+  // silently reject every new commenter. Hold the push and tell the user.
+  if (captured.length && postUrl && m.url && m.url !== postUrl) {
+    msg('New post detected. Export or clear the current list to start capturing this one.', 'err')
+    return
+  }
   postUrl = m.url || postUrl
   const added = mergeFound(m.found)
   if (added > 0) { saveState(); renderCount(added) }
@@ -412,7 +429,13 @@ async function init() {
   $('watch').onclick = toggleWatch
   $('send').onclick = send
   $('export').onclick = exportCsv
-  $('clear').onclick = async () => { captured = []; lockActivity = ''; await saveState(); renderCount(0); msg('') }
+  $('clear').onclick = async () => {
+    await stopWatch()          // else the running observer re-pushes the same list instantly
+    captured = []; lockActivity = ''; postUrl = ''
+    await saveState()
+    renderCount(0)
+    msg('Cleared. Open the next post and Scan (or turn auto-scan back on).')
+  }
 }
 
 init()
