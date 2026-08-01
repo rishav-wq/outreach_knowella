@@ -65,6 +65,7 @@ function renderCount(delta) {
     : '')
   $('send').hidden = captured.length === 0
   $('clear').hidden = captured.length === 0
+  $('export').hidden = captured.length === 0
   $('send').textContent = `Send ${captured.length} to campaign`
   const list = $('list')
   list.hidden = captured.length === 0
@@ -329,6 +330,23 @@ function showSkipped(skipped, offIcp) {
   list.appendChild(btn)
 }
 
+// Local-only exit: download the captured list as CSV. Nothing is sent to the app,
+// no campaign, no enrichment — for efforts whose leads must stay out of this system
+// (e.g. a different brand). Enrich the CSV separately if needed.
+function exportCsv() {
+  if (!captured.length) return
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  const rows = [['name', 'profile_url', 'headline', 'captured_from', 'captured_at']]
+  for (const c of captured) rows.push([c.name, c.profile_url, c.headline, lockActivity || '', new Date().toISOString()])
+  const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\r\n')], { type: 'text/csv' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `linkedin-capture-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  msg(`Exported ${captured.length} to CSV (local only — nothing sent to the app).`, 'ok')
+}
+
 async function send() {
   $('send').disabled = true
   msg('Sending…')
@@ -393,6 +411,7 @@ async function init() {
   $('scan').onclick = scan
   $('watch').onclick = toggleWatch
   $('send').onclick = send
+  $('export').onclick = exportCsv
   $('clear').onclick = async () => { captured = []; lockActivity = ''; await saveState(); renderCount(0); msg('') }
 }
 
