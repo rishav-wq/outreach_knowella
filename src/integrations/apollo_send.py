@@ -238,6 +238,73 @@ def mailbox_health() -> list[dict]:
     return out
 
 
+# Mailboxes whose reputation must never be spent on cold outreach — the company's
+# real business addresses. A junk report on one of these hits the domain you run
+# the business on. Matched by domain or full address (env: PROTECTED_MAILBOXES).
+def protected_domains() -> set[str]:
+    raw = os.environ.get("PROTECTED_MAILBOXES", "knowella.com")
+    return {p.strip().lower().lstrip("@") for p in raw.split(",") if p.strip()}
+
+
+def is_protected(email: str) -> bool:
+    e = (email or "").strip().lower()
+    prot = protected_domains()
+    return bool(e) and (e in prot or e.rsplit("@", 1)[-1] in prot)
+
+
+# While a mailbox is still warming, Apollo's configured daily_cap is a ceiling for
+# LATER, not permission for today. Send at this fraction of it until warmup completes.
+WARMING_FRACTION = 0.5
+
+
+def effective_cap(m: dict) -> int:
+    """How many cold sends this mailbox may take today: 0 when it must not be used,
+    otherwise its Apollo cap scaled down while warmup is incomplete."""
+    if not m.get("active") or is_protected(m.get("email", "")):
+        return 0
+    if (m.get("placement") or "").lower() == "unhealthy":
+        return 0            # Apollo's own placement test says its mail lands in spam
+    cap = int(m.get("daily_cap") or 0) or 50
+    warm = m.get("warmup_score")
+    try:
+        warming = warm is not None and float(warm) < 100
+    except (TypeError, ValueError):
+        warming = True      # unknown warmup: assume still warming, stay conservative
+    return max(1, int(cap * WARMING_FRACTION)) if warming else cap
+
+
+def mailbox_ids_of(campaign: dict) -> list[str]:
+    """A campaign's send-from mailbox ids (back-compat with the single mailbox_id)."""
+    send = campaign.get("sending") or {}
+    return send.get("mailbox_ids") or ([send["mailbox_id"]] if send.get("mailbox_id") else [])
+
+
+def pick_mailbox(mailbox_ids: list[str], sent_today: dict, health: list[dict] | None = None) -> tuple[str, str]:
+    """Choose which mailbox sends the next lead: the healthy, under-cap one with the
+    LEAST load today. Replaces a blind hash rotation that had no idea a mailbox was
+    flagged Unhealthy or already over its daily limit — the bug behind the 2026-08-03
+    Microsoft 'suspicious sending' alert. Returns (mailbox_id, reason-if-none)."""
+    health = health if health is not None else mailbox_health()
+    by_id = {m["id"]: m for m in health}
+    usable = []
+    for mid in mailbox_ids:
+        m = by_id.get(mid)
+        if not m:                      # health unavailable (e.g. no API key): trust the config
+            usable.append((sent_today.get(mid, 0), mid))
+            continue
+        cap = effective_cap(m)
+        if cap <= 0 or sent_today.get(mid, 0) >= cap:
+            continue
+        usable.append((sent_today.get(mid, 0), mid))
+    if not usable:
+        blocked = [f"{by_id[i]['email']} ({(by_id[i].get('placement') or 'at cap')})"
+                   for i in mailbox_ids if i in by_id]
+        return "", ("every sending mailbox is at its daily cap or flagged unhealthy: "
+                    + ", ".join(blocked) if blocked else "no usable mailbox")
+    usable.sort()
+    return usable[0][1], ""
+
+
 def stop_contacts(sequence_id: str, contact_ids: list[str], mode: str = "mark_as_finished") -> int:
     """Stop enrolled contacts' remaining sequence emails (mark_as_finished keeps the
     history; 'remove' would erase it). The missing half of suppression: our list stops
@@ -321,7 +388,8 @@ def list_replies(sequence_id: str, limit: int = 200) -> list[dict]:
     return [m for m in list_messages(sequence_id, limit) if is_inbound(m)]
 
 
-def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None = None) -> str:
+def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None = None,
+              mailbox_id: str | None = None) -> str:
     """Upsert the contact with personalized copy, add it to the sequence. Returns contact id.
 
     followups: {'subject_N','body_N'} for every follow-up step (N = 2..), any count
@@ -342,8 +410,10 @@ def push_lead(lead: Lead, draft: Draft, campaign: dict, followups: dict | None =
         raise RuntimeError("Apollo sending needs sending.sequence_id and at least one sending.mailbox_ids in the campaign config")
     if not lead.email:
         raise RuntimeError(f"lead {lead.full_name} has no email — cannot send")
-    idx = int(hashlib.md5(lead.key.encode()).hexdigest(), 16) % len(mailbox_ids)
-    mailbox_id = mailbox_ids[idx]
+    if not mailbox_id:
+        # caller didn't choose: fall back to the old deterministic rotation
+        idx = int(hashlib.md5(lead.key.encode()).hexdigest(), 16) % len(mailbox_ids)
+        mailbox_id = mailbox_ids[idx]
 
     fu = followups or {}
     steps = sorted(int(k.rsplit("_", 1)[-1]) for k in fu

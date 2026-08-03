@@ -478,7 +478,24 @@ def mailboxes(campaign: str | None = None):
     ids = []
     if campaign:
         ids = _mailbox_ids(_load(campaign).get("sending") or {})
-    return {"mailboxes": apollo_send.list_mailboxes(), "current_ids": ids, "current": ids[0] if ids else None}
+    # carry each mailbox's guard state so the picker can show WHY one is unusable
+    boxes = apollo_send.list_mailboxes()
+    try:
+        health = {m["id"]: m for m in apollo_send.mailbox_health()}
+        sent = open_store().mailbox_sends_today()
+        for b in boxes:
+            h = health.get(b["id"]) or {}
+            cap = apollo_send.effective_cap(h) if h else 0
+            used = sent.get(b["id"], 0)
+            b.update({
+                "placement": h.get("placement", ""), "warmup": h.get("warmup_score"),
+                "cap": cap, "sent_today": used,
+                "protected": apollo_send.is_protected(b["email"]),
+                "blocked": bool(h) and (cap <= 0 or used >= cap),
+            })
+    except Exception:
+        pass   # health is advisory — never break the picker over it
+    return {"mailboxes": boxes, "current_ids": ids, "current": ids[0] if ids else None}
 
 
 @app.get("/api/sequences")

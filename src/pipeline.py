@@ -281,11 +281,21 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
         return {"lead": lead, "verdict": "suppressed", "reason": "on the do-not-contact list", "draft": final}
     pushed = False
     if not store.is_sent(lead.key):
+        # Deliverability guard: send from the healthy, under-cap mailbox with the
+        # least load today — never a mailbox Apollo flags Unhealthy, never past its
+        # (warmup-scaled) daily cap, never a protected business address.
+        mailbox_ids = apollo_send.mailbox_ids_of(cfg)
+        mid, why = apollo_send.pick_mailbox(mailbox_ids, store.mailbox_sends_today())
+        if not mid:
+            store.set_status(lead.key, "queued")
+            return {"lead": lead, "verdict": "held",
+                    "reason": f"{MAILBOXES_UNAVAILABLE} — {why}", "draft": final}
         # every stored follow-up step rides along, however many the sequence has
         fu = {k: v for k, v in (outbox or {}).items()
               if (k.startswith("subject_") or k.startswith("body_")) and k.rsplit("_", 1)[-1].isdigit()}
-        pid = apollo_send.push_lead(lead, send_draft, cfg, followups=fu)
+        pid = apollo_send.push_lead(lead, send_draft, cfg, followups=fu, mailbox_id=mid)
         store.mark_sent(lead.key, "apollo", pid or "")
+        store.bump_mailbox_send(mid)
         pushed = True
     store.set_status(lead.key, "sent")
     return {"lead": lead, "verdict": "sent", "reason": "pushed" if pushed else "already sent",
@@ -293,6 +303,7 @@ def advance(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: 
 
 
 APOLLO_HOURLY = "Apollo hourly API limit reached"
+MAILBOXES_UNAVAILABLE = "No healthy mailbox available"
 
 
 def _advance_safe(store: Store, lead: Lead, cfg: dict, dry_run: bool, require_review: bool) -> dict:
@@ -365,6 +376,12 @@ def run(store: Store, cfg: dict, dry_run: bool = True, limit: int | None = None,
             sent += 1
         if on_progress:
             on_progress(sent, len(results), total)
+        if (r.get("reason") or "").startswith(MAILBOXES_UNAVAILABLE):
+            # every mailbox is capped/unhealthy — the rest of the run would only
+            # repeat this. Stop; tomorrow's caps (or a fixed mailbox) resume it.
+            logging.getLogger("uvicorn.error").warning(
+                "[pipeline] stopping send after %d pushes: %s", sent, r["reason"])
+            break
         if (r.get("reason") or "").startswith(APOLLO_HOURLY):
             # a hard hourly quota won't reset mid-run — stop here; untouched leads
             # stay approved+queued and the next Send picks them up

@@ -286,12 +286,22 @@ export default function Review({ campaign }) {
               <>
                 <div className="drawer-backdrop" style={{ background: 'transparent', zIndex: 39 }} onClick={() => setMboxOpen(false)} />
                 <div className="mbox-menu">
-                  {boxes.map((b) => (
-                    <label key={b.id} className="mbox-opt">
-                      <input type="checkbox" checked={mailboxIds.includes(b.id)} disabled={!b.active} onChange={() => toggleMailbox(b.id)} />
-                      {b.email}{b.active ? '' : ' (inactive)'}
-                    </label>
-                  ))}
+                  {boxes.map((b) => {
+                    // the guard's verdict, in the place you choose senders
+                    const why = !b.active ? 'inactive'
+                      : b.protected ? 'business mailbox — protected'
+                      : (b.placement || '').toLowerCase() === 'unhealthy' ? 'unhealthy placement — blocked'
+                      : b.cap > 0 && b.sent_today >= b.cap ? `daily cap reached (${b.sent_today}/${b.cap})`
+                      : b.cap > 0 ? `${b.sent_today}/${b.cap} today` : ''
+                    const off = !b.active || b.blocked || b.protected
+                    return (
+                      <label key={b.id} className={`mbox-opt ${off ? 'mbox-off' : ''}`} title={why}>
+                        <input type="checkbox" checked={mailboxIds.includes(b.id)} disabled={!b.active} onChange={() => toggleMailbox(b.id)} />
+                        <span className="mbox-email">{b.email}</span>
+                        {why && <span className={`mbox-note ${off ? 'bad' : ''}`}>{why}</span>}
+                      </label>
+                    )
+                  })}
                 </div>
               </>
             )}

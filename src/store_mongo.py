@@ -263,6 +263,22 @@ class MongoStore:
     def is_sent(self, key: str) -> bool:
         return self.db.sends.find_one({"_id": key}) is not None
 
+    # --- per-mailbox daily send counter -------------------------------------
+    # The app had no idea how much each mailbox had sent today, so a hash-based
+    # rotation blew past Apollo's caps (75/70) and kept feeding mailboxes Apollo
+    # had already flagged Unhealthy. This is the ledger that makes caps real.
+    def bump_mailbox_send(self, mailbox_id: str) -> None:
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        self.db.mailbox_sends.update_one(
+            {"_id": f"{day}::{mailbox_id}"},
+            {"$inc": {"n": 1}, "$set": {"day": day, "mailbox": mailbox_id}},
+            upsert=True)
+
+    def mailbox_sends_today(self) -> dict:
+        """{mailbox_id: count} for today (UTC)."""
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return {d["mailbox"]: d.get("n", 0) for d in self.db.mailbox_sends.find({"day": day})}
+
     def mark_sent(self, key: str, platform: str, platform_id: str = "") -> None:
         self.db.sends.update_one(
             {"_id": key},

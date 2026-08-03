@@ -863,6 +863,10 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .mbox-opt { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px; font-size: 13px; color: var(--text-2); cursor: pointer; }
 .mbox-opt:hover { background: var(--signal-tint); color: var(--text); }
+.mbox-opt .mbox-email { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mbox-note { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.mbox-note.bad { color: var(--alert); font-weight: 600; }
+.mbox-opt.mbox-off .mbox-email { opacity: 0.55; text-decoration: line-through; }
 .mbox-opt input { accent-color: var(--signal); }
 .mbox-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .set-savebar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 14px 0; margin-top: 8px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
