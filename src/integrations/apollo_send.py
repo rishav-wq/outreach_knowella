@@ -252,25 +252,19 @@ def is_protected(email: str) -> bool:
     return bool(e) and (e in prot or e.rsplit("@", 1)[-1] in prot)
 
 
-# While a mailbox is still warming, Apollo's configured daily_cap is a ceiling for
-# LATER, not permission for today. Send at this fraction of it until warmup completes.
-WARMING_FRACTION = 0.5
-
-
 def effective_cap(m: dict) -> int:
-    """How many cold sends this mailbox may take today: 0 when it must not be used,
-    otherwise its Apollo cap scaled down while warmup is incomplete."""
+    """How many cold sends this mailbox may take today: 0 when it must not be used
+    at all, otherwise Apollo's own configured daily cap.
+
+    We deliberately do NOT discount the cap during warmup — Apollo already raises
+    daily_cap as a mailbox warms, so scaling it again double-counted and starved
+    the healthy mailboxes. The guard's job is to keep FLAGGED mailboxes out of the
+    rotation, not to second-guess Apollo's ramp."""
     if not m.get("active") or is_protected(m.get("email", "")):
         return 0
     if (m.get("placement") or "").lower() == "unhealthy":
         return 0            # Apollo's own placement test says its mail lands in spam
-    cap = int(m.get("daily_cap") or 0) or 50
-    warm = m.get("warmup_score")
-    try:
-        warming = warm is not None and float(warm) < 100
-    except (TypeError, ValueError):
-        warming = True      # unknown warmup: assume still warming, stay conservative
-    return max(1, int(cap * WARMING_FRACTION)) if warming else cap
+    return int(m.get("daily_cap") or 0) or 50
 
 
 def mailbox_ids_of(campaign: dict) -> list[str]:
