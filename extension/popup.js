@@ -176,51 +176,34 @@ function pageAgent(mode) {
       items.push({ name, profile_url: href, headline, activity: ckActivity })
     }
 
-    // REACTIONS: LinkedIn lists reactors in a modal ("All 117"). Far more numerous
-    // than commenters — a post with 4 comments can have 117 reactions — and still a
-    // self-selected signal, just weaker intent. Everything in the open modal belongs
-    // to the post it was opened from, so no activity id is needed to scope it.
+    // REACTIONS: LinkedIn lists reactors in a modal ("All 117") — far more numerous
+    // than commenters (4 comments vs 117 reactions on the same post) and still a
+    // self-selected signal, just weaker intent.
     //
-    // Detection is STRUCTURAL, not markup-based: this build carries no role="dialog",
-    // so we look for what a modal physically IS — a tall, fixed-position overlay —
-    // and take the profile links inside it.
-    const inOverlay = (el) => {
-      let n = el
-      for (let d = 0; n && d < 14; d++, n = n.parentElement) {
-        if (n.getAttribute && (n.getAttribute('role') === 'dialog' || n.getAttribute('aria-modal') === 'true')) return true
-        try {
-          const s = getComputedStyle(n)
-          if ((s.position === 'fixed' || s.position === 'absolute') && n.offsetHeight > 240 && n.offsetWidth > 240) {
-            // an overlay panel, not the page itself
-            if (n.offsetWidth < window.innerWidth * 0.9) return true
-          }
-        } catch (e) { /* detached node */ }
+    // Live-verified 2026-08-06 against the obfuscated build: every reactor row carries
+    // ONE aria-label with everything —
+    //   "Shilesh Gargi reacted with Funny, 3rd+ degree connection, Head of Marketing | ..."
+    // That beats walking the DOM, whose wrappers use display:contents (no box at all,
+    // so geometry- and class-based detection both fail). The modal only ever belongs
+    // to the post it was opened from, so no activity id is needed to scope it.
+    const seenHref = new Set(items.map((i) => i.profile_url))
+    for (const el of document.querySelectorAll('[aria-label*="reacted with"]')) {
+      const a = el.closest('a[href*="/in/"]') || el.querySelector('a[href*="/in/"]')
+      if (!a) continue
+      const href = (a.href || '').split('?')[0].split('#')[0]
+      if (!href.includes('/in/') || seenHref.has(href)) continue
+      const label = el.getAttribute('aria-label') || ''
+      // name ... "reacted with X," ... optional "Nth degree connection," ... headline
+      const m = label.match(/^(.*?)\s+reacted with\s+[^,]*,\s*(?:[^,]*degree connection,\s*)?([\s\S]*)$/i)
+      const name = cleanName(m ? m[1] : (a.innerText || '').split('\n')[0] || '')
+      if (!name) continue
+      let headline = clean(m ? m[2] : '')
+      if (!headline) {   // fall back to the row's own text
+        const lines = (a.innerText || '').split('\n').map(clean).filter(Boolean)
+        headline = lines.slice(1).find((l) => l.length > 6 && !badgeRe.test(l) && cleanName(l) !== name) || ''
       }
-      return false
-    }
-    const modalLinks = [...document.querySelectorAll('a[href*="/in/"]')].filter(
-      (a) => (a.offsetWidth || a.offsetHeight) && inOverlay(a))
-    if (modalLinks.length) {
-      const seenHref = new Set(items.map((i) => i.profile_url))
-      for (const a of modalLinks) {
-        const href = (a.href || '').split('?')[0].split('#')[0]
-        if (!href.includes('/in/') || seenHref.has(href)) continue
-        if (!(a.offsetWidth || a.offsetHeight)) continue
-        // walk up to the row that carries both the name and the headline
-        let row = a
-        for (let d = 0; d < 4 && row.parentElement; d++) {
-          row = row.parentElement
-          if ((row.innerText || '').split('\n').map(clean).filter(Boolean).length >= 2) break
-        }
-        const lines = (row.innerText || '').split('\n').map(clean).filter(Boolean)
-        if (!lines.length) continue
-        const name = cleanName(lines[0])
-        if (!name) continue
-        const headline = lines.slice(1).find((l) =>
-          l.length > 6 && !badgeRe.test(l) && cleanName(l) !== name) || ''
-        seenHref.add(href)
-        items.push({ name, profile_url: href, headline, activity: '', source: 'reaction' })
-      }
+      seenHref.add(href)
+      items.push({ name, profile_url: href, headline, activity: '', source: 'reaction' })
     }
     return items
   }
