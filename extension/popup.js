@@ -119,12 +119,21 @@ function renderCount(delta) {
   }
 }
 
-function msg(text, cls = '') {
+// action: optional {label, onClick} — puts the fix INSIDE the message, so a warning
+// that tells you to do something doesn't also make you go hunting for the button
+function msg(text, cls = '', action = null) {
   $('msg').innerHTML = ''
   if (!text) return
   const d = document.createElement('div')
   d.className = `msg ${cls}`
   d.textContent = text
+  if (action) {
+    const b = document.createElement('button')
+    b.className = 'msg-action'
+    b.textContent = action.label
+    b.onclick = action.onClick
+    d.appendChild(b)
+  }
   $('msg').appendChild(d)
 }
 
@@ -332,13 +341,32 @@ async function scan() {
   renderCount(added)
   if (otherPost > 0) {
     // the guard that stops one post's reactors piling onto another's list
-    msg(`This is a different post — ${otherPost} reactors were NOT added. Your list still holds ${captured.length} from the first post. Hit “Clear list” to start capturing this one.`, 'err')
+    msg(`Different post — ${otherPost} reactors not added. Your list still holds ${captured.length} from the first post.`,
+        'err', { label: 'Start fresh here', onClick: () => clearAll(true) })
     return
   }
   // say what came from where — so "it's not capturing" is never a guess again
   if (res.counts) {
     const c = res.counts
     msg(`Scanned: ${c.total} on the page (${c.reactions} from the reactions list, ${c.total - c.reactions} from comments) → ${added} new.`)
+  }
+}
+
+// Wipe the list and every lock. Deliberately NOT automatic on navigation: silently
+// discarding 117 captured people because you scrolled into another post is
+// unrecoverable. Instead the cross-post warnings offer this as a one-click action.
+// keepWatching: re-arm auto-scan afterwards so a fresh post starts capturing at once.
+async function clearAll(keepWatching = false) {
+  const wasWatching = watching
+  await stopWatch()          // else the running observer re-pushes the old list instantly
+  captured = []; lockActivity = ''; lockModal = ''; postUrl = ''; otherPost = 0; dismissed = new Set()
+  await saveState()
+  renderCount(0)
+  if (keepWatching && wasWatching) {
+    await toggleWatch()      // resumes on the post you're now looking at
+    msg('Fresh list — auto-scan is back on for this post. Just scroll.')
+  } else {
+    msg('Cleared. Open the next post and Scan (or turn auto-scan back on).')
   }
 }
 
@@ -379,7 +407,8 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   // Moved to a different post with a list still open: the old post's lock would
   // silently reject every new commenter. Hold the push and tell the user.
   if (captured.length && postUrl && m.url && m.url !== postUrl) {
-    msg('New post detected. Export or clear the current list to start capturing this one.', 'err')
+    msg(`New post — the current list still holds ${captured.length} from the last one.`,
+        'err', { label: 'Start fresh here', onClick: () => clearAll(true) })
     return
   }
   postUrl = m.url || postUrl
@@ -565,13 +594,7 @@ async function init() {
   $('watch').onclick = toggleWatch
   $('send').onclick = send
   $('export').onclick = exportCsv
-  $('clear').onclick = async () => {
-    await stopWatch()          // else the running observer re-pushes the same list instantly
-    captured = []; lockActivity = ''; lockModal = ''; postUrl = ''; otherPost = 0; dismissed = new Set()
-    await saveState()
-    renderCount(0)
-    msg('Cleared. Open the next post and Scan (or turn auto-scan back on).')
-  }
+  $('clear').onclick = () => clearAll(false)
 }
 
 init()

@@ -134,9 +134,11 @@
     font-size: 12.5px; color: var(--body); line-height: 1.5;
   }
   .msg.ok { border-left-color: var(--ok); }
+  .msg-action { display: block; margin-top: 8px; border: 1px solid var(--primary); background: #fff; color: var(--primary); font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 7px; }
+  .msg-action:hover { background: var(--primary); color: #fff; }
   .msg.err { border-left-color: var(--err); }
 
-  .actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+  .actions { display: flex; justify-content: flex-end; gap: 14px; margin-top: 4px; }
   .setup-note { font-size: 11.5px; color: var(--faint); margin: 10px 0 12px; line-height: 1.5; }
   #settings { display: none; }
   body.setup #settings { display: block; }
