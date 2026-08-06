@@ -155,6 +155,35 @@ function pageAgent(mode) {
       }
       items.push({ name, profile_url: href, headline, activity: ckActivity })
     }
+
+    // REACTIONS: LinkedIn lists reactors in a modal ("All 117"). Far more numerous
+    // than commenters — a post with 4 comments can have 117 reactions — and still a
+    // self-selected signal, just weaker intent. Everything in the open modal belongs
+    // to the post it was opened from, so no activity id is needed to scope it.
+    const dlg = [...document.querySelectorAll('[role="dialog"]')]
+      .find((d) => /reaction/i.test((d.innerText || '').slice(0, 120)))
+    if (dlg) {
+      const seenHref = new Set(items.map((i) => i.profile_url))
+      for (const a of dlg.querySelectorAll('a[href*="/in/"]')) {
+        const href = (a.href || '').split('?')[0].split('#')[0]
+        if (!href.includes('/in/') || seenHref.has(href)) continue
+        if (!(a.offsetWidth || a.offsetHeight)) continue
+        // walk up to the row that carries both the name and the headline
+        let row = a
+        for (let d = 0; d < 4 && row.parentElement; d++) {
+          row = row.parentElement
+          if ((row.innerText || '').split('\n').map(clean).filter(Boolean).length >= 2) break
+        }
+        const lines = (row.innerText || '').split('\n').map(clean).filter(Boolean)
+        if (!lines.length) continue
+        const name = cleanName(lines[0])
+        if (!name) continue
+        const headline = lines.slice(1).find((l) =>
+          l.length > 6 && !badgeRe.test(l) && cleanName(l) !== name) || ''
+        seenHref.add(href)
+        items.push({ name, profile_url: href, headline, activity: '', source: 'reaction' })
+      }
+    }
     return items
   }
 
@@ -227,7 +256,7 @@ async function scan() {
   const res = await runAgent('scan')
   if (!res) return
   if (!res.blocks) {
-    msg('No comment blocks found. Open the post itself and expand its comments — or LinkedIn changed its markup (the extension needs a selector update).', 'err')
+    msg('Nothing found. Expand the post’s comments, or open its reactions list ("117 · Like") and scan again — or LinkedIn changed its markup (the extension needs a selector update).', 'err')
     if (res.debug) {
       const list = $('list')
       list.hidden = false
