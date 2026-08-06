@@ -16,6 +16,8 @@ let captured = []          // [{name, profile_url, headline}] accumulated across
 let postUrl = ''
 let watching = false
 let lockActivity = ''      // capture locks to the post scanned FIRST; Clear list unlocks
+let lockModal = ''         // …and to that post's reactions modal ("All 117")
+let otherPost = 0          // reactors skipped because they belong to a DIFFERENT post
 let dismissed = new Set()  // profile urls you removed — never re-added by a later scan
 
 const norm = (u) => (u || '').toLowerCase().split('?')[0].split('#')[0]
@@ -29,12 +31,13 @@ const loadState = async () => {
   captured = s?.items || []
   postUrl = s?.postUrl || ''
   lockActivity = s?.lock || ''
+  lockModal = s?.lockModal || ''
   dismissed = new Set(s?.dismissed || [])
   renderCount(0)
 }
 const saveState = () =>
   chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl, lock: lockActivity,
-                                                 dismissed: [...dismissed] } })
+                                                 lockModal, dismissed: [...dismissed] } })
 
 // merge a scrape result into the accumulated list; returns how many were new.
 // The first batch with activity ids locks capture to that post (majority id), so
@@ -45,10 +48,18 @@ function mergeFound(found) {
     for (const c of found || []) if (c.activity) counts[c.activity] = (counts[c.activity] || 0) + 1
     lockActivity = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || [])[0] || ''
   }
+  // reactions carry no post id, so lock to the first modal seen — otherwise opening
+  // another post's reactors silently piles them onto this list
+  if (!lockModal) lockModal = (found || []).find((c) => c.modal)?.modal || ''
   const known = new Set(captured.map((c) => norm(c.profile_url)))
   let added = 0
+  otherPost = 0
   for (const c of found || []) {
     if (lockActivity && c.activity && c.activity !== lockActivity) continue   // another post's comment
+    if (c.source === 'reaction' && c.modal && lockModal && c.modal !== lockModal) {
+      otherPost++                                                             // another post's reactors
+      continue
+    }
     const k = norm(c.profile_url)
     if (!k || known.has(k) || dismissed.has(k)) continue   // removed people stay removed
     known.add(k)
@@ -186,6 +197,12 @@ function pageAgent(mode) {
     // That beats walking the DOM, whose wrappers use display:contents (no box at all,
     // so geometry- and class-based detection both fail). The modal only ever belongs
     // to the post it was opened from, so no activity id is needed to scope it.
+    // The modal carries no post id, so identify it by its own "All 117" tab count —
+    // stable for a given post, and enough to notice you've opened a DIFFERENT post's
+    // reactors (otherwise every post's list silently piles onto the last one).
+    const modalKey = [...document.querySelectorAll('[role="tab"], button, a')]
+      .map((e) => clean(e.innerText || ''))
+      .find((t) => /^all\s+[\d,]+$/i.test(t)) || ''
     const seenHref = new Set(items.map((i) => i.profile_url))
     for (const el of document.querySelectorAll('[aria-label*="reacted with"]')) {
       const a = el.closest('a[href*="/in/"]') || el.querySelector('a[href*="/in/"]')
@@ -203,7 +220,7 @@ function pageAgent(mode) {
         headline = lines.slice(1).find((l) => l.length > 6 && !badgeRe.test(l) && cleanName(l) !== name) || ''
       }
       seenHref.add(href)
-      items.push({ name, profile_url: href, headline, activity: '', source: 'reaction' })
+      items.push({ name, profile_url: href, headline, activity: '', source: 'reaction', modal: modalKey })
     }
     return items
   }
@@ -294,11 +311,15 @@ async function scan() {
   const added = mergeFound(res.found)
   await saveState()
   renderCount(added)
+  if (otherPost > 0) {
+    // the guard that stops one post's reactors piling onto another's list
+    msg(`This is a different post — ${otherPost} reactors were NOT added. Your list still holds ${captured.length} from the first post. Hit “Clear list” to start capturing this one.`, 'err')
+    return
+  }
   // say what came from where — so "it's not capturing" is never a guess again
   if (res.counts) {
     const c = res.counts
-    msg(`Scanned: ${c.total} on the page (${c.reactions} from the reactions list, ${c.total - c.reactions} from comments) → ${added} new.`
-        + (c.reactions === 0 ? ' If the reactions modal is open and this says 0, the overlay wasn’t detected — tell me.' : ''))
+    msg(`Scanned: ${c.total} on the page (${c.reactions} from the reactions list, ${c.total - c.reactions} from comments) → ${added} new.`)
   }
 }
 
@@ -344,6 +365,11 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   }
   postUrl = m.url || postUrl
   const added = mergeFound(m.found)
+  if (otherPost > 0) {
+    // auto-scan hit another post's reactors — say so instead of silently dropping them
+    msg(`Different post — ${otherPost} reactors not added. “Clear list” to capture this one.`, 'err')
+    return
+  }
   if (added > 0) { saveState(); renderCount(added) }
 })
 
@@ -488,7 +514,7 @@ async function init() {
   $('export').onclick = exportCsv
   $('clear').onclick = async () => {
     await stopWatch()          // else the running observer re-pushes the same list instantly
-    captured = []; lockActivity = ''; postUrl = ''; dismissed = new Set()
+    captured = []; lockActivity = ''; lockModal = ''; postUrl = ''; otherPost = 0; dismissed = new Set()
     await saveState()
     renderCount(0)
     msg('Cleared. Open the next post and Scan (or turn auto-scan back on).')
