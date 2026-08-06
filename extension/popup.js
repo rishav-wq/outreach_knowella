@@ -200,11 +200,19 @@ function pageAgent(mode) {
     // The modal carries no post id, so identify it by its own "All 117" tab count —
     // stable for a given post, and enough to notice you've opened a DIFFERENT post's
     // reactors (otherwise every post's list silently piles onto the last one).
-    const modalKey = [...document.querySelectorAll('[role="tab"], button, a')]
-      .map((e) => clean(e.innerText || ''))
-      .find((t) => /^all\s+[\d,]+$/i.test(t)) || ''
+    const reactionRows = document.querySelectorAll('[aria-label*="reacted with"]')
+    // computed ONLY when a reactions modal is actually open: reading innerText forces
+    // layout, and this used to run over every anchor on the page every 700ms while
+    // auto-scan was on, whether or not any reactions existed
+    let modalKey = ''
+    if (reactionRows.length) {
+      for (const e of document.querySelectorAll('[role="tab"], button')) {
+        const t = clean(e.innerText || '')
+        if (/^all\s+[\d,]+$/i.test(t)) { modalKey = t; break }
+      }
+    }
     const seenHref = new Set(items.map((i) => i.profile_url))
-    for (const el of document.querySelectorAll('[aria-label*="reacted with"]')) {
+    for (const el of reactionRows) {
       const a = el.closest('a[href*="/in/"]') || el.querySelector('a[href*="/in/"]')
       if (!a) continue
       const href = (a.href || '').split('?')[0].split('#')[0]
@@ -232,11 +240,22 @@ function pageAgent(mode) {
   if (mode === 'watch') {
     if (!window.__knowellaWatch) {
       let t = null
+      let misses = 0
       const push = () => {
+        // The panel is the only consumer. If it's closed, sending throws — after a few
+        // of those, disconnect: an observer left running on LinkedIn's DOM forever is
+        // both wasted work and an artifact we don't want lingering.
         try {
           chrome.runtime.sendMessage({ type: 'knowella-commenters',
-            url: location.href.split('?')[0], found: scrape() })
-        } catch (e) { /* panel closed — observer keeps quietly deduping later */ }
+            url: location.href.split('?')[0], found: scrape() },
+            () => { if (chrome.runtime.lastError) bumpMiss(); else misses = 0 })
+        } catch (e) { bumpMiss() }
+      }
+      const bumpMiss = () => {
+        if (++misses >= 3 && window.__knowellaWatch) {
+          window.__knowellaWatch.disconnect()
+          window.__knowellaWatch = null
+        }
       }
       const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(push, 700) })
       obs.observe(document.body, { childList: true, subtree: true })
@@ -365,24 +384,47 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   }
   postUrl = m.url || postUrl
   const added = mergeFound(m.found)
+  // persist FIRST — returning early on a cross-post warning used to drop people
+  // mergeFound had already accepted (in memory, never saved, lost on reload)
+  if (added > 0) { saveState(); renderCount(added) }
   if (otherPost > 0) {
     // auto-scan hit another post's reactors — say so instead of silently dropping them
     msg(`Different post — ${otherPost} reactors not added. “Clear list” to capture this one.`, 'err')
-    return
   }
-  if (added > 0) { saveState(); renderCount(added) }
 })
+
+// The API caps a capture at 200 people, but the panel can accumulate far more
+// (117 reactors on one post, 228 across two) — so send in chunks and add the
+// results up. Without this, any capture over 200 failed outright at Send.
+const CHUNK = 150
 
 async function sendBatch(commenters, skipFilter) {
   const campaign = $('campaign').value
   if (!campaign) { msg('Pick a campaign first.', 'err'); return null }
-  const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
-    body: JSON.stringify({ campaign, post_url: postUrl, commenters, skip_filter: skipFilter }),
-  })
-  if (!r.ok) throw new Error((await r.text()).slice(0, 200))
-  return r.json()
+  const totals = { added: 0, with_email: 0, no_email: 0, off_icp: 0, duplicates: 0,
+                   suppressed: 0, credits_used: 0, received: 0, skipped: [] }
+  for (let i = 0; i < commenters.length; i += CHUNK) {
+    const slice = commenters.slice(i, i + CHUNK)
+    if (commenters.length > CHUNK) {
+      msg(`Sending ${Math.min(i + CHUNK, commenters.length)}/${commenters.length}…`)
+    }
+    const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
+      body: JSON.stringify({ campaign, post_url: postUrl, commenters: slice, skip_filter: skipFilter }),
+    })
+    if (!r.ok) {
+      const detail = (await r.text()).slice(0, 200)
+      if (totals.added) throw new Error(`${detail} (${totals.added} already added before this failed)`)
+      throw new Error(detail)
+    }
+    const d = await r.json()
+    for (const k of ['added', 'with_email', 'no_email', 'off_icp', 'duplicates', 'suppressed', 'credits_used', 'received']) {
+      totals[k] += d[k] || 0
+    }
+    if (d.skipped?.length) totals.skipped.push(...d.skipped)
+  }
+  return totals
 }
 
 function resultLine(d, campaign) {
@@ -497,6 +539,10 @@ async function init() {
   if (!cfg.appUrl || !cfg.token) document.body.classList.add('setup')
   else { await loadCampaigns() }
   if (cfg.appUrl) $('appLink').href = cfg.appUrl   // the eyebrow opens the app
+  // show the version — the only way to tell at a glance whether a reload took effect
+  const v = chrome.runtime.getManifest().version
+  const h1 = document.querySelector('.top h1')
+  if (h1) h1.insertAdjacentHTML('beforeend', ` <span class="ver">v${v}</span>`)
 
   const tab = await activeTab()
   if (tab) { tabId = tab.id; await loadState() }
