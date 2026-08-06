@@ -16,6 +16,7 @@ let captured = []          // [{name, profile_url, headline}] accumulated across
 let postUrl = ''
 let watching = false
 let lockActivity = ''      // capture locks to the post scanned FIRST; Clear list unlocks
+let dismissed = new Set()  // profile urls you removed — never re-added by a later scan
 
 const norm = (u) => (u || '').toLowerCase().split('?')[0].split('#')[0]
   .replace('https://', '').replace('http://', '').replace(/^www\./, '').replace(/\/$/, '')
@@ -28,10 +29,12 @@ const loadState = async () => {
   captured = s?.items || []
   postUrl = s?.postUrl || ''
   lockActivity = s?.lock || ''
+  dismissed = new Set(s?.dismissed || [])
   renderCount(0)
 }
 const saveState = () =>
-  chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl, lock: lockActivity } })
+  chrome.storage.session.set({ [sessionKey()]: { items: captured, postUrl, lock: lockActivity,
+                                                 dismissed: [...dismissed] } })
 
 // merge a scrape result into the accumulated list; returns how many were new.
 // The first batch with activity ids locks capture to that post (majority id), so
@@ -47,7 +50,7 @@ function mergeFound(found) {
   for (const c of found || []) {
     if (lockActivity && c.activity && c.activity !== lockActivity) continue   // another post's comment
     const k = norm(c.profile_url)
-    if (!k || known.has(k)) continue
+    if (!k || known.has(k) || dismissed.has(k)) continue   // removed people stay removed
     known.add(k)
     captured.push({ name: c.name, profile_url: c.profile_url, headline: c.headline })
     added++
@@ -78,12 +81,29 @@ function renderCount(delta) {
   }
   for (const c of captured.slice(-80).reverse()) {
     const row = document.createElement('div')
-    row.textContent = c.name || c.profile_url
+    row.className = 'cap-row'
+    const txt = document.createElement('span')
+    txt.className = 'cap-txt'
+    txt.textContent = c.name || c.profile_url
     if (c.headline) {
       const s = document.createElement('span')
       s.textContent = ` — ${c.headline.slice(0, 60)}`
-      row.appendChild(s)
+      txt.appendChild(s)
     }
+    // drop an obviously-irrelevant person on the spot — saves an Apollo credit and
+    // keeps them out of later scans (dismissed, not just deleted)
+    const del = document.createElement('button')
+    del.className = 'cap-del'
+    del.textContent = '×'
+    del.title = 'Remove — and don’t re-add on the next scan'
+    del.onclick = async () => {
+      dismissed.add(norm(c.profile_url))
+      captured = captured.filter((x) => norm(x.profile_url) !== norm(c.profile_url))
+      await saveState()
+      renderCount(0)
+    }
+    row.appendChild(txt)
+    row.appendChild(del)
     list.appendChild(row)
   }
 }
@@ -460,7 +480,7 @@ async function init() {
   $('export').onclick = exportCsv
   $('clear').onclick = async () => {
     await stopWatch()          // else the running observer re-pushes the same list instantly
-    captured = []; lockActivity = ''; postUrl = ''
+    captured = []; lockActivity = ''; postUrl = ''; dismissed = new Set()
     await saveState()
     renderCount(0)
     msg('Cleared. Open the next post and Scan (or turn auto-scan back on).')

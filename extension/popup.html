@@ -115,6 +115,11 @@
   .list > div { padding: 7px 11px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .list > div:last-child { border-bottom: 0; }
   .list span { color: var(--muted); font-weight: 400; }
+  .list .cap-row { display: flex; align-items: center; gap: 6px; }
+  .cap-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+  .cap-del { flex: none; border: 0; background: transparent; color: var(--faint); font-size: 16px; line-height: 1; padding: 1px 5px; border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+  .list .cap-row:hover .cap-del { opacity: 1; }
+  .cap-del:hover { color: var(--err); background: #fb1e3915; }
   .list .rescue { width: calc(100% - 20px); margin: 10px; }
   .list::-webkit-scrollbar { width: 5px; }
   .list::-webkit-scrollbar-track { background: var(--line-2); border-radius: 10px; }
