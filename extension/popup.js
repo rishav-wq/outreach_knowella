@@ -180,11 +180,29 @@ function pageAgent(mode) {
     // than commenters — a post with 4 comments can have 117 reactions — and still a
     // self-selected signal, just weaker intent. Everything in the open modal belongs
     // to the post it was opened from, so no activity id is needed to scope it.
-    const dlg = [...document.querySelectorAll('[role="dialog"]')]
-      .find((d) => /reaction/i.test((d.innerText || '').slice(0, 120)))
-    if (dlg) {
+    //
+    // Detection is STRUCTURAL, not markup-based: this build carries no role="dialog",
+    // so we look for what a modal physically IS — a tall, fixed-position overlay —
+    // and take the profile links inside it.
+    const inOverlay = (el) => {
+      let n = el
+      for (let d = 0; n && d < 14; d++, n = n.parentElement) {
+        if (n.getAttribute && (n.getAttribute('role') === 'dialog' || n.getAttribute('aria-modal') === 'true')) return true
+        try {
+          const s = getComputedStyle(n)
+          if ((s.position === 'fixed' || s.position === 'absolute') && n.offsetHeight > 240 && n.offsetWidth > 240) {
+            // an overlay panel, not the page itself
+            if (n.offsetWidth < window.innerWidth * 0.9) return true
+          }
+        } catch (e) { /* detached node */ }
+      }
+      return false
+    }
+    const modalLinks = [...document.querySelectorAll('a[href*="/in/"]')].filter(
+      (a) => (a.offsetWidth || a.offsetHeight) && inOverlay(a))
+    if (modalLinks.length) {
       const seenHref = new Set(items.map((i) => i.profile_url))
-      for (const a of dlg.querySelectorAll('a[href*="/in/"]')) {
+      for (const a of modalLinks) {
         const href = (a.href || '').split('?')[0].split('#')[0]
         if (!href.includes('/in/') || seenHref.has(href)) continue
         if (!(a.offsetWidth || a.offsetHeight)) continue
@@ -229,7 +247,8 @@ function pageAgent(mode) {
 
   // one-shot scan (+ debug when nothing matches, so selector fixes never need guesswork)
   const found = scrape()
-  const out = { url: location.href.split('?')[0], found, blocks: found.length }
+  const out = { url: location.href.split('?')[0], found, blocks: found.length,
+                counts: { total: found.length, reactions: found.filter((f) => f.source === 'reaction').length } }
   if (!found.length) {
     const dbg = { viewNames: {}, classes: {}, componentkeys: {}, articles: document.querySelectorAll('article').length,
                   profileLinks: document.querySelectorAll('a[href*="/in/"]').length }
@@ -292,6 +311,12 @@ async function scan() {
   const added = mergeFound(res.found)
   await saveState()
   renderCount(added)
+  // say what came from where — so "it's not capturing" is never a guess again
+  if (res.counts) {
+    const c = res.counts
+    msg(`Scanned: ${c.total} on the page (${c.reactions} from the reactions list, ${c.total - c.reactions} from comments) → ${added} new.`
+        + (c.reactions === 0 ? ' If the reactions modal is open and this says 0, the overlay wasn’t detected — tell me.' : ''))
+  }
 }
 
 // Tear down the page-side observer and sync the toggle's UI. Used by the toggle
