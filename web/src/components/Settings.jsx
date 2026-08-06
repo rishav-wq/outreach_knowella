@@ -102,45 +102,87 @@ function MarketingSending() {
 // into an extension, so it authenticates with this instead. Only the hash is
 // stored server-side — the token is shown once, here, on generation.
 function LinkedInCapture() {
-  const [exists, setExists] = useState(null)
+  const [data, setData] = useState(null)      // {tokens, legacy}
   const [token, setToken] = useState('')      // plaintext, only right after generating
+  const [label, setLabel] = useState('')
   const [copied, setCopied] = useState(false)
-  useEffect(() => { api.getCaptureToken().then((d) => setExists(!!d.exists)).catch(() => setExists(false)) }, [])
+
+  const load = () => api.getCaptureToken().then(setData).catch(() => setData({ tokens: [] }))
+  useEffect(() => { load() }, [])
+
   const generate = async () => {
-    if (exists && !window.confirm('Generate a new token? The old one stops working everywhere it was pasted.')) return
-    const r = await api.createCaptureToken()
-    setToken(r.token); setExists(true); setCopied(false)
+    const r = await api.createCaptureToken(label.trim())
+    setToken(r.token); setCopied(false); setLabel('')
+    load()
   }
-  const revoke = async () => {
-    if (!window.confirm('Revoke the capture token? The extension stops working until you generate and paste a new one.')) return
-    await api.revokeCaptureToken()
-    setExists(false); setToken('')
+  const revoke = async (t) => {
+    if (!window.confirm(`Revoke ${t.label || 'this token'}? That person's extension stops working; everyone else is unaffected.`)) return
+    await api.revokeCaptureToken(t.id)
+    load()
+  }
+  const revokeLegacy = async () => {
+    if (!window.confirm('Retire the old shared token? Anyone still using it must switch to a personal one.')) return
+    await api.revokeLegacyCaptureToken()
+    load()
   }
   const copy = () => { navigator.clipboard.writeText(token).then(() => setCopied(true)).catch(() => {}) }
+  const when = (s) => (s ? new Date(s).toLocaleDateString() : '')
+
+  const tokens = data?.tokens || []
   return (
     <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <div className="drawer-label">LinkedIn capture extension</div>
       <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
-        The browser extension captures commenters from a LinkedIn post you're viewing into a campaign
-        (enriched via Apollo, deduped, landing as normal leads for review). It signs its requests with
-        this token — generate it once and paste it into the extension's settings.
+        The browser extension captures commenters and reactors from a LinkedIn post into a campaign
+        (enriched via Apollo, deduped, landing as normal leads for review). Give <b>each person their
+        own token</b> — issuing or revoking one never affects anybody else&apos;s.
       </div>
-      {token ? (
+
+      {token && (
         <div className="token-reveal">
           <code className="token-value">{token}</code>
           <button className="btn" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Shown once — it's stored hashed. If you lose it, generate a new one.
+            Shown once — only its hash is stored. Send it to that person for the extension&apos;s ⚙ settings.
           </div>
         </div>
-      ) : (
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-          {exists === null ? '…' : exists ? 'A token is active (hidden). Generating a new one replaces it.' : 'No token yet.'}
-        </div>
       )}
+
+      {data === null ? <Skeleton w="60%" h={12} /> : (
+        <>
+          {tokens.length > 0 && (
+            <ul className="supp-list" style={{ marginBottom: 10 }}>
+              {tokens.map((t) => (
+                <li key={t.id}>
+                  <b>{t.label}</b>
+                  <span className="muted">
+                    {' · issued ' + when(t.created_at)}
+                    {t.last_used_at ? ` · last used ${when(t.last_used_at)}` : ' · never used'}
+                  </span>
+                  <button className="icon-btn" title="Revoke this person's token" onClick={() => revoke(t)}>
+                    <Icon name="x" size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {data.legacy && (
+            <div className="banner" style={{ marginBottom: 10 }}>
+              An old <b>shared</b> token is still active — the one that broke for everyone whenever it was
+              regenerated. Give each person a token above, then retire it.
+              <button className="linklike" style={{ display: 'inline', marginLeft: 8 }} onClick={revokeLegacy}>Retire it</button>
+            </div>
+          )}
+          {tokens.length === 0 && !data.legacy && (
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>No tokens yet.</div>
+          )}
+        </>
+      )}
+
       <div className="ready-form">
-        <button className="btn" onClick={generate}>{exists ? 'Generate new token' : 'Generate token'}</button>
-        {exists && <button className="btn reject" onClick={revoke}>Revoke</button>}
+        <input className="field-input" placeholder="Who is this for? e.g. Sid" value={label}
+          onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generate()} />
+        <button className="btn primary" onClick={generate}>Generate token</button>
       </div>
     </motion.section>
   )

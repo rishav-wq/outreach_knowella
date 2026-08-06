@@ -1404,8 +1404,12 @@ def _capture_auth(request: Request) -> None:
     (the web app / open local dev). 401 otherwise."""
     tok = request.headers.get("x-capture-token") or ""
     if tok:
-        stored = open_store().get_setting(_CAPTURE_TOKEN_KEY)
-        if stored and hmac.compare_digest(hashlib.sha256(tok.encode()).hexdigest(), stored):
+        store = open_store()
+        h = hashlib.sha256(tok.encode()).hexdigest()
+        if store.find_capture_token(h):     # per-person tokens
+            return
+        legacy = store.get_setting(_CAPTURE_TOKEN_KEY)   # the old single shared token
+        if legacy and hmac.compare_digest(h, legacy):
             return
         raise HTTPException(401, "invalid capture token — generate one in Settings and paste it into the extension")
     if auth.enabled() and not getattr(request.state, "user", None):
@@ -1612,20 +1616,38 @@ async def postmark_events(request: Request):
 
 @app.get("/api/capture_token")
 def capture_token_status():
-    return {"exists": bool(open_store().get_setting(_CAPTURE_TOKEN_KEY))}
+    store = open_store()
+    tokens = [{"id": t["_id"], "label": t.get("label", ""),
+               "created_at": t.get("created_at", ""), "last_used_at": t.get("last_used_at", "")}
+              for t in store.list_capture_tokens()]
+    legacy = bool(store.get_setting(_CAPTURE_TOKEN_KEY))
+    return {"tokens": tokens, "legacy": legacy, "exists": bool(tokens) or legacy}
+
+
+class TokenCreate(BaseModel):
+    label: str = ""
 
 
 @app.post("/api/capture_token")
-def create_capture_token():
-    """Mint the capture token for the browser extension. Shown ONCE (only the hash
-    is kept); generating again replaces the old token everywhere."""
+def create_capture_token(r: TokenCreate = TokenCreate()):
+    """Mint a capture token for ONE person. Shown once (only its hash is stored) and
+    independent of everyone else's — issuing or revoking one never disturbs the
+    others, which the previous single shared token did."""
     token = "olc_" + secrets.token_urlsafe(32)   # olc = outreach linkedin capture
-    open_store().set_setting(_CAPTURE_TOKEN_KEY, hashlib.sha256(token.encode()).hexdigest())
-    return {"token": token}
+    tid = open_store().create_capture_token(
+        (r.label or "").strip() or "unnamed", hashlib.sha256(token.encode()).hexdigest())
+    return {"token": token, "id": tid}
+
+
+@app.delete("/api/capture_token/{tid}")
+def revoke_one_capture_token(tid: str):
+    open_store().revoke_capture_token(tid)
+    return {"ok": True}
 
 
 @app.delete("/api/capture_token")
-def revoke_capture_token():
+def revoke_legacy_capture_token():
+    """Retire the old shared token once everyone has a personal one."""
     open_store().delete_setting(_CAPTURE_TOKEN_KEY)
     return {"ok": True}
 

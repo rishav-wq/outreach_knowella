@@ -479,7 +479,11 @@ function exportCsv() {
   if (!captured.length) return
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const rows = [['name', 'profile_url', 'headline', 'captured_from', 'captured_at']]
-  for (const c of captured) rows.push([c.name, c.profile_url, c.headline, lockActivity || '', new Date().toISOString()])
+  // attribute to whatever identifies the source: the post's activity id, else the
+  // reactions modal it came from, else the page URL (was blank for reaction-only runs)
+  const from = lockActivity || lockModal || postUrl || ''
+  const at = new Date().toISOString()
+  for (const c of captured) rows.push([c.name, c.profile_url, c.headline, from, at])
   const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\r\n')], { type: 'text/csv' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
@@ -554,6 +558,9 @@ async function init() {
     document.body.classList.remove('setup')
     await loadCampaigns()
   }
+  // refresh campaigns when the panel regains focus — a campaign created in the app
+  // while the panel sat open used to stay missing from the dropdown until reopen
+  window.addEventListener('focus', () => { if (cfg.appUrl && cfg.token) loadCampaigns() })
   $('scan').onclick = scan
   $('watch').onclick = toggleWatch
   $('send').onclick = send

@@ -518,6 +518,33 @@ class MongoStore:
     def inc_blast_stat(self, bid: str, field: str, n: int = 1) -> None:
         self.db.blasts.update_one({"_id": bid}, {"$inc": {f"stats.{field}": n}})
 
+    # --- capture tokens: one per person, revocable independently ---------------
+    # A single shared token meant generating one for a teammate silently broke
+    # everyone else's extension. Each token is stored only as its SHA-256.
+    def create_capture_token(self, label: str, token_hash: str) -> str:
+        import uuid
+        tid = uuid.uuid4().hex[:10]
+        self.db.capture_tokens.insert_one({
+            "_id": tid, "label": label, "hash": token_hash,
+            "created_at": datetime.now(timezone.utc).isoformat()})
+        return tid
+
+    def list_capture_tokens(self) -> list[dict]:
+        return list(self.db.capture_tokens.find({}).sort("created_at", -1))
+
+    def revoke_capture_token(self, tid: str) -> None:
+        self.db.capture_tokens.delete_one({"_id": tid})
+
+    def find_capture_token(self, token_hash: str) -> dict | None:
+        """Match a presented token and stamp its last use (so a stale token is
+        identifiable before revoking it)."""
+        d = self.db.capture_tokens.find_one({"hash": token_hash})
+        if d:
+            self.db.capture_tokens.update_one(
+                {"_id": d["_id"]},
+                {"$set": {"last_used_at": datetime.now(timezone.utc).isoformat()}})
+        return d
+
     # --- app settings (single-value, e.g. the LinkedIn-capture token hash) ---
     def set_setting(self, key: str, value: str) -> None:
         self.db.settings.replace_one({"_id": key}, {"_id": key, "value": value}, upsert=True)

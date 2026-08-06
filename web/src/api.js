@@ -69,8 +69,9 @@ export const deleteAudience = (id) => apiSend(`/api/audiences/${encodeURICompone
 export const promoteLeads = (keys, campaign) => apiSend('/api/library/promote', 'POST', { keys, campaign })
 // LinkedIn-capture token for the browser extension (hash-stored; shown once on create)
 export const getCaptureToken = () => apiGet('/api/capture_token')
-export const createCaptureToken = () => apiSend('/api/capture_token', 'POST', {})
-export const revokeCaptureToken = () => apiSend('/api/capture_token', 'DELETE', {})
+export const createCaptureToken = (label) => apiSend('/api/capture_token', 'POST', { label })
+export const revokeCaptureToken = (id) => apiSend(`/api/capture_token/${encodeURIComponent(id)}`, 'DELETE', {})
+export const revokeLegacyCaptureToken = () => apiSend('/api/capture_token', 'DELETE', {})
 // bulk-approve every pending, sendable draft (respects existing rejections)
 export const approveAll = (campaign) => apiSend('/api/review/approve_all', 'POST', { campaign })
 // exclude a not-a-fit lead: clears its drafts + drops it from the campaign, but keeps it in the library
