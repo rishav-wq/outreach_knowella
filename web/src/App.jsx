@@ -8,6 +8,7 @@ import Review from './components/Review'
 import Leads from './components/Leads'
 import LeadsLibrary from './components/LeadsLibrary'
 import Marketing from './components/Marketing'
+import Sources from './components/Sources'
 import Audiences from './components/Audiences'
 import Inbox from './components/Inbox'
 import Settings from './components/Settings'
@@ -31,6 +32,7 @@ const MKT_NAV = [
 ]
 const SHARED_NAV = [
   { id: 'Library', slug: 'library', icon: 'list', shared: true },
+  { id: 'Sources', slug: 'sources', icon: 'download', shared: true },
   { id: 'Settings', slug: 'settings', icon: 'gear', shared: true },
 ]
 const NAV = [...SALES_NAV, ...MKT_NAV, ...SHARED_NAV]
@@ -107,6 +109,7 @@ export default function App({ onHome }) {
     if (tab === 'Library') return <LeadsLibrary onPromoted={() => api.getStatus(campaign).then(setStatus).catch(() => {})} />
     if (tab === 'Blasts') return <Marketing />
     if (tab === 'Audiences') return <Audiences />
+    if (tab === 'Sources') return <Sources />
     if (tab === 'Settings') return <Settings campaign={campaign} />
     return null
   }

@@ -440,7 +440,11 @@ async function sendBatch(commenters, skipFilter) {
     const r = await fetch(`${cfg.appUrl}/api/linkedin/capture`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Capture-Token': cfg.token },
-      body: JSON.stringify({ campaign, post_url: postUrl, commenters: slice, skip_filter: skipFilter }),
+      body: JSON.stringify({ campaign, post_url: postUrl, commenters: slice, skip_filter: skipFilter,
+                             // where this thread lives, so the app can tell which group /
+                             // community actually produces meetings
+                             source_name: ($('source').value || '').trim(),
+                             source_type: 'linkedin_post' }),
     })
     if (!r.ok) {
       const detail = (await r.text()).slice(0, 200)
@@ -557,10 +561,31 @@ async function loadCampaigns() {
     const { lastCampaign } = await chrome.storage.local.get('lastCampaign')
     if (lastCampaign && d.campaigns.includes(lastCampaign)) sel.value = lastCampaign
     sel.onchange = () => chrome.storage.local.set({ lastCampaign: sel.value })
+    loadSources()
   } catch (e) {
     sel.innerHTML = '<option value="">unavailable</option>'
     msg(`Can’t reach the app: ${e.message}`, 'err')
   }
+}
+
+// Suggest sources already known to the app, so the same group is spelled the same
+// way every time (typos would split one group's stats across two rows).
+async function loadSources() {
+  try {
+    const r = await fetch(`${cfg.appUrl}/api/sources`, { headers: { 'X-Capture-Token': cfg.token } })
+    if (!r.ok) return
+    const list = await r.json()
+    const dl = $('source-suggestions')
+    dl.innerHTML = ''
+    for (const s of list) {
+      const o = document.createElement('option')
+      o.value = s.name
+      dl.appendChild(o)
+    }
+    const { lastSource } = await chrome.storage.local.get('lastSource')
+    if (lastSource && !$('source').value) $('source').value = lastSource
+    $('source').onchange = () => chrome.storage.local.set({ lastSource: $('source').value })
+  } catch (e) { /* suggestions are optional */ }
 }
 
 // ---------- setup ----------

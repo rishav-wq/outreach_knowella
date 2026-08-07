@@ -1341,6 +1341,7 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
         f.write(data)
     leads_in = csv_source.from_csv(tmp)
     topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
+    src_id = store.upsert_source(f"CSV import ({source})", "import")
     skipped = 0
     for lead in leads_in:
         lead.source = source
@@ -1351,7 +1352,7 @@ async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: 
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
-        store.upsert_lead(lead, cfg["name"], topics)
+        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
     return {"pulled": len(leads_in) - skipped, "suppressed": skipped, "counts": store.counts(cfg["name"])}
 
 
@@ -1698,6 +1699,59 @@ def _fits_icp(text: str, toks: set[str]) -> bool | None:
     return True if words & toks else False
 
 
+# --- sources: the attribution spine ------------------------------------------
+@app.get("/api/sources")
+def list_sources(request: Request):
+    """Every place we've engaged, with what it actually produced. This is the dial:
+    leads in, meetings out, per LinkedIn group / publication / community.
+    Readable with a capture token too — the extension suggests known source names so
+    the same group isn't logged three different ways."""
+    _capture_auth(request)
+    store = open_store()
+    funnel = store.source_funnel()
+    out = []
+    for s in store.list_sources():
+        f = funnel.get(s["_id"], {})
+        out.append({"id": s["_id"], "name": s.get("name", ""), "type": s.get("type", ""),
+                    "url": s.get("url", ""), "notes": s.get("notes", ""),
+                    "created_at": s.get("created_at", ""),
+                    "leads": f.get("leads", 0), "with_email": f.get("with_email", 0),
+                    "sent": f.get("sent", 0), "engaged": f.get("engaged", 0),
+                    "replied": f.get("replied", 0), "meetings": f.get("meetings", 0)})
+    out.sort(key=lambda x: (x["meetings"], x["replied"], x["leads"]), reverse=True)
+    return out
+
+
+class SourceIn(BaseModel):
+    name: str
+    type: str = "linkedin_post"
+    url: str = ""
+
+
+@app.post("/api/sources")
+def create_source(s: SourceIn):
+    if not s.name.strip():
+        raise HTTPException(400, "name is required")
+    return {"id": open_store().upsert_source(s.name, s.type, s.url)}
+
+
+class SourceNotes(BaseModel):
+    notes: str
+
+
+@app.put("/api/sources/{sid}/notes")
+def update_source_notes(sid: str, r: SourceNotes):
+    """The questions people asked there — our content backlog, written by buyers."""
+    open_store().set_source_notes(sid, r.notes)
+    return {"ok": True}
+
+
+@app.delete("/api/sources/{sid}")
+def delete_source(sid: str):
+    open_store().delete_source(sid)
+    return {"ok": True}
+
+
 class Commenter(BaseModel):
     name: str = ""
     profile_url: str = ""
@@ -1709,6 +1763,8 @@ class LinkedInCapture(BaseModel):
     post_url: str = ""
     commenters: list[Commenter] = []
     skip_filter: bool = False   # true = capture everyone; the targeting filter is bypassed
+    source_name: str = ""       # the group/community/publication this thread lives in
+    source_type: str = "linkedin_post"
 
 
 @app.post("/api/linkedin/capture")
@@ -1780,6 +1836,9 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
                               company=company, linkedin_url=c["profile_url"]))
 
     topics = tagging.topics_of(cfg)
+    # attribute this capture: named source if the extension sent one, else the post URL
+    src_id = store.upsert_source(r.source_name or r.post_url or "LinkedIn",
+                                 r.source_type or "linkedin_post", r.post_url)
     added = with_email = suppressed = 0
     for c, lead in zip(fresh, leads):
         if lead.email and store.is_suppressed(lead.email):
@@ -1797,7 +1856,7 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         lead.source = "linkedin_comment"
         lead.raw = {**(lead.raw or {}),
                     "linkedin_capture": {"post_url": r.post_url, "headline": c["headline"]}}
-        store.upsert_lead(lead, cfg["name"], topics)
+        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
         added += 1
         if lead.email:
             with_email += 1
@@ -1861,6 +1920,7 @@ def pull_apollo(r: ApolloPull):
     except Exception as e:
         raise HTTPException(400, str(e))
     topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
+    src_id = store.upsert_source("Apollo search", "apollo")   # comparable to every other source
     skipped = 0
     no_email = 0
     for lead in leads_in:
@@ -1875,7 +1935,7 @@ def pull_apollo(r: ApolloPull):
         if not lead.email:  # Apollo couldn't reveal an email — an unemailable lead only clutters, so skip it
             no_email += 1
             continue
-        store.upsert_lead(lead, cfg["name"], topics)
+        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
     return {"pulled": len(leads_in) - skipped - no_email, "suppressed": skipped, "no_email": no_email,
             "credits_used": credits, "counts": store.counts(cfg["name"])}
 

@@ -50,6 +50,11 @@ export const deleteCampaign = (campaign) => apiSend('/api/campaign/delete', 'POS
 export const setMailbox = (campaign, mailbox_ids) => apiSend('/api/campaign/mailbox', 'POST', { campaign, mailbox_ids })
 
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
+// sources: where leads came from, and what each place produced
+export const listSources = () => apiGet('/api/sources')
+export const createSource = (s) => apiSend('/api/sources', 'POST', s)
+export const setSourceNotes = (id, notes) => apiSend(`/api/sources/${encodeURIComponent(id)}/notes`, 'PUT', { notes })
+export const deleteSource = (id) => apiSend(`/api/sources/${encodeURIComponent(id)}`, 'DELETE', {})
 // marketing engine (Postmark broadcast stream)
 export const getMarketingStatus = () => apiGet('/api/marketing/status')
 export const sendMarketingTest = (to) => apiSend('/api/marketing/test', 'POST', { to })

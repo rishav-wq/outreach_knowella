@@ -27,7 +27,7 @@ _OPEN_API_PATHS = {"/api/health", "/api/unsubscribe", "/api/postmark/events"}
 # with a per-user capture token instead (X-Capture-Token header). Requests carrying
 # that header skip the bearer check here; THE ENDPOINTS THEMSELVES verify the token
 # against its stored hash and 401 on mismatch — this is a re-route, not a hole.
-_CAPTURE_TOKEN_PATHS = {"/api/linkedin/capture", "/api/linkedin/campaigns"}
+_CAPTURE_TOKEN_PATHS = {"/api/linkedin/capture", "/api/linkedin/campaigns", "/api/sources"}
 
 
 def _issuer() -> str | None:

@@ -61,17 +61,17 @@ class MongoStore:
     def _scoped(campaign: str, base: str) -> str:
         return f"{campaign}::{base}"
 
-    def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None) -> None:
+    def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None,
+                    source_id: str = "") -> None:
         # _id is campaign-scoped so the SAME person can live in multiple campaigns as
         # independent rows (own research/draft/status). Re-importing into the SAME
         # campaign still dedups (same _id, $setOnInsert no-ops).
         sid = self._scoped(campaign, self._base_key(lead))
-        self.db.leads.update_one(
-            {"_id": sid},
-            {"$setOnInsert": {"campaign": campaign, "status": "new", "lead": lead.model_dump(),
-                              "topics": topics or [], "pulled_at": datetime.now(timezone.utc)}},
-            upsert=True,
-        )
+        doc = {"campaign": campaign, "status": "new", "lead": lead.model_dump(),
+               "topics": topics or [], "pulled_at": datetime.now(timezone.utc)}
+        if source_id:      # which LinkedIn group / publication / community produced them
+            doc["source_id"] = source_id
+        self.db.leads.update_one({"_id": sid}, {"$setOnInsert": doc}, upsert=True)
 
     def migrate_lead_keys(self) -> int:
         """One-time: re-key legacy leads (_id = base email) to campaign-scoped ids
@@ -517,6 +517,74 @@ class MongoStore:
 
     def inc_blast_stat(self, bid: str, field: str, n: int = 1) -> None:
         self.db.blasts.update_one({"_id": bid}, {"$inc": {f"stats.{field}": n}})
+
+    # --- sources: WHERE a lead came from, and what that place produced ---------
+    # The attribution spine. Without it the engage->capture->nurture loop is just
+    # activity; with it we can see which LinkedIn group / publication / community
+    # actually yields meetings, and spend the next hour there.
+    def upsert_source(self, name: str, stype: str = "linkedin_post", url: str = "") -> str:
+        """Find-or-create by (name, type). Returns the source id."""
+        key = (name or "").strip() or "unattributed"
+        d = self.db.sources.find_one({"name": key, "type": stype})
+        if d:
+            if url and not d.get("url"):
+                self.db.sources.update_one({"_id": d["_id"]}, {"$set": {"url": url}})
+            return d["_id"]
+        import uuid
+        sid = uuid.uuid4().hex[:10]
+        self.db.sources.insert_one({"_id": sid, "name": key, "type": stype, "url": url,
+                                    "created_at": datetime.now(timezone.utc).isoformat()})
+        return sid
+
+    def list_sources(self) -> list[dict]:
+        return list(self.db.sources.find({}).sort("created_at", -1))
+
+    def delete_source(self, sid: str) -> None:
+        self.db.sources.delete_one({"_id": sid})
+        self.db.leads.update_many({"source_id": sid}, {"$unset": {"source_id": ""}})
+
+    def set_source_notes(self, sid: str, notes: str) -> None:
+        """Questions people actually asked in that place — the content backlog."""
+        self.db.sources.update_one({"_id": sid}, {"$set": {"notes": notes}})
+
+    def source_funnel(self) -> dict:
+        """{source_id: {leads, with_email, sent, replied, meetings, opened, clicked}} —
+        one pass over the leads, then set-membership against the other collections."""
+        by_source: dict = {}
+        keys_of: dict = {}
+        for d in self.db.leads.find({"source_id": {"$exists": True}},
+                                    {"source_id": 1, "status": 1, "lead.email": 1}):
+            sid = d.get("source_id")
+            if not sid:
+                continue
+            f = by_source.setdefault(sid, {"leads": 0, "with_email": 0, "sent": 0,
+                                           "replied": 0, "meetings": 0, "engaged": 0})
+            f["leads"] += 1
+            if ((d.get("lead") or {}).get("email") or ""):
+                f["with_email"] += 1
+            keys_of.setdefault(sid, []).append(d["_id"])
+        all_keys = [k for ks in keys_of.values() for k in ks]
+        if not all_keys:
+            return by_source
+        sent = {d["_id"] for d in self.db.sends.find({"_id": {"$in": all_keys}}, {"_id": 1})}
+        replied = {d["_id"] for d in self.db.replies.find({"_id": {"$in": all_keys}}, {"_id": 1})}
+        met = {d["_id"] for d in self.db.meetings.find({"_id": {"$in": all_keys}}, {"_id": 1})}
+        engaged = self.engagement_by_email()          # marketing opens/clicks, keyed by email
+        email_of = {d["_id"]: ((d.get("lead") or {}).get("email") or "").lower()
+                    for d in self.db.leads.find({"_id": {"$in": all_keys}}, {"lead.email": 1})}
+        for sid, ks in keys_of.items():
+            f = by_source[sid]
+            for k in ks:
+                if k in sent:
+                    f["sent"] += 1
+                if k in replied:
+                    f["replied"] += 1
+                if k in met:
+                    f["meetings"] += 1
+                e = engaged.get(email_of.get(k, ""))
+                if e and (e.get("opened") or e.get("clicked")):
+                    f["engaged"] += 1
+        return by_source
 
     # --- capture tokens: one per person, revocable independently ---------------
     # A single shared token meant generating one for a teammate silently broke

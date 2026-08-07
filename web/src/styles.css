@@ -448,6 +448,9 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .lib-promote { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-2); }
 .lib-email { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; white-space: nowrap; }
 .lib-more { display: flex; justify-content: center; padding: 14px; border-top: 1px solid var(--line); }
+.src-link { color: var(--signal); text-decoration: none; }
+.src-notes { font-size: 11.5px; color: var(--text-2); margin-top: 4px; cursor: pointer; max-width: 380px; }
+.src-notes:hover { color: var(--signal); }
 .lib-email .icon-btn { opacity: 0; transition: opacity 0.15s; }
 tr:hover .lib-email .icon-btn { opacity: 1; }
 .mkt-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
