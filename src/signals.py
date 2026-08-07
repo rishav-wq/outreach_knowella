@@ -302,7 +302,7 @@ def poll_all(store) -> dict:
 _poller_started = False
 
 
-def start_poller(open_store) -> None:
+def start_poller(open_store, extra=None) -> None:
     """Background loop, started once per process. Single uvicorn process (see the
     Dockerfile), so there is exactly one poller; even so every write is an idempotent
     upsert on the dedupe key, which keeps a restart or a second process harmless."""
@@ -315,6 +315,7 @@ def start_poller(open_store) -> None:
     def loop():
         time.sleep(20)          # let the app finish coming up before the first poll
         while True:
+            store = None
             try:
                 store = open_store()
                 if store.list_feeds():
@@ -323,6 +324,16 @@ def start_poller(open_store) -> None:
                         print(f"[signals] polled feeds: {res['new']} new, {res['errors']} error(s)")
             except Exception as e:
                 print(f"[signals] poll cycle failed: {e}")
+            # Sources that aren't plain feeds (OSHA citations) are injected by the
+            # caller rather than imported here — they import this module, and a poller
+            # that only ran feeds would leave citations arriving only on a manual click.
+            for fn in (extra or []):
+                try:
+                    n = fn(store or open_store())
+                    if n:
+                        print(f"[signals] {fn.__module__.split('.')[-1]}: {n} new")
+                except Exception as e:
+                    print(f"[signals] {getattr(fn, '__module__', '?')} poll failed: {e}")
             time.sleep(POLL_SECONDS)
 
     threading.Thread(target=loop, daemon=True, name="signal-poller").start()

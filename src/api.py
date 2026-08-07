@@ -28,8 +28,8 @@ from pydantic import BaseModel
 from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from . import signals
-from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, postmark_send
-from .models import Lead
+from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, osha, postmark_send
+from .models import Fact, Lead, Research
 from .store import open_store
 
 config.load_env()  # so Clerk/CORS env is available at app-construction time
@@ -131,7 +131,7 @@ def _load(name: str) -> dict:
     _seed_campaigns_once(store)
     _migrate_leads_once(store)
     _backfill_sources_once(store)
-    signals.start_poller(open_store)
+    signals.start_poller(open_store, extra=[osha.poll])
     cfg = store.get_campaign(name)
     if cfg is None:
         raise HTTPException(404, f"campaign '{name}' not found")
@@ -1811,6 +1811,9 @@ def list_signals(status: str = ""):
             "title": d.get("title", ""), "text": d.get("text", ""),
             "url": d.get("url", ""), "status": d.get("status", "new"),
             "feed": d.get("feed", ""), "source_id": d.get("source_id", ""),
+            # only present on OSHA citations — the fields that make one a lead
+            "company": d.get("company", ""), "location": d.get("location", ""),
+            "penalty": d.get("penalty", 0),
             "source": names.get(d.get("source_id", ""), "")}
            for d in store.list_signals(status)]
     return {"signals": out, "counts": store.signal_counts(),
@@ -1861,7 +1864,75 @@ def remove_signal(sid: str):
 @app.post("/api/signals/poll")
 def poll_signals():
     """Poll every feed now, rather than waiting for the half-hourly cycle."""
-    return signals.poll_all(open_store())
+    store = open_store()
+    res = signals.poll_all(store)
+    try:
+        res["citations"] = osha.poll(store)
+    except Exception as e:
+        res["citations_error"] = str(e)[:160]
+    return res
+
+
+# --- OSHA citations → leads ---------------------------------------------------
+# The one signal on this page that is a lead rather than a reading item: a named
+# employer, publicly cited, with a dated and expensive problem. Resolution is split
+# in two on purpose — looking a company up is free, revealing contacts costs credits,
+# and nobody should email the wrong company about a worker fatality because the app
+# silently took Apollo's top hit.
+@app.post("/api/signals/{sid}/resolve")
+def resolve_citation(sid: str):
+    """Company name → Apollo organisation candidates, each with a free preview of who
+    works there in safety. Costs nothing; reveals nothing."""
+    store = open_store()
+    sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
+    if not sig:
+        raise HTTPException(404, "signal not found")
+    company = sig.get("company") or sig.get("title", "")
+    if not company:
+        raise HTTPException(400, "this signal has no company on it")
+    out = []
+    for org in apollo.find_org(company):
+        try:
+            people = apollo.preview_contacts_at_org(org["id"])
+        except Exception:
+            people = []
+        out.append({**org, "contacts": people})
+    return {"company": company, "candidates": out}
+
+
+class PromoteCitation(BaseModel):
+    org_id: str
+    campaign: str
+    limit: int = 3
+
+
+@app.post("/api/signals/{sid}/promote")
+def promote_citation(sid: str, r: PromoteCitation):
+    """Turn a citation into leads in a campaign. Reveals contacts (credits), attaches
+    the citation itself as the grounded fact the draft is written from — which is the
+    whole point: this lead has a reason, unlike anything on a bought list."""
+    store = open_store()
+    cfg = _load(r.campaign)
+    sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
+    if not sig:
+        raise HTTPException(404, "signal not found")
+    leads, credits = apollo.contacts_at_org(r.org_id, limit=max(1, min(r.limit, 10)))
+    leads = [ld for ld in leads if ld.email]        # no email, no campaign
+    if not leads:
+        raise HTTPException(400, "Apollo revealed no reachable contact at that company")
+    src_id = sig.get("source_id") or store.upsert_source("OSHA citations", "regulator", osha.FEED_URL)
+    fact = Fact(claim=sig.get("text") or sig.get("title", ""),
+                source_url=sig.get("url", ""), source_type="osha",
+                published=(sig.get("created_at") or "")[:10], confidence=0.95)
+    research = Research(facts=[fact], summary=sig.get("text") or "")
+    made = []
+    for ld in leads:
+        store.upsert_lead(ld, cfg["name"], ["osha-citation"], source_id=src_id)
+        key = store._scoped(cfg["name"], store._base_key(ld))
+        store.save_research(key, "osha-citation", research)
+        made.append({"key": key, "name": ld.full_name, "title": ld.title, "email": ld.email})
+    store.set_signal_status(sid, "engaged")
+    return {"added": len(made), "credits": credits, "leads": made, "campaign": cfg["name"]}
 
 
 class FeedIn(BaseModel):

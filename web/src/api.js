@@ -66,6 +66,10 @@ export const addFeed = (f) => apiSend('/api/feeds', 'POST', f)
 export const updateFeed = (id, f) => apiSend(`/api/feeds/${encodeURIComponent(id)}`, 'PUT', f)
 export const deleteFeed = (id) => apiSend(`/api/feeds/${encodeURIComponent(id)}`, 'DELETE', {})
 export const clearSignals = (channel = '') => apiSend('/api/signals/clear', 'POST', { channel })
+// OSHA citations: look the employer up (free), then reveal contacts into a campaign (credits)
+export const resolveCitation = (id) => apiSend(`/api/signals/${encodeURIComponent(id)}/resolve`, 'POST', {})
+export const promoteCitation = (id, org_id, campaign, limit = 3) =>
+  apiSend(`/api/signals/${encodeURIComponent(id)}/promote`, 'POST', { org_id, campaign, limit })
 export const toggleFeed = (id, on) => apiSend(`/api/feeds/${encodeURIComponent(id)}/toggle`, 'POST', { status: on ? 'on' : 'off' })
 // backlog: the questions buyers asked — what to write next
 export const listBacklog = () => apiGet('/api/backlog')

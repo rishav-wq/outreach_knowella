@@ -17,6 +17,7 @@ optional `apollo` block (see _build_filters).
 from __future__ import annotations
 
 import os
+import re
 
 import httpx
 
@@ -356,3 +357,81 @@ def fetch_leads(cfg: dict, limit: int = 250, reveal: bool = True,
     if not reveal:
         return [Lead(first_name=pv["first_name"], title=pv["title"], company=pv["company"]) for pv in previews], 0
     return _reveal(previews, hdr)
+
+
+# --- resolving a company we already know by name ------------------------------
+# Everything above starts from an ICP filter and asks Apollo "who matches?". This
+# starts from the other end: a specific named employer (an OSHA citation, a form
+# fill) where we need the org record and then its safety leadership.
+
+# The buyer for an OSHA citation isn't a job title in the abstract — it's whoever
+# has to answer for it. Ordered from most to least accountable; Apollo matches these
+# as partials, so "safety" alone would drag in "safety driver" and worse.
+SAFETY_TITLES = [
+    "ehs director", "ehs manager", "director of safety", "safety director",
+    "vp safety", "vice president safety", "health and safety manager",
+    "environmental health and safety", "safety manager", "hse manager",
+    "risk manager", "compliance manager", "plant manager", "operations director",
+]
+
+
+def find_org(name: str, limit: int = 5) -> list[dict]:
+    """Company name → Apollo organisation candidates [{id, name, domain}]. Free.
+
+    Returns several, deliberately. Legal names from a citation ("Blazey Construction
+    Services LLC") don't always rank first against Apollo's index, and silently
+    taking the top hit is how you email the wrong company about a fatality.
+    """
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    q = re.sub(r"\b(LLC|L\.L\.C\.|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.|Ltd\.?|LP|LLP|PLLC)\b\.?",
+               "", name, flags=re.I).strip(" ,.")     # the suffix hurts the match
+    r = httpx.post(COMPANY_ENDPOINT, json={"q_organization_name": q or name, "page": 1, "per_page": limit},
+                   headers=hdr, timeout=30.0)
+    _raise_for_status(r)
+    j = r.json()
+    out = []
+    for o in (j.get("organizations") or j.get("accounts") or []):
+        if not o.get("id"):
+            continue
+        out.append({"id": o["id"], "name": o.get("name") or "",
+                    "domain": _domain(o), "employees": o.get("estimated_num_employees") or 0,
+                    "industry": o.get("industry") or "",
+                    "location": ", ".join(x for x in [o.get("city"), o.get("state")] if x)})
+    return out
+
+
+def contacts_at_org(org_id: str, titles: list[str] | None = None,
+                    limit: int = 5) -> tuple[list[Lead], int]:
+    """The safety leadership at one org → revealed leads, and the credits it cost.
+    Falls back to any senior contact when nobody carries a safety title: a small
+    contractor often has no EHS function, which is rather the point of the pitch."""
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    base = {"organization_ids": [org_id]}
+    previews = _search_previews({**base, "person_titles": titles or SAFETY_TITLES}, limit, hdr)
+    if not previews:
+        previews = _search_previews({**base, "person_seniorities": ["owner", "founder", "c_suite",
+                                                                    "vp", "director"]}, limit, hdr)
+    if not previews:
+        return [], 0
+    return _reveal(previews, hdr)
+
+
+def preview_contacts_at_org(org_id: str, limit: int = 5) -> list[dict]:
+    """Who's in safety at this org — masked previews only. FREE: no reveal, no
+    credits. Lets the UI show what it found before anyone commits to spending."""
+    key = os.environ.get("APOLLO_API_KEY")
+    if not key:
+        raise RuntimeError("APOLLO_API_KEY not set")
+    hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
+    base = {"organization_ids": [org_id]}
+    pv = _search_previews({**base, "person_titles": SAFETY_TITLES}, limit, hdr)
+    if not pv:
+        pv = _search_previews({**base, "person_seniorities": ["owner", "founder", "c_suite",
+                                                              "vp", "director"]}, limit, hdr)
+    return [{"first_name": p["first_name"], "title": p["title"]} for p in pv]

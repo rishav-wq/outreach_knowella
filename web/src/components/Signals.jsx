@@ -108,8 +108,10 @@ export default function Signals() {
   }, 'Clearing…')
 
   const open = (data?.signals || []).filter((s) => s.status === 'new')
-  const people = useMemo(() => open.filter((s) => s.channel !== 'rss' && PERSON_KINDS.has(s.kind)), [data])
-  const topics = useMemo(() => open.filter((s) => !(s.channel !== 'rss' && PERSON_KINDS.has(s.kind))), [data])
+  const isPerson = (s) => s.channel !== 'rss' && PERSON_KINDS.has(s.kind)
+  const people = useMemo(() => open.filter(isPerson), [data])
+  const cited = useMemo(() => open.filter((s) => s.kind === 'citation'), [data])
+  const topics = useMemo(() => open.filter((s) => !isPerson(s) && s.kind !== 'citation'), [data])
 
   if (data === null) return <div><Skeleton h={44} /><Skeleton h={92} r={12} style={{ marginTop: 16 }} /><Skeleton h={260} r={12} style={{ marginTop: 14 }} /></div>
 
@@ -181,7 +183,7 @@ export default function Signals() {
       <AnimatePresence mode="wait">
         <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
           {view === 'queue' && (
-            <Queue people={people} topics={topics} feeds={feeds} busy={busy}
+            <Queue people={people} cited={cited} topics={topics} feeds={feeds} busy={busy}
               onAddStarters={addStarters} onClearTopics={clearTopics}
               onReload={load} onNote={setNote} onTuneFeeds={() => setView('feeds')} />
           )}
@@ -197,12 +199,12 @@ export default function Signals() {
 
 // --- queue -------------------------------------------------------------------
 
-function Queue({ people, topics, feeds, busy, onAddStarters, onClearTopics, onReload, onNote, onTuneFeeds }) {
+function Queue({ people, cited, topics, feeds, busy, onAddStarters, onClearTopics, onReload, onNote, onTuneFeeds }) {
   const [adding, setAdding] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const unfiltered = feeds.filter((f) => !(f.keywords || []).length && !NO_FILTER_OK.has(f.url)).length
 
-  if (!people.length && !topics.length) {
+  if (!people.length && !cited.length && !topics.length) {
     return (
       <>
         {adding && <AddByHand onDone={() => { setAdding(false); onReload() }} onCancel={() => setAdding(false)} />}
@@ -245,6 +247,20 @@ function Queue({ people, topics, feeds, busy, onAddStarters, onClearTopics, onRe
           <p className="sig-h-sub">A named person, in public, waiting for an answer. This is the whole point of the loop.</p>
           <div className="sig-cards">
             {people.map((s) => <PersonCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
+          </div>
+        </section>
+      )}
+
+      {cited.length > 0 && (
+        <section className="sig-sect">
+          <h4 className="sig-h">Just cited by OSHA <span className="sig-h-n sig-h-n-hot">{cited.length}</span></h4>
+          <p className="sig-h-sub">
+            A named employer with a public, dated, expensive problem they are legally obliged to fix.
+            The only thing on this page that is a lead rather than a reading item — and the reason
+            for the email writes itself.
+          </p>
+          <div className="sig-cards">
+            {cited.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
           </div>
         </section>
       )}
@@ -321,6 +337,97 @@ function PersonCard({ s, onReload, onNote }) {
         </button>
         <button className="btn ghost" onClick={() => done(() => api.setSignalStatus(s.id, 'ignored'))}>Ignore</button>
       </footer>
+    </motion.article>
+  )
+}
+
+// A citation is the only signal that becomes a lead, so it's the only one with a
+// two-step action: look the employer up (free) and then reveal contacts (credits).
+// Apollo's top hit for "FleetPride" included a spring retailer — the choice stays
+// with the human, because the alternative is emailing a stranger about a fatality.
+function CitationCard({ s, onReload, onNote }) {
+  const [cands, setCands] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [campaigns, setCampaigns] = useState([])
+  const [campaign, setCampaign] = useState('')
+  const [done, setDone] = useState(null)
+
+  const resolve = async () => {
+    setBusy('looking up')
+    try {
+      const [r, cs] = await Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
+      setCands(r.candidates || []); setCampaigns(cs); setCampaign(cs[0] || '')
+    } catch (e) { onNote(String(e.message || e).slice(0, 180)) }
+    finally { setBusy('') }
+  }
+  const promote = async (org) => {
+    setBusy(org.id)
+    try {
+      const r = await api.promoteCitation(s.id, org.id, campaign)
+      setDone(r)
+      onNote(`${r.added} lead${r.added === 1 ? '' : 's'} added to ${r.campaign} — ${r.credits} Apollo credit${r.credits === 1 ? '' : 's'}`)
+      onReload()
+    } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
+    finally { setBusy('') }
+  }
+
+  return (
+    <motion.article layout className="sig-card k-citation" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <header className="sig-card-head">
+        <span className="sig-kind sig-kind-cite">OSHA citation</span>
+        {s.location && <span className="sig-meta">{s.location}</span>}
+        <span className="sig-meta sig-when">{ago(s.created_at)}</span>
+      </header>
+      <div className="sig-cite-top">
+        <div className="sig-who">{s.company || s.title}</div>
+        {s.penalty > 0 && <div className="sig-penalty">${Number(s.penalty).toLocaleString()}<small>proposed penalty</small></div>}
+      </div>
+      {s.text && <p className="sig-card-text">{s.text}</p>}
+
+      {done ? (
+        <div className="sig-cite-done">
+          Added {done.added} to <b>{done.campaign}</b>: {done.leads.map((l) => l.name).join(', ')}.
+          The citation is attached as the fact the draft is written from.
+        </div>
+      ) : cands === null ? (
+        <footer className="sig-card-foot">
+          <button className="btn primary" onClick={resolve} disabled={!!busy}>
+            {busy ? 'Looking up…' : 'Find who to contact'}
+          </button>
+          <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
+        </footer>
+      ) : cands.length === 0 ? (
+        <div className="sig-cite-none">
+          Apollo has no record of <b>{s.company}</b>. Small contractors often aren't in it at all —
+          this one has to be found by hand or skipped.
+        </div>
+      ) : (
+        <div className="sig-cite-pick">
+          <div className="sig-cite-pick-h">
+            Which company is it? <span className="muted">Apollo matches by name, so check the domain.</span>
+            <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+              {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {cands.map((o) => (
+            <div key={o.id} className="sig-cand">
+              <div className="sig-bl-main">
+                <div className="sig-bl-q">{o.name} {o.domain && <span className="sig-dom">{o.domain}</span>}</div>
+                <div className="sig-meta">
+                  {o.contacts.length
+                    ? o.contacts.slice(0, 3).map((p) => `${p.first_name} — ${p.title}`).join(' · ')
+                    : 'nobody reachable at this record'}
+                </div>
+              </div>
+              <button className="btn primary" disabled={!o.contacts.length || !!busy || !campaign}
+                onClick={() => promote(o)}>
+                {busy === o.id ? 'Adding…' : `Add ${Math.min(o.contacts.length, 3) || ''}`}
+              </button>
+            </div>
+          ))}
+          <button className="btn ghost" onClick={() => setCands(null)}>Cancel</button>
+        </div>
+      )}
     </motion.article>
   )
 }
