@@ -53,6 +53,65 @@ _NOT_A_COMPANY = re.compile(
     r"Commission|Coast Guard|OSHA|Labor)\b", re.I)
 
 
+_STATES = {
+    "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR", "CALIFORNIA": "CA",
+    "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE", "FLORIDA": "FL", "GEORGIA": "GA",
+    "HAWAII": "HI", "IDAHO": "ID", "ILLINOIS": "IL", "INDIANA": "IN", "IOWA": "IA",
+    "KANSAS": "KS", "KENTUCKY": "KY", "LOUISIANA": "LA", "MAINE": "ME", "MARYLAND": "MD",
+    "MASSACHUSETTS": "MA", "MICHIGAN": "MI", "MINNESOTA": "MN", "MISSISSIPPI": "MS",
+    "MISSOURI": "MO", "MONTANA": "MT", "NEBRASKA": "NE", "NEVADA": "NV",
+    "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ", "NEW MEXICO": "NM", "NEW YORK": "NY",
+    "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND", "OHIO": "OH", "OKLAHOMA": "OK",
+    "OREGON": "OR", "PENNSYLVANIA": "PA", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC",
+    "SOUTH DAKOTA": "SD", "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT", "VERMONT": "VT",
+    "VIRGINIA": "VA", "WASHINGTON": "WA", "WEST VIRGINIA": "WV", "WISCONSIN": "WI",
+    "WYOMING": "WY", "DISTRICT OF COLUMBIA": "DC",
+}
+# OSHA datelines are usually the regional or area office city, and about a third of
+# them omit the state ("HOUSTON ‒ …"). Without a state the citation can't be placed
+# on the map, so the unambiguous big cities are resolved by name.
+_CITY_STATE = {
+    "BOSTON": "MA", "NEW YORK": "NY", "PHILADELPHIA": "PA", "ATLANTA": "GA", "CHICAGO": "IL",
+    "DALLAS": "TX", "KANSAS CITY": "MO", "DENVER": "CO", "SAN FRANCISCO": "CA", "SEATTLE": "WA",
+    "HOUSTON": "TX", "AUSTIN": "TX", "SAN ANTONIO": "TX", "EL PASO": "TX", "FORT WORTH": "TX",
+    "CORPUS CHRISTI": "TX", "LUBBOCK": "TX", "PHOENIX": "AZ", "TUCSON": "AZ", "LAS VEGAS": "NV",
+    "LOS ANGELES": "CA", "SAN DIEGO": "CA", "SACRAMENTO": "CA", "FRESNO": "CA", "OAKLAND": "CA",
+    "PORTLAND": "OR", "SALT LAKE CITY": "UT", "BOISE": "ID", "BILLINGS": "MT", "OMAHA": "NE",
+    "WICHITA": "KS", "ST. LOUIS": "MO", "MINNEAPOLIS": "MN", "MILWAUKEE": "WI", "MADISON": "WI",
+    "DETROIT": "MI", "CLEVELAND": "OH", "COLUMBUS": "OH", "CINCINNATI": "OH", "TOLEDO": "OH",
+    "INDIANAPOLIS": "IN", "LOUISVILLE": "KY", "NASHVILLE": "TN", "MEMPHIS": "TN",
+    "BIRMINGHAM": "AL", "MOBILE": "AL", "JACKSON": "MS", "NEW ORLEANS": "LA",
+    "BATON ROUGE": "LA", "LITTLE ROCK": "AR", "OKLAHOMA CITY": "OK", "TULSA": "OK",
+    "TAMPA": "FL", "ORLANDO": "FL", "MIAMI": "FL", "JACKSONVILLE": "FL", "FORT LAUDERDALE": "FL",
+    "CHARLOTTE": "NC", "RALEIGH": "NC", "COLUMBIA": "SC", "CHARLESTON": "WV", "RICHMOND": "VA",
+    "NORFOLK": "VA", "BALTIMORE": "MD", "PITTSBURGH": "PA", "HARRISBURG": "PA", "NEWARK": "NJ",
+    "BUFFALO": "NY", "SYRACUSE": "NY", "ALBANY": "NY", "HARTFORD": "CT", "PROVIDENCE": "RI",
+    "MANCHESTER": "NH", "PORTLAND, ME": "ME", "AUGUSTA": "ME", "BANGOR": "ME",
+    "ANCHORAGE": "AK", "HONOLULU": "HI", "DES MOINES": "IA", "FARGO": "ND", "SIOUX FALLS": "SD",
+    "CHEYENNE": "WY", "ALBUQUERQUE": "NM", "WASHINGTON": "DC",
+}
+
+
+def state_of(location: str, text: str = "") -> str:
+    """Two-letter state for the map. The dateline's own suffix first, then the city,
+    then a state named in the prose ('a Florida roofing company')."""
+    loc = (location or "").strip()
+    m = re.search(r",\s*([A-Za-z .]+)$", loc)
+    if m:
+        tail = m.group(1).strip().upper()
+        if len(tail) == 2 and tail in _STATES.values():
+            return tail
+        if tail in _STATES:
+            return _STATES[tail]
+    city = re.sub(r",.*$", "", loc).strip().upper()
+    if city in _CITY_STATE:
+        return _CITY_STATE[city]
+    for full, code in _STATES.items():
+        if re.search(r"\b" + full + r"\b", text, re.I):
+            return code
+    return ""
+
+
 def _penalty(text: str) -> int:
     """Dollars as an integer. '$343K' and '$264,380' both appear; the largest figure in
     a release is the proposed penalty (smaller ones are per-violation maximums)."""
@@ -108,6 +167,7 @@ def parse_release(title: str, url: str, html: str) -> dict | None:
     return {
         "company": company,
         "location": location,
+        "state": state_of(location, text),
         "penalty": _penalty(title) or _penalty(text),
         "violation": lede or title,
         "title": title,
@@ -138,7 +198,7 @@ def to_signal(rec: dict) -> dict:
     return {
         "channel": "rss", "platform": "osha", "kind": "citation",
         "person": "", "company": rec["company"], "location": rec.get("location", ""),
-        "penalty": rec.get("penalty", 0),
+        "state": rec.get("state", ""), "penalty": rec.get("penalty", 0),
         "title": f"{rec['company']}{pen}",
         "text": rec.get("violation", ""), "url": rec["url"],
         "dedupe": signals.dedupe_key("osha", rec["url"], rec["company"]),

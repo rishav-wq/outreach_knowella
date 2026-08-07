@@ -1813,7 +1813,7 @@ def list_signals(status: str = ""):
             "feed": d.get("feed", ""), "source_id": d.get("source_id", ""),
             # only present on OSHA citations — the fields that make one a lead
             "company": d.get("company", ""), "location": d.get("location", ""),
-            "penalty": d.get("penalty", 0),
+            "state": d.get("state", ""), "penalty": d.get("penalty", 0),
             "source": names.get(d.get("source_id", ""), "")}
            for d in store.list_signals(status)]
     return {"signals": out, "counts": store.signal_counts(),

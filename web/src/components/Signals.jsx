@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
+import USTileMap from './USTileMap'
 
 // The listening post.
 //
@@ -67,6 +68,7 @@ export default function Signals() {
   const [feeds, setFeeds] = useState([])
   const [backlog, setBacklog] = useState([])
   const [view, setView] = useState('queue')
+  const [pin, setPin] = useState('')      // state code selected on the map
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
 
@@ -174,6 +176,7 @@ export default function Signals() {
 
       <div className="seg sig-seg" role="tablist">
         {[['queue', `Queue${open.length ? ` (${open.length})` : ''}`],
+          ['map', `Map${cited.length ? ` (${cited.length})` : ''}`],
           ['backlog', `Backlog${backlog.length ? ` (${backlog.length})` : ''}`],
           ['feeds', `Feeds${feeds.length ? ` (${feeds.length})` : ''}`]].map(([k, label]) => (
           <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{label}</button>
@@ -186,6 +189,9 @@ export default function Signals() {
             <Queue people={people} cited={cited} topics={topics} feeds={feeds} busy={busy}
               onAddStarters={addStarters} onClearTopics={clearTopics}
               onReload={load} onNote={setNote} onTuneFeeds={() => setView('feeds')} />
+          )}
+          {view === 'map' && (
+            <MapView cited={cited} pin={pin} setPin={setPin} onReload={load} onNote={setNote} />
           )}
           {view === 'backlog' && <Backlog rows={backlog} onReload={load} />}
           {view === 'feeds' && (
@@ -338,6 +344,37 @@ function PersonCard({ s, onReload, onNote }) {
         <button className="btn ghost" onClick={() => done(() => api.setSignalStatus(s.id, 'ignored'))}>Ignore</button>
       </footer>
     </motion.article>
+  )
+}
+
+// The map answers a question the list can't: where is enforcement landing? At a
+// handful of citations that's a curiosity; against the full DOL inspection dataset
+// it becomes a territory picker. Built so it works either way.
+function MapView({ cited, pin, setPin, onReload, onNote }) {
+  if (!cited.length) {
+    return (
+      <div className="empty">
+        <div className="empty-icon"><Icon name="download" size={24} /></div>
+        <h3>No citations yet</h3>
+        <p className="muted">
+          The map plots employers OSHA has just cited. Add the OSHA news release feed on the
+          Feeds tab, or hit <b>Check feeds now</b>.
+        </p>
+      </div>
+    )
+  }
+  const shown = pin ? cited.filter((s) => s.state === pin) : cited
+  return (
+    <>
+      <USTileMap rows={cited} selected={pin} onSelect={setPin} />
+      <h4 className="sig-h" style={{ marginTop: 26 }}>
+        {pin ? `${pin} — ${shown.length} cited` : 'Every cited employer'}
+        <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
+      </h4>
+      <div className="sig-cards" style={{ marginTop: 12 }}>
+        {shown.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
+      </div>
+    </>
   )
 }
 
