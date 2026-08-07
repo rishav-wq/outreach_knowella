@@ -33,14 +33,14 @@ export default function SourceFlow({ data, selected, onSelect }) {
     <div className="flow">
       <div className="flow-head">
         <div>
-          <div className="map-stat">{totalReady}</div>
-          <div className="map-stat-k">{totalReady === 1 ? 'lead ready to add' : 'leads ready to add'}</div>
+          <div className="flow-stat">{totalReady}</div>
+          <div className="flow-stat-k">{totalReady === 1 ? 'lead ready to add' : 'leads ready to add'}</div>
         </div>
         <div>
-          <div className="map-stat">{sources.length}</div>
-          <div className="map-stat-k">{sources.length === 1 ? 'source feeding' : 'sources feeding'}</div>
+          <div className="flow-stat">{sources.length}</div>
+          <div className="flow-stat-k">{sources.length === 1 ? 'source feeding' : 'sources feeding'}</div>
         </div>
-        {selected && <button className="btn map-clear" onClick={() => onSelect('')}>Show all</button>}
+        {selected && <button className="btn flow-clear" onClick={() => onSelect('')}>Show all</button>}
       </div>
 
       <div className="flow-board" style={{ minHeight: H }}>

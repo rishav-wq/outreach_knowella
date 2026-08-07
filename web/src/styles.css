@@ -1572,98 +1572,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-cite-none { background: var(--bg); color: var(--muted); border: 1px dashed var(--line-strong); }
 .sig-cite-pick .btn.ghost { margin-top: 8px; }
 
-/* The tile-grid US map. Equal-area on purpose: a geographic outline gives Rhode
-   Island four pixels and Montana a hundred, which is backwards when the unit being
-   plotted is one cited employer. */
-.map-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 18px 20px 14px; }
-.map-head { display: flex; align-items: flex-start; gap: 40px; margin-bottom: 18px; }
-.map-stat { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
-.map-stat-money { color: var(--caution); }
-.map-stat-k { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
-.map-clear { margin-left: auto; align-self: center; }
-.map-scroll { overflow-x: auto; }
-.map-svg { width: 100%; max-width: 620px; height: auto; display: block; margin: 0 auto; }
-.map-cell.on { cursor: pointer; }
-.map-cell.dim { opacity: 0.35; }
-.map-cell.on:hover rect { stroke: var(--caution); stroke-width: 2; }
-.map-code { font-family: var(--font-display); font-size: 11px; font-weight: 700; fill: var(--faint); pointer-events: none; }
-.map-cell.on .map-code { fill: var(--text); }
-.map-code.inv { fill: #fff; }
-.map-badge-bg { fill: var(--ink); }
-.map-badge { font-family: var(--font-display); font-size: 8.5px; font-weight: 700; fill: #fff; pointer-events: none; }
-.map-note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.55; text-align: center; }
-
-@media (max-width: 700px) {
-  .map-head { gap: 22px; flex-wrap: wrap; }
-  .map-wrap { padding: 14px 12px 10px; }
-}
-
-/* The pin popup. Clicking a state resolves the employer immediately — lookup is
-   free — so the popup can lead with the answer ("1 lead found") and reserve the
-   click for the two things that actually need a human: is this the right company,
-   and which campaign does it belong to. */
-.map-stage { position: relative; max-width: 620px; margin: 0 auto; }
-.map-pop {
-  position: absolute; z-index: 5; width: 302px; margin-top: 10px;
-  background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  padding: 14px 15px 13px;
-}
-.map-pop-left { transform: translateX(-24px); }
-.map-pop-right { transform: translateX(calc(-100% + 24px)); }
-.map-pop-arrow {
-  position: absolute; top: -6px; width: 10px; height: 10px; background: var(--panel);
-  border-left: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong);
-  transform: rotate(45deg);
-}
-.map-pop-left .map-pop-arrow { left: 20px; }
-.map-pop-right .map-pop-arrow { right: 20px; }
-.map-pop-x {
-  position: absolute; top: 6px; right: 8px; border: none; background: none; cursor: pointer;
-  font-size: 17px; line-height: 1; color: var(--faint); padding: 3px 5px; border-radius: 5px;
-}
-.map-pop-x:hover { background: var(--bg); color: var(--text); }
-.pin-src { font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--caution); }
-.pin-co { font-family: var(--font-display); font-size: 15.5px; font-weight: 700; margin-top: 5px; line-height: 1.25; padding-right: 16px; }
-.pin-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.pin-meta b { color: var(--caution); }
-.pin-pager { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
-.pin-pager .btn { padding: 1px 8px; font-size: 14px; line-height: 1.2; }
-.pin-load, .pin-none, .pin-done {
-  margin-top: 11px; padding: 10px 11px; border-radius: 7px; font-size: 12.5px; line-height: 1.5;
-}
-.pin-load { background: var(--bg); color: var(--muted); }
-.pin-none { background: var(--bg); color: var(--muted); border: 1px dashed var(--line-strong); }
-.pin-none .btn { display: block; margin-top: 9px; }
-.pin-done { background: var(--verify-tint); color: #0b6b58; font-weight: 600; }
-.pin-found {
-  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
-  margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); font-size: 13px;
-}
-.pin-people { list-style: none; margin: 7px 0 0; padding: 0; display: grid; gap: 4px; }
-.pin-people li { font-size: 12px; color: var(--muted); line-height: 1.4; }
-.pin-people li b { color: var(--text); }
-.pin-act { display: flex; gap: 7px; margin-top: 12px; }
-.pin-act .field-input { flex: 1; min-width: 0; font-size: 12px; }
-.pin-act .btn { flex-shrink: 0; }
-.pin-link {
-  border: none; background: none; cursor: pointer; padding: 8px 0 0; font: inherit;
-  font-size: 11.5px; color: var(--signal); text-decoration: underline;
-}
-.pin-others { display: grid; gap: 5px; margin-top: 9px; }
-.pin-other {
-  display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left; cursor: pointer;
-  border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 7px 9px;
-  font: inherit; font-size: 12px;
-}
-.pin-other:hover:not(:disabled) { border-color: var(--signal); }
-.pin-other:disabled { opacity: 0.5; cursor: not-allowed; }
-.pin-other em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--faint); }
-
-@media (max-width: 700px) {
-  .map-pop { width: 258px; }
-  .map-pop-left, .map-pop-right { transform: translateX(-50%); }
-}
-
 /* Sources → campaigns. The middle is the point: a source matters because of what it
    feeds, a campaign is ready because something is queued for it. Line weight carries
    volume so a busy route reads before you get to the label. */
@@ -1708,3 +1616,8 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .flow-links { display: none; }
   .flow-col + .flow-col { margin-top: 12px; }
 }
+
+/* Shared stat block for the routing board header. */
+.flow-stat { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.flow-stat-k { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
+.flow-clear { margin-left: auto; align-self: center; }

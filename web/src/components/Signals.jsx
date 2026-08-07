@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
-import USTileMap from './USTileMap'
 import SourceFlow from './SourceFlow'
 
 // The listening post.
@@ -69,7 +68,6 @@ export default function Signals() {
   const [feeds, setFeeds] = useState([])
   const [backlog, setBacklog] = useState([])
   const [view, setView] = useState('queue')
-  const [pin, setPin] = useState('')      // state code selected on the map
   const [route, setRoute] = useState(null)   // sources -> campaigns board
   const [flow, setFlow] = useState('')       // selected source|campaign edge
   const [busy, setBusy] = useState('')
@@ -180,7 +178,7 @@ export default function Signals() {
 
       <div className="seg sig-seg" role="tablist">
         {[['queue', `Queue${open.length ? ` (${open.length})` : ''}`],
-          ['map', `Routing${route?.flows?.length ? ` (${route.campaigns.reduce((a, c) => a + c.ready, 0)})` : ''}`],
+          ['routing', `Routing${route?.flows?.length ? ` (${route.campaigns.reduce((a, c) => a + c.ready, 0)})` : ''}`],
           ['backlog', `Backlog${backlog.length ? ` (${backlog.length})` : ''}`],
           ['feeds', `Feeds${feeds.length ? ` (${feeds.length})` : ''}`]].map(([k, label]) => (
           <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{label}</button>
@@ -194,8 +192,8 @@ export default function Signals() {
               onAddStarters={addStarters} onClearTopics={clearTopics}
               onReload={load} onNote={setNote} onTuneFeeds={() => setView('feeds')} />
           )}
-          {view === 'map' && (
-            <MapView cited={cited} pin={pin} setPin={setPin} route={route} flow={flow}
+          {view === 'routing' && (
+            <RoutingView cited={cited} route={route} flow={flow}
               setFlow={setFlow} onReload={load} onNote={setNote} />
           )}
           {view === 'backlog' && <Backlog rows={backlog} onReload={load} />}
@@ -355,15 +353,15 @@ function PersonCard({ s, onReload, onNote }) {
 // The map answers a question the list can't: where is enforcement landing? At a
 // handful of citations that's a curiosity; against the full DOL inspection dataset
 // it becomes a territory picker. Built so it works either way.
-function MapView({ cited, pin, setPin, route, flow, setFlow, onReload, onNote }) {
+function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
   if (!cited.length) {
     return (
       <div className="empty">
         <div className="empty-icon"><Icon name="download" size={24} /></div>
-        <h3>No citations yet</h3>
+        <h3>Nothing waiting to be routed</h3>
         <p className="muted">
-          The map plots employers OSHA has just cited. Add the OSHA news release feed on the
-          Feeds tab, or hit <b>Check feeds now</b>.
+          This is where cited employers queue up against the campaign they fit. Add the OSHA
+          news release feed on the Feeds tab, or hit <b>Check feeds now</b>.
         </p>
       </div>
     )
@@ -391,123 +389,10 @@ function MapView({ cited, pin, setPin, route, flow, setFlow, onReload, onNote })
         ))}
       </div>
 
-      <h4 className="sig-h sig-h-quiet" style={{ marginTop: 34 }}>Where they are</h4>
-      <p className="sig-h-sub">Territory, not a decision — useful once there are enough pins to show a cluster.</p>
-      <USTileMap rows={cited} selected={pin} onSelect={setPin}
-        renderPopover={(st) => (
-          <PinPopover rows={cited.filter((s) => s.state === st)} state={st}
-            onReload={onReload} onNote={onNote} />
-        )} />
     </>
   )
 }
 
-// What a pin does when you click it. Looking a company up costs nothing, so the
-// popup resolves on open and can say "1 lead found" straight away — the decision
-// left to you is the one that costs credits and the one a machine shouldn't make:
-// is this the right company, and which campaign does it belong in.
-function PinPopover({ rows, state, onReload, onNote }) {
-  const [i, setI] = useState(0)
-  const [found, setFound] = useState(null)   // {candidates} | 'error'
-  const [pickOther, setPickOther] = useState(false)
-  const [campaigns, setCampaigns] = useState([])
-  const [campaign, setCampaign] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(null)
-  const s = rows[i]
-
-  useEffect(() => {
-    let live = true
-    setFound(null); setDone(null); setPickOther(false)
-    Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
-      .then(([r, cs]) => {
-        if (!live) return
-        setFound(r); setCampaigns(cs); setCampaign((c) => c || cs[0] || '')
-      })
-      .catch(() => live && setFound('error'))
-    return () => { live = false }
-  }, [s.id])
-
-  const best = found && found !== 'error'
-    ? (found.candidates || []).filter((o) => o.contacts.length)[0] : null
-  const others = found && found !== 'error'
-    ? (found.candidates || []).filter((o) => o !== best) : []
-
-  const add = async (org) => {
-    setBusy(true)
-    try {
-      const r = await api.promoteCitation(s.id, org.id, campaign)
-      setDone(r); onReload()
-      onNote(`${r.added} added to ${r.campaign} — ${r.credits} Apollo credit${r.credits === 1 ? '' : 's'}`)
-    } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
-    finally { setBusy(false) }
-  }
-
-  return (
-    <div className="pin">
-      <div className="pin-src">OSHA citations · {state}</div>
-      <div className="pin-co">{s.company}</div>
-      <div className="pin-meta">
-        {s.penalty > 0 && <b>${Number(s.penalty).toLocaleString()}</b>} {s.location}
-      </div>
-      {rows.length > 1 && (
-        <div className="pin-pager">
-          <button className="btn ghost" disabled={i === 0} onClick={() => setI(i - 1)}>‹</button>
-          <span>{i + 1} of {rows.length} in {state}</span>
-          <button className="btn ghost" disabled={i === rows.length - 1} onClick={() => setI(i + 1)}>›</button>
-        </div>
-      )}
-
-      {done ? (
-        <div className="pin-done">✓ Added {done.added} to <b>{done.campaign}</b></div>
-      ) : found === null ? (
-        <div className="pin-load">Looking up the employer…</div>
-      ) : found === 'error' || !best ? (
-        <div className="pin-none">
-          No reachable contact at <b>{s.company}</b>. Small contractors often aren’t in Apollo.
-          <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
-        </div>
-      ) : (
-        <>
-          <div className="pin-found">
-            <b>{best.contacts.length} lead{best.contacts.length === 1 ? '' : 's'} found</b>
-            <span className="sig-dom">{best.domain}</span>
-          </div>
-          <ul className="pin-people">
-            {best.contacts.slice(0, 3).map((p, n) => (
-              <li key={n}><b>{p.first_name}</b> — {p.title}</li>
-            ))}
-          </ul>
-          <div className="pin-act">
-            <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
-              {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button className="btn primary" disabled={busy || !campaign} onClick={() => add(best)}>
-              {busy ? 'Adding…' : 'Add to campaign'}
-            </button>
-          </div>
-          {others.length > 0 && (
-            pickOther ? (
-              <div className="pin-others">
-                {others.map((o) => (
-                  <button key={o.id} className="pin-other" disabled={!o.contacts.length || busy}
-                    onClick={() => add(o)}>
-                    {o.name} <span className="sig-dom">{o.domain || 'no domain'}</span>
-                    <em>{o.contacts.length ? `${o.contacts.length} contacts` : 'nobody'}</em>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <button className="pin-link" onClick={() => setPickOther(true)}>
-                Not this company? {others.length} other match{others.length === 1 ? '' : 'es'}
-              </button>
-            )
-          )}
-        </>
-      )}
-    </div>
-  )
-}
 
 // A citation is the only signal that becomes a lead, so it's the only one with a
 // two-step action: look the employer up (free) and then reveal contacts (credits).
