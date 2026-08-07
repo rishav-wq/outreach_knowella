@@ -32,14 +32,25 @@ const EHS_KW = ['osha', 'ehs', 'safety manager', 'recordkeeping', '300a', 'citat
 const TRUCK_KW = ['fmcsa', 'csa', 'dot audit', 'compliance review', 'safety rating', 'out-of-service',
   'out of service', 'eld', 'hours of service', 'driver qualification', 'clearinghouse', 'violation',
   'citation', 'audit', 'inspection', 'osha']
+//
+// Trade press needs filtering because it's written for a mixed audience. The
+// REGULATOR's own feed doesn't: every OSHA news release is an enforcement action
+// against a named company, so it ships with no keywords at all. Trucking Dive was
+// dropped after inspection — it covers the BUSINESS of trucking (M&A, earnings,
+// plant closures) and matched zero of our terms. Land Line replaces it: hours-of-
+// service exemptions, roadside enforcement sweeps, state crackdowns.
 const STARTER_FEEDS = [
+  { name: 'OSHA news releases', url: 'https://www.osha.gov/news/newsreleases.xml', keywords: [] },
   { name: 'EHS Today', url: 'https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D', keywords: EHS_KW },
   { name: 'Safety+Health', url: 'https://www.safetyandhealthmagazine.com/feed/', keywords: EHS_KW },
   { name: 'Occupational Health & Safety', url: 'https://ohsonline.com/rss-feeds/news.aspx', keywords: EHS_KW },
   { name: 'FreightWaves', url: 'https://www.freightwaves.com/feed', keywords: TRUCK_KW },
-  { name: 'Trucking Dive', url: 'https://www.truckingdive.com/feeds/news/', keywords: TRUCK_KW },
+  { name: 'Land Line (OOIDA)', url: 'https://landline.media/feed/', keywords: TRUCK_KW },
   { name: 'CDLLife', url: 'https://cdllife.com/feed/', keywords: TRUCK_KW },
 ]
+// A feed carrying nothing but enforcement actions needs no filter, and saying so
+// stops the "unfiltered feed" warning from crying wolf about the best source we have.
+const NO_FILTER_OK = new Set(['https://www.osha.gov/news/newsreleases.xml'])
 
 const ago = (iso) => {
   if (!iso) return ''
@@ -185,7 +196,7 @@ export default function Signals() {
 function Queue({ people, topics, feeds, busy, onAddStarters, onClearTopics, onReload, onNote, onTuneFeeds }) {
   const [adding, setAdding] = useState(false)
   const [showAll, setShowAll] = useState(false)
-  const unfiltered = feeds.filter((f) => !(f.keywords || []).length).length
+  const unfiltered = feeds.filter((f) => !(f.keywords || []).length && !NO_FILTER_OK.has(f.url)).length
 
   if (!people.length && !topics.length) {
     return (
@@ -414,7 +425,7 @@ function Feeds({ rows, busy, onAddStarters, onReload, onNote }) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(null)     // feed id whose keywords are open
   const [kw, setKw] = useState('')
-  const unfiltered = rows.filter((r) => !(r.keywords || []).length).length
+  const unfiltered = rows.filter((r) => !(r.keywords || []).length && !NO_FILTER_OK.has(r.url)).length
 
   const saveKw = async (r) => {
     await api.updateFeed(r.id, { url: r.url, name: r.name, keywords: kw.split(',').map((s) => s.trim()).filter(Boolean) })

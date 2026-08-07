@@ -45,15 +45,28 @@ the whole set in one click. Every URL below was fetched and parsed on 2026-08-07
 
 | Publication | Feed URL | Why |
 |---|---|---|
+| **OSHA news releases** | `https://www.osha.gov/news/newsreleases.xml` | **The best feed we have.** Every item is an enforcement action against a named company — no filter needed |
 | EHS Today | `https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D` | Endeavor's flagship for manufacturing/construction EHS |
 | Safety+Health | `https://www.safetyandhealthmagazine.com/feed/` | National Safety Council, ~92,000 subscribers |
 | Occupational Health & Safety | `https://ohsonline.com/rss-feeds/news.aspx` | Industry news + webinars |
 | FreightWaves | `https://www.freightwaves.com/feed` | Freight/logistics news, big practitioner audience |
-| Trucking Dive | `https://www.truckingdive.com/feeds/news/` | Carrier/fleet business news |
+| Land Line (OOIDA) | `https://landline.media/feed/` | Roadside enforcement sweeps, HOS exemptions, state crackdowns |
 | CDLLife | `https://cdllife.com/feed/` | 2M+ Facebook followers, driver-side sentiment |
 
-**Overdrive is deliberately missing.** `overdriveonline.com` returns 403 to any
-non-browser client (Cloudflare), so it cannot be polled. Read it by hand or skip it.
+**Go to the regulator before the trade press.** Trade publications serve a mixed
+audience, so they need keyword filtering to be readable. OSHA's own release feed
+doesn't — *"cites Maine hardwood pulp mill more than $700K"*, *"fines Houston utility
+contractor $343K after worker hospitalized"* — every line is a named company with an
+expensive, public, current safety problem.
+
+**Dropped after inspection, with reasons:**
+
+| Feed | Why not |
+|---|---|
+| Trucking Dive | Covers the *business* of trucking — M&A, quarterly earnings, plant closures. Ten items, zero matches on any safety or compliance term |
+| Overdrive, Transport Topics, CCJ, FMCSA newsroom | All return **403** to non-browser clients (Cloudflare). Cannot be polled at all |
+| DOL newsroom | Mostly unemployment-claims statistics |
+| OSHA QuickTakes | A newsletter digest, so every item is just "QuickTakes 8/06/2026" — no per-story detail |
 
 More to add later, if the six aren't enough:
 - [Feedspot: Top 100 Trucking RSS Feeds](https://rss.feedspot.com/trucking_rss_feeds/)
