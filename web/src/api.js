@@ -134,3 +134,4 @@ export const previewApollo = (icp, apollo) => apiSend('/api/preview/apollo', 'PO
 export const setLookalike = (campaign, key, on) => apiSend('/api/campaign/lookalike', 'POST', { campaign, key, on })
 // University-name typeahead for the alumni filter (returns Apollo school ids + names)
 export const searchSchools = (q) => apiGet(`/api/apollo/schools?q=${encodeURIComponent(q)}`)
+export const getRouting = () => apiGet('/api/routing')

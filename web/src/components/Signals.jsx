@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import USTileMap from './USTileMap'
+import SourceFlow from './SourceFlow'
 
 // The listening post.
 //
@@ -69,6 +70,8 @@ export default function Signals() {
   const [backlog, setBacklog] = useState([])
   const [view, setView] = useState('queue')
   const [pin, setPin] = useState('')      // state code selected on the map
+  const [route, setRoute] = useState(null)   // sources -> campaigns board
+  const [flow, setFlow] = useState('')       // selected source|campaign edge
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
 
@@ -78,6 +81,7 @@ export default function Signals() {
     api.listSignals('new').then(setData).catch(() => setData({ signals: [], counts: {} })),
     api.listFeeds().then(setFeeds).catch(() => setFeeds([])),
     api.listBacklog().then(setBacklog).catch(() => setBacklog([])),
+    api.getRouting().then(setRoute).catch(() => setRoute(null)),
   ])
   useEffect(() => { load() }, [])
 
@@ -176,7 +180,7 @@ export default function Signals() {
 
       <div className="seg sig-seg" role="tablist">
         {[['queue', `Queue${open.length ? ` (${open.length})` : ''}`],
-          ['map', `Map${cited.length ? ` (${cited.length})` : ''}`],
+          ['map', `Routing${route?.flows?.length ? ` (${route.campaigns.reduce((a, c) => a + c.ready, 0)})` : ''}`],
           ['backlog', `Backlog${backlog.length ? ` (${backlog.length})` : ''}`],
           ['feeds', `Feeds${feeds.length ? ` (${feeds.length})` : ''}`]].map(([k, label]) => (
           <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{label}</button>
@@ -191,7 +195,8 @@ export default function Signals() {
               onReload={load} onNote={setNote} onTuneFeeds={() => setView('feeds')} />
           )}
           {view === 'map' && (
-            <MapView cited={cited} pin={pin} setPin={setPin} onReload={load} onNote={setNote} />
+            <MapView cited={cited} pin={pin} setPin={setPin} route={route} flow={flow}
+              setFlow={setFlow} onReload={load} onNote={setNote} />
           )}
           {view === 'backlog' && <Backlog rows={backlog} onReload={load} />}
           {view === 'feeds' && (
@@ -350,7 +355,7 @@ function PersonCard({ s, onReload, onNote }) {
 // The map answers a question the list can't: where is enforcement landing? At a
 // handful of citations that's a curiosity; against the full DOL inspection dataset
 // it becomes a territory picker. Built so it works either way.
-function MapView({ cited, pin, setPin, onReload, onNote }) {
+function MapView({ cited, pin, setPin, route, flow, setFlow, onReload, onNote }) {
   if (!cited.length) {
     return (
       <div className="empty">
@@ -363,19 +368,36 @@ function MapView({ cited, pin, setPin, onReload, onNote }) {
       </div>
     )
   }
+  // The board first: what is waiting, and which campaign it fits. The map is a
+  // second read on the same set — useful for territory, not for deciding.
+  const picked = route?.flows?.find((f) => `${f.source_id}|${f.campaign}` === flow)
+  const shown = picked ? cited.filter((c) => picked.items.some((i) => i.id === c.id)) : cited
+  const suggestion = {}
+  for (const f of route?.flows || []) for (const i of f.items) suggestion[i.id] = { campaign: f.campaign, why: i.why }
+
   return (
     <>
+      {route && route.flows.length > 0 && (
+        <SourceFlow data={route} selected={flow} onSelect={setFlow} />
+      )}
+
+      <h4 className="sig-h" style={{ marginTop: 26 }}>
+        {picked ? `${picked.source} → ${picked.campaign || 'unrouted'}` : 'Every cited employer'}
+        <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
+      </h4>
+      <div className="sig-cards" style={{ marginTop: 12 }}>
+        {shown.map((s) => (
+          <CitationCard key={s.id} s={s} suggest={suggestion[s.id]} onReload={onReload} onNote={onNote} />
+        ))}
+      </div>
+
+      <h4 className="sig-h sig-h-quiet" style={{ marginTop: 34 }}>Where they are</h4>
+      <p className="sig-h-sub">Territory, not a decision — useful once there are enough pins to show a cluster.</p>
       <USTileMap rows={cited} selected={pin} onSelect={setPin}
         renderPopover={(st) => (
           <PinPopover rows={cited.filter((s) => s.state === st)} state={st}
             onReload={onReload} onNote={onNote} />
         )} />
-      <h4 className="sig-h" style={{ marginTop: 26 }}>
-        Every cited employer <span className="sig-h-n sig-h-n-hot">{cited.length}</span>
-      </h4>
-      <div className="sig-cards" style={{ marginTop: 12 }}>
-        {cited.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
-      </div>
     </>
   )
 }
@@ -491,7 +513,7 @@ function PinPopover({ rows, state, onReload, onNote }) {
 // two-step action: look the employer up (free) and then reveal contacts (credits).
 // Apollo's top hit for "FleetPride" included a spring retailer — the choice stays
 // with the human, because the alternative is emailing a stranger about a fatality.
-function CitationCard({ s, onReload, onNote }) {
+function CitationCard({ s, suggest, onReload, onNote }) {
   const [cands, setCands] = useState(null)
   const [busy, setBusy] = useState('')
   const [campaigns, setCampaigns] = useState([])
@@ -502,7 +524,10 @@ function CitationCard({ s, onReload, onNote }) {
     setBusy('looking up')
     try {
       const [r, cs] = await Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
-      setCands(r.candidates || []); setCampaigns(cs); setCampaign(cs[0] || '')
+      setCands(r.candidates || []); setCampaigns(cs)
+      // Pre-select what the router worked out; the human can still override it,
+      // which is why this is a select and not a decision made on their behalf.
+      setCampaign(suggest?.campaign && cs.includes(suggest.campaign) ? suggest.campaign : cs[0] || '')
     } catch (e) { onNote(String(e.message || e).slice(0, 180)) }
     finally { setBusy('') }
   }
@@ -537,6 +562,13 @@ function CitationCard({ s, onReload, onNote }) {
         </div>
       ) : cands === null ? (
         <footer className="sig-card-foot">
+          {suggest && (suggest.campaign
+            ? <span className="sig-fit" title={`Matched on: ${(suggest.why || []).join(', ')}`}>
+                → {suggest.campaign}
+              </span>
+            : <span className="sig-fit sig-fit-none" title="No campaign declares an industry this employer matches">
+                no campaign matches
+              </span>)}
           <button className="btn primary" onClick={resolve} disabled={!!busy}>
             {busy ? 'Looking up…' : 'Find who to contact'}
           </button>
@@ -551,6 +583,11 @@ function CitationCard({ s, onReload, onNote }) {
         <div className="sig-cite-pick">
           <div className="sig-cite-pick-h">
             Which company is it? <span className="muted">Apollo matches by name, so check the domain.</span>
+            {suggest?.campaign && (
+              <span className="sig-fit" title={`Matched on: ${(suggest.why || []).join(', ')}`}>
+                fits <b>{suggest.campaign}</b>
+              </span>
+            )}
             <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
               {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>

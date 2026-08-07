@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
-from . import signals
+from . import routing, signals
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, osha, postmark_send
 from .models import Fact, Lead, Research
 from .store import open_store
@@ -1871,6 +1871,57 @@ def poll_signals():
     except Exception as e:
         res["citations_error"] = str(e)[:160]
     return res
+
+
+@app.get("/api/routing")
+def routing_board(request: Request):
+    """Sources → campaigns: what each place has waiting, and which campaign each
+    waiting lead fits. The fit is scored against what the campaign already declares
+    it wants, and every route carries the terms that matched so it can be argued
+    with. Leads nothing matches are reported as unrouted rather than dumped into
+    whichever campaign sorted first."""
+    _capture_auth(request)
+    store = open_store()
+    names = [c["_id"] for c in store.db.campaigns.find({}, {"_id": 1})]
+    cfgs = {}
+    for n in names:
+        try:
+            cfgs[n] = _load(n)
+        except Exception:
+            continue
+    srcs = {s["_id"]: s for s in store.list_sources()}
+    funnel = store.source_funnel()
+    flows: dict[tuple, dict] = {}
+    for sig in store.list_signals("new"):
+        if sig.get("kind") != "citation":
+            continue           # only citations are un-promoted leads today
+        sid = sig.get("source_id", "")
+        text = " ".join([sig.get("company", ""), sig.get("text", ""), sig.get("title", "")])
+        sug = routing.suggest(text, cfgs)
+        k = (sid, sug["campaign"])
+        f = flows.setdefault(k, {"source_id": sid,
+                                 "source": (srcs.get(sid) or {}).get("name", "Unattributed"),
+                                 "campaign": sug["campaign"], "items": []})
+        f["items"].append({"id": sig["_id"], "company": sig.get("company", ""),
+                           "penalty": sig.get("penalty", 0), "location": sig.get("location", ""),
+                           "state": sig.get("state", ""), "url": sig.get("url", ""),
+                           "text": sig.get("text", ""), "why": sug["why"],
+                           "alternatives": [a["campaign"] for a in sug["alternatives"]]})
+    out_flows = sorted(flows.values(), key=lambda f: (-len(f["items"]), f["campaign"]))
+    by_source: dict[str, int] = {}
+    by_campaign: dict[str, int] = {}
+    for f in out_flows:
+        by_source[f["source_id"]] = by_source.get(f["source_id"], 0) + len(f["items"])
+        by_campaign[f["campaign"]] = by_campaign.get(f["campaign"], 0) + len(f["items"])
+    return {
+        "sources": [{"id": sid, "name": (srcs.get(sid) or {}).get("name", "Unattributed"),
+                     "type": (srcs.get(sid) or {}).get("type", ""),
+                     "ready": n, "leads": funnel.get(sid, {}).get("leads", 0)}
+                    for sid, n in sorted(by_source.items(), key=lambda kv: -kv[1])],
+        "campaigns": [{"name": c, "ready": n} for c, n in sorted(by_campaign.items(), key=lambda kv: -kv[1])],
+        "flows": out_flows,
+        "all_campaigns": names,
+    }
 
 
 # --- OSHA citations → leads ---------------------------------------------------

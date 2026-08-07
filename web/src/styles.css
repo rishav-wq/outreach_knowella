@@ -1663,3 +1663,48 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .map-pop { width: 258px; }
   .map-pop-left, .map-pop-right { transform: translateX(-50%); }
 }
+
+/* Sources → campaigns. The middle is the point: a source matters because of what it
+   feeds, a campaign is ready because something is queued for it. Line weight carries
+   volume so a busy route reads before you get to the label. */
+.flow { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 18px 20px 14px; }
+.flow-head { display: flex; align-items: flex-start; gap: 40px; margin-bottom: 18px; }
+.flow-board { display: grid; grid-template-columns: 1fr 132px 1fr; gap: 0; align-items: start; }
+.flow-col { display: flex; flex-direction: column; gap: 12px; }
+.flow-node {
+  border: 1px solid var(--line); border-left: 3px solid var(--signal); border-radius: var(--radius-sm);
+  padding: 11px 13px; background: var(--panel); display: flex; flex-direction: column; justify-content: center;
+}
+.flow-node-c { border-left-color: var(--verify); }
+.flow-node.is-unrouted { border-left-color: var(--caution); border-style: dashed; }
+.flow-node-k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+.flow-node-n { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin-top: 4px; line-height: 1.25; }
+.flow-node-v { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+.flow-links { width: 132px; height: 100%; overflow: visible; }
+.flow-link { stroke: var(--signal); opacity: 0.5; cursor: pointer; stroke-linecap: round; }
+.flow-link:hover { opacity: 1; }
+.flow-link.unrouted { stroke: var(--caution); stroke-dasharray: 5 4; }
+.flow-link.dim { opacity: 0.14; }
+.flow-legend { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+.flow-chip {
+  border: 1px solid var(--line-strong); background: var(--panel); border-radius: 999px;
+  padding: 4px 11px; font: inherit; font-size: 11.5px; color: var(--text-2); cursor: pointer;
+}
+.flow-chip span { color: var(--faint); margin: 0 3px; }
+.flow-chip b { margin-left: 5px; color: var(--signal); }
+.flow-chip.on { background: var(--signal-pill); border-color: var(--signal-line); color: var(--signal); }
+.flow-chip.unrouted b { color: var(--caution); }
+/* the routing verdict, on the card face — auditable, since it names what matched */
+.sig-fit {
+  font-size: 11.5px; color: var(--verify); background: var(--verify-tint);
+  border-radius: 999px; padding: 3px 10px; font-weight: 600; cursor: help;
+}
+.sig-fit-none { color: var(--caution); background: var(--caution-tint); }
+.sig-card-foot .sig-fit { margin-right: auto; }
+.sig-cite-pick-h .sig-fit { margin-left: 6px; }
+
+@media (max-width: 800px) {
+  .flow-board { grid-template-columns: 1fr; }
+  .flow-links { display: none; }
+  .flow-col + .flow-col { margin-top: 12px; }
+}
