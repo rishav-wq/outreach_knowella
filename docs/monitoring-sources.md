@@ -11,6 +11,30 @@ crowd and will mostly deliver noise for us.
 
 ---
 
+## First: how "monitoring" works here — nothing on this list is scraped
+
+Every source below **pushes to us**. There are exactly three channels, and it matters which
+one a source uses, because only two of them tell you *a person asked something*.
+
+| Channel | How it works | What it catches |
+|---|---|---|
+| **RSS** | The publisher hosts a machine-readable feed at a fixed URL, on purpose. We poll it. | New articles — **topic level** |
+| **Google Alerts → RSS** | Google already crawled the web. In the alert, set *Deliver to → RSS feed* and you get a pollable URL instead of email. | Any public page mentioning a keyword, incl. indexed forum threads — **topic level** |
+| **Notification email** | The platform emails us: "X commented on your post", "someone asked a question about your product", "new review". | **Person level** — a named human with a question |
+
+The third channel is the only automatic one that answers *"notify us when someone asks a
+question"* — and it only fires **where we have an account and a presence**: our LinkedIn
+page and posts, our G2/Capterra listing, our Trustpilot profile. That reframes the whole
+exercise: you don't monitor the internet for questions, you become the place questions get
+asked, and the platform notifies you.
+
+Which is why **Tier 2 is human-monitored, and that is the mechanism, not a shortcut.** Sid
+joins the group → switches on its notifications → LinkedIn emails him when someone posts or
+comments → he answers → the extension captures whoever engaged. There is no feed to poll:
+membership is the API. See *Explicitly ruled out* for why no tool can do this instead.
+
+---
+
 ## Tier 1 — automate today, free (about one hour of setup)
 
 ### A. RSS feeds → Feedly or Inoreader (email/Slack digest)
@@ -31,7 +55,8 @@ Shortcuts — pre-built lists to import:
 
 ### B. Google Alerts (free)
 
-Create one alert each for:
+Set **Deliver to → RSS feed** on each one (not email) — that gives a URL the app can poll,
+and keeps the alerts out of a person's inbox. Create one alert each for:
 - `Knowella` (brand)
 - Competitors: `VelocityEHS`, `Intelex`, `Cority`, `EHS Insight`, `SafetyCulture`, `Samsara`
 - Category phrases: `"OSHA recordkeeping software"`, `"fleet safety compliance software"`,
@@ -39,10 +64,15 @@ Create one alert each for:
 
 ### C. Native notifications — already ours, just switch on
 
+**The only automatic person-level signal we get.** Each of these emails us when a named
+human does something; nothing is polled or scraped.
+
 - **G2 / Capterra** — new review and buyer-question alerts
 - **LinkedIn** — company page mentions + comments on our own posts *(highest-value single
   source: it is exactly where the capture extension then works)*
 - **Trustpilot** — if we claim a profile
+
+Point them all at one address so they land in a single queue rather than five inboxes.
 
 ### D. F5Bot (free) — Reddit + Hacker News keyword alerts
 
