@@ -604,6 +604,10 @@ def status(campaign: str, light: bool = False):
             "window": send_cfg.get("window") or {},
         },
         "apollo_rate": _apollo_rate_summary(),
+        # Signals is campaign-independent, but the count rides along here because the
+        # header already polls this every 15s — nobody opens a tab that doesn't say
+        # it has something waiting.
+        "signals_open": store.signal_counts().get("new", 0),
     }
 
 

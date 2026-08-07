@@ -190,7 +190,9 @@ export default function App({ onHome }) {
           {[...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...SHARED_NAV].map((n) => {
             // live register per lifecycle stage: what's waiting at each step
             const total = Object.values(counts).reduce((a, b) => a + b, 0)
-            const navCount = n.id === 'Review' ? queued : n.id === 'Leads' ? total : 0
+            const navCount = n.id === 'Review' ? queued
+              : n.id === 'Leads' ? total
+              : n.id === 'Signals' ? (status.signals_open || 0) : 0
             return (
               <button key={n.id} className={`nav-item ${n.id === tab ? 'active' : ''} ${n.shared ? 'nav-op' : ''}`} onClick={() => setTab(n.id)}>
                 {n.id === tab && (

@@ -220,7 +220,9 @@ function Queue({ people, topics, feeds, busy, onAddStarters, onClearTopics, onRe
           <div className="empty-actions">
             {!feeds.length && (
               <button className="btn primary" onClick={onAddStarters} disabled={!!busy}>
-                <Icon name="plus" size={14} /> {busy ? 'Adding…' : 'Add the 6 verified feeds'}
+                {/* count comes from the list itself — a hardcoded number goes stale
+                    the first time the set changes, and this one already had */}
+                <Icon name="plus" size={14} /> {busy ? 'Adding…' : `Add the ${STARTER_FEEDS.length} verified feeds`}
               </button>
             )}
             <button className="btn" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add by hand</button>

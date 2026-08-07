@@ -40,7 +40,7 @@ membership is the API. See *Explicitly ruled out* for why no tool can do this in
 ### A. RSS feeds — built into the app (Signals → Feeds)
 
 No Feedly account needed: the app polls these itself every 30 minutes and files
-matches in the Signals queue. **Signals → Queue → "Add the 6 verified feeds"** adds
+matches in the Signals queue. **Signals → Queue → "Add the verified feeds"** adds
 the whole set in one click. Every URL below was fetched and parsed on 2026-08-07.
 
 | Publication | Feed URL | Why |
