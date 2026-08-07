@@ -14,6 +14,11 @@ const TYPE_LABEL = {
   publication: 'Publication', event: 'Event', apollo: 'Apollo', import: 'Import',
 }
 
+// Reply rate is the only column that compares places of different sizes. A bought
+// Apollo list of 4,000 and a LinkedIn thread of 40 are otherwise incomparable —
+// the big number always looks better. Null until anything has actually been sent.
+const rate = (s) => (s.sent > 0 ? (s.replied / s.sent) * 100 : null)
+
 export default function Sources() {
   const [rows, setRows] = useState(null)
   const [notesFor, setNotesFor] = useState(null)   // source id being annotated
@@ -43,7 +48,12 @@ export default function Sources() {
       <div className="lib-head">
         <div>
           <div className="dash-eyebrow">Sources</div>
-          <div className="lib-title">{rows.length} <small>places, {totals.leads.toLocaleString()} leads, {totals.meetings} meetings</small></div>
+          <div className="lib-title">
+            {rows.length} <small>
+              {rows.length === 1 ? 'place' : 'places'}, {totals.leads.toLocaleString()} leads,{' '}
+              {totals.replied.toLocaleString()} {totals.replied === 1 ? 'reply' : 'replies'}, {totals.meetings} meetings
+            </small>
+          </div>
           <p className="dash-sub">
             Where every lead came from and what that place produced. Capture from a LinkedIn thread with the
             extension, name the group it lives in, and its contribution shows up here — so you can spend the
@@ -64,7 +74,9 @@ export default function Sources() {
             <thead>
               <tr>
                 <th>Source</th><th>Type</th><th>Leads</th><th>With email</th>
-                <th>Sent</th><th>Engaged</th><th>Replied</th><th>Meetings</th><th></th>
+                <th>Sent</th><th>Engaged</th><th>Replied</th>
+                <th title="Replies ÷ sent. The number to compare places by.">Reply rate</th>
+                <th>Meetings</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +105,9 @@ export default function Sources() {
                   <td className="muted">{s.sent}</td>
                   <td className="muted">{s.engaged}</td>
                   <td>{s.replied > 0 ? <span className="badge s-approved">{s.replied}</span> : <span className="muted">0</span>}</td>
+                  <td className={rate(s) !== null && rate(s) >= 2 ? 'src-rate-good' : 'muted'}>
+                    {rate(s) === null ? '—' : `${rate(s).toFixed(2)}%`}
+                  </td>
                   <td>{s.meetings > 0 ? <span className="badge s-approved">{s.meetings}</span> : <span className="muted">0</span>}</td>
                   <td><button className="icon-btn" title="Delete source" onClick={() => remove(s)}><Icon name="trash" size={13} /></button></td>
                 </tr>

@@ -112,7 +112,9 @@ export default function Signals() {
         </div>
         <div className={`sig-chan ${liveFeeds.length ? 'on' : ''}`}>
           <div className="sig-chan-k"><span className="sig-dot" /> Feeds</div>
-          <div className="sig-chan-v">{liveFeeds.length || 'None'} {liveFeeds.length === 1 ? 'feed' : 'feeds'}</div>
+          <div className="sig-chan-v">
+            {liveFeeds.length ? `${liveFeeds.length} ${liveFeeds.length === 1 ? 'feed' : 'feeds'}` : 'No feeds yet'}
+          </div>
           <div className="sig-chan-n">
             {lastPoll ? `Checked ${ago(lastPoll)}, then every 30 min.` : 'Publisher feeds and Google Alerts, polled every 30 minutes.'}
             {brokenFeeds.length > 0 && <b className="sig-warn"> {brokenFeeds.length} failing</b>}

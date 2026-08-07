@@ -1514,3 +1514,10 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .sig-topic-src { width: 88px; }
   .sig-bl, .sig-feed { flex-wrap: wrap; }
 }
+
+/* Sources: reply rate is the comparison column — a rate that beats the bought-list
+   baseline should read as good news without needing the reader to do the division. */
+.src-rate-good { color: var(--verify); font-weight: 700; }
+/* The Signals empty state IS the setup path, so it sits up near the tabs rather
+   than floating in the middle of an otherwise blank page. */
+.sig-empty { margin-top: 4px; padding: 30px 20px 40px; }
