@@ -37,21 +37,30 @@ membership is the API. See *Explicitly ruled out* for why no tool can do this in
 
 ## Tier 1 — automate today, free (about one hour of setup)
 
-### A. RSS feeds → Feedly or Inoreader (email/Slack digest)
+### A. RSS feeds — built into the app (Signals → Feeds)
 
-| Publication | Why |
-|---|---|
-| [EHS Today](https://www.ehstoday.com/) | Endeavor's flagship for manufacturing/construction EHS |
-| [Safety+Health](https://www.safetyandhealthmagazine.com/) | National Safety Council, ~92,000 subscribers |
-| [Occupational Health & Safety](https://ohsonline.com/) | Industry news + webinars |
-| [FreightWaves](https://www.freightwaves.com/) | Freight/logistics news, big practitioner audience |
-| [Overdrive](https://www.overdriveonline.com/) | Owner-operator and carrier coverage |
-| [Trucking Dive](https://www.truckingdive.com/) | Carrier/fleet business news |
-| [CDLLife](https://www.cdllife.com/) | 2M+ Facebook followers, driver-side sentiment |
+No Feedly account needed: the app polls these itself every 30 minutes and files
+matches in the Signals queue. **Signals → Queue → "Add the 6 verified feeds"** adds
+the whole set in one click. Every URL below was fetched and parsed on 2026-08-07.
 
-Shortcuts — pre-built lists to import:
+| Publication | Feed URL | Why |
+|---|---|---|
+| EHS Today | `https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D` | Endeavor's flagship for manufacturing/construction EHS |
+| Safety+Health | `https://www.safetyandhealthmagazine.com/feed/` | National Safety Council, ~92,000 subscribers |
+| Occupational Health & Safety | `https://ohsonline.com/rss-feeds/news.aspx` | Industry news + webinars |
+| FreightWaves | `https://www.freightwaves.com/feed` | Freight/logistics news, big practitioner audience |
+| Trucking Dive | `https://www.truckingdive.com/feeds/news/` | Carrier/fleet business news |
+| CDLLife | `https://cdllife.com/feed/` | 2M+ Facebook followers, driver-side sentiment |
+
+**Overdrive is deliberately missing.** `overdriveonline.com` returns 403 to any
+non-browser client (Cloudflare), so it cannot be polled. Read it by hand or skip it.
+
+More to add later, if the six aren't enough:
 - [Feedspot: Top 100 Trucking RSS Feeds](https://rss.feedspot.com/trucking_rss_feeds/)
 - [Feedspot: Top 15 Occupational Health & Safety magazines](https://magazine.feedspot.com/occupational_health_and_safety_magazines/)
+
+Add keywords to a feed to filter it (`OSHA, recordkeeping, CSA`); leave them blank to
+keep everything.
 
 ### B. Google Alerts (free)
 
@@ -72,7 +81,18 @@ human does something; nothing is polled or scraped.
   source: it is exactly where the capture extension then works)*
 - **Trustpilot** — if we claim a profile
 
-Point them all at one address so they land in a single queue rather than five inboxes.
+Point them all at one address so they land in a single queue rather than five inboxes —
+literally: forward them to the app's inbound address and they become Signals, parsed into
+who asked, on what platform, with a link. Setup:
+
+1. In Postmark, add an inbound address (or an inbound domain) and set its webhook to
+   `https://outreach.knowella.com/api/signals/inbound?token=YOUR_TOKEN`.
+2. On the VM, **append** the token — never overwrite the file:
+   `echo 'SIGNALS_WEBHOOK_TOKEN=YOUR_TOKEN' | sudo tee -a /opt/outreach-agent/.env`
+3. Forward (or auto-forward a filter for) LinkedIn / G2 / Trustpilot notification mail there.
+
+Mail we can't parse is filed under its subject line rather than dropped, so a changed
+notification format costs us the labelling and never the lead.
 
 ### D. F5Bot (free) — Reddit + Hacker News keyword alerts
 
@@ -143,9 +163,19 @@ DETECT (this document)  →  ENGAGE (Sid answers, in the thread)
       →  ATTRIBUTION per source  →  tells us where to engage next
 ```
 
-Detection is bought, not built (Feedly, Alerts, native notifications). What we build is the
-attribution spine — so we can see which of these sources actually produces meetings, and
-spend the next hour where it pays.
+All of it now lands in the app:
+
+- **Signals** — the queue. Two registers, because the difference matters: *someone asked*
+  (a named person, waiting) above *topics moving* (an article, nobody waiting). Answer the
+  people; skim the topics.
+- **Backlog** — a signal that's a question becomes a content item (idea → drafted →
+  published). The buyers write our editorial calendar.
+- **Sources** — what each place actually produced, leads through to meetings.
+
+**The baseline to beat.** Attribution was backfilled over the existing database on
+2026-08-07: *Apollo search — 4,422 leads, 4,226 sent, 9 replies, 0 meetings.* A 0.2% reply
+rate is what buying a list gets you. Every LinkedIn group and community below is measured
+against that number, on the same page, in the same columns.
 
 **Second compounding leg:** the questions people ask in these threads are the newsletter and
-LinkedIn-post backlog, written by the buyers themselves. Log them against the source.
+LinkedIn-post backlog, written by the buyers themselves.

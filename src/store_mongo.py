@@ -10,6 +10,7 @@ exactly like SQLite, so the incremental-build behavior is identical.
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import datetime, timezone
 
 from pymongo import MongoClient
@@ -530,7 +531,6 @@ class MongoStore:
             if url and not d.get("url"):
                 self.db.sources.update_one({"_id": d["_id"]}, {"$set": {"url": url}})
             return d["_id"]
-        import uuid
         sid = uuid.uuid4().hex[:10]
         self.db.sources.insert_one({"_id": sid, "name": key, "type": stype, "url": url,
                                     "created_at": datetime.now(timezone.utc).isoformat()})
@@ -585,6 +585,112 @@ class MongoStore:
                 if e and (e.get("opened") or e.get("clicked")):
                     f["engaged"] += 1
         return by_source
+
+    def backfill_source_ids(self) -> int:
+        """One-time: give the leads that pre-date attribution the source they came
+        from, recovered from the `lead.source` they were saved with. Without this the
+        Sources page opens empty and every new LinkedIn group is compared against
+        nothing — the Apollo baseline is the whole point of the comparison.
+        Idempotent: only ever touches leads that have no source_id."""
+        by_value: dict[str, list] = {}
+        for d in self.db.leads.find({"source_id": {"$exists": False}},
+                                    {"lead.source": 1}):
+            v = ((d.get("lead") or {}).get("source") or "").strip()
+            if v:
+                by_value.setdefault(v, []).append(d["_id"])
+        n = 0
+        for v, keys in by_value.items():
+            if v.lower() == "apollo":
+                sid = self.upsert_source("Apollo search", "apollo")
+            else:
+                sid = self.upsert_source(f"CSV import ({v})", "import")
+            for i in range(0, len(keys), 1000):     # chunked: 4k+ leads in one go
+                self.db.leads.update_many({"_id": {"$in": keys[i:i + 1000]}},
+                                          {"$set": {"source_id": sid}})
+            n += len(keys)
+        return n
+
+    # --- signals: the monitoring inbox -----------------------------------------
+    # Platforms push to us (notification email, RSS); this is where those land as
+    # one queue instead of five inboxes. See src/signals.py for the parsers.
+    def add_signal(self, doc: dict) -> bool:
+        """Upsert on the dedupe key. True only when the signal is genuinely new, so
+        re-polling a feed or being sent the same notification twice is a no-op."""
+        key = doc.get("dedupe") or ""
+        if key and self.db.signals.find_one({"dedupe": key}, {"_id": 1}):
+            return False
+        doc = dict(doc)
+        doc["_id"] = uuid.uuid4().hex[:12]
+        doc.setdefault("status", "new")
+        doc.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        self.db.signals.insert_one(doc)
+        return True
+
+    def list_signals(self, status: str = "", limit: int = 300) -> list[dict]:
+        q = {"status": status} if status else {}
+        return list(self.db.signals.find(q).sort("created_at", -1).limit(limit))
+
+    def signal_counts(self) -> dict:
+        out = {"new": 0, "engaged": 0, "ignored": 0}
+        for d in self.db.signals.aggregate([{"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
+            out[d["_id"] or "new"] = d["n"]
+        return out
+
+    def set_signal_status(self, sid: str, status: str) -> None:
+        self.db.signals.update_one({"_id": sid}, {"$set": {
+            "status": status, "acted_at": datetime.now(timezone.utc).isoformat()}})
+
+    def delete_signal(self, sid: str) -> None:
+        self.db.signals.delete_one({"_id": sid})
+
+    # --- feeds: the RSS side of the monitor ------------------------------------
+    def add_feed(self, url: str, name: str = "", keywords: list | None = None,
+                 source_id: str = "") -> str:
+        d = self.db.feeds.find_one({"url": url})
+        if d:
+            return d["_id"]
+        fid = uuid.uuid4().hex[:10]
+        self.db.feeds.insert_one({"_id": fid, "url": url, "name": name or url,
+                                  "keywords": keywords or [], "source_id": source_id,
+                                  "enabled": True, "last_ok": "", "last_note": "",
+                                  "created_at": datetime.now(timezone.utc).isoformat()})
+        return fid
+
+    def list_feeds(self) -> list[dict]:
+        return list(self.db.feeds.find({}).sort("created_at", 1))
+
+    def delete_feed(self, fid: str) -> None:
+        self.db.feeds.delete_one({"_id": fid})
+
+    def set_feed_enabled(self, fid: str, on: bool) -> None:
+        self.db.feeds.update_one({"_id": fid}, {"$set": {"enabled": bool(on)}})
+
+    def mark_feed_polled(self, fid: str, ok: bool, note: str = "") -> None:
+        """Record the outcome on the feed row — a feed that quietly stopped working
+        should be visible in the UI, not discovered months later."""
+        now = datetime.now(timezone.utc).isoformat()
+        patch = {"last_poll": now, "last_note": note, "last_ok_flag": bool(ok)}
+        if ok:
+            patch["last_ok"] = now
+        self.db.feeds.update_one({"_id": fid}, {"$set": patch})
+
+    # --- backlog: the questions buyers asked, which is what to write next ------
+    def add_backlog(self, question: str, source_id: str = "", signal_id: str = "",
+                    url: str = "") -> str:
+        bid = uuid.uuid4().hex[:10]
+        self.db.backlog.insert_one({"_id": bid, "question": question, "source_id": source_id,
+                                    "signal_id": signal_id, "url": url, "status": "idea",
+                                    "created_at": datetime.now(timezone.utc).isoformat()})
+        return bid
+
+    def list_backlog(self) -> list[dict]:
+        return list(self.db.backlog.find({}).sort("created_at", -1))
+
+    def set_backlog_status(self, bid: str, status: str) -> None:
+        self.db.backlog.update_one({"_id": bid}, {"$set": {"status": status}})
+
+    def delete_backlog(self, bid: str) -> None:
+        self.db.backlog.delete_one({"_id": bid})
 
     # --- capture tokens: one per person, revocable independently ---------------
     # A single shared token meant generating one for a teammate silently broke

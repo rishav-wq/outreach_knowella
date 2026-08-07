@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
+from . import signals
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, postmark_send
 from .models import Lead
 from .store import open_store
@@ -61,6 +62,7 @@ _runs: dict = {}  # campaign -> {running, error, summary, started_at}
 _run_threads: dict = {}  # campaign -> worker Thread (kept out of _runs so it stays JSON-serializable)
 _seeded = False   # one-time file→Mongo migration guard (per process)
 _leads_migrated = False   # one-time lead-key re-scoping guard (per process)
+_sources_backfilled = False   # one-time attribution backfill guard (per process)
 REQUIRED_KEYS = ("name", "icp", "offer", "voice")
 
 
@@ -77,6 +79,22 @@ def _migrate_leads_once(store) -> None:
             print(f"[migrate] re-scoped {n} legacy lead(s) to campaign-scoped keys")
     except Exception as e:
         print(f"[migrate] lead re-key skipped: {e}")
+
+
+def _backfill_sources_once(store) -> None:
+    """Give the pre-attribution leads their source, once per process. Every lead we
+    already have came from Apollo; recording that makes it the baseline every
+    hand-engaged LinkedIn source gets measured against."""
+    global _sources_backfilled
+    if _sources_backfilled:
+        return
+    _sources_backfilled = True
+    try:
+        n = store.backfill_source_ids()
+        if n:
+            print(f"[migrate] attributed {n} existing lead(s) to their source")
+    except Exception as e:
+        print(f"[migrate] source backfill skipped: {e}")
 
 
 def _slug(name: str) -> str:
@@ -112,6 +130,8 @@ def _load(name: str) -> dict:
     store = open_store()
     _seed_campaigns_once(store)
     _migrate_leads_once(store)
+    _backfill_sources_once(store)
+    signals.start_poller(open_store)
     cfg = store.get_campaign(name)
     if cfg is None:
         raise HTTPException(404, f"campaign '{name}' not found")
@@ -1749,6 +1769,177 @@ def update_source_notes(sid: str, r: SourceNotes):
 @app.delete("/api/sources/{sid}")
 def delete_source(sid: str):
     open_store().delete_source(sid)
+    return {"ok": True}
+
+
+# --- signals: the monitoring inbox -------------------------------------------
+# Platforms push; we collect. Notification email arrives via Postmark inbound,
+# publisher/Google-Alert feeds are polled. Nothing here scrapes anything.
+@app.post("/api/signals/inbound")
+async def signals_inbound(request: Request):
+    """Postmark inbound webhook. Point an inbound address (Postmark gives you one,
+    or set an inbound domain) at https://…/api/signals/inbound?token=… with
+    SIGNALS_WEBHOOK_TOKEN set, then forward LinkedIn / G2 / Capterra / Trustpilot /
+    Google Alerts notification mail to it. Every message becomes a signal — the
+    ones we can't parse keep their subject line rather than being dropped."""
+    want = os.environ.get("SIGNALS_WEBHOOK_TOKEN", "")
+    if want and request.query_params.get("token", "") != want:
+        raise HTTPException(401, "bad webhook token")
+    try:
+        ev = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON")
+    frm = ev.get("From") or (ev.get("FromFull") or {}).get("Email") or ""
+    sig = signals.parse_email(frm, ev.get("Subject") or "",
+                              ev.get("TextBody") or "", ev.get("HtmlBody") or "")
+    sig["from"] = frm
+    added = open_store().add_signal(sig)
+    return {"ok": True, "added": added, "platform": sig["platform"], "kind": sig["kind"]}
+
+
+@app.get("/api/signals")
+def list_signals(status: str = ""):
+    store = open_store()
+    names = {s["_id"]: s.get("name", "") for s in store.list_sources()}
+    out = [{"id": d["_id"], "created_at": d.get("created_at", ""),
+            "channel": d.get("channel", ""), "platform": d.get("platform", ""),
+            "kind": d.get("kind", ""), "person": d.get("person", ""),
+            "title": d.get("title", ""), "text": d.get("text", ""),
+            "url": d.get("url", ""), "status": d.get("status", "new"),
+            "feed": d.get("feed", ""), "source_id": d.get("source_id", ""),
+            "source": names.get(d.get("source_id", ""), "")}
+           for d in store.list_signals(status)]
+    return {"signals": out, "counts": store.signal_counts(),
+            "inbound_ready": bool(os.environ.get("SIGNALS_WEBHOOK_TOKEN"))}
+
+
+class SignalIn(BaseModel):
+    title: str
+    url: str = ""
+    text: str = ""
+    person: str = ""
+    kind: str = "question"
+    platform: str = "other"
+    source_id: str = ""
+
+
+@app.post("/api/signals")
+def add_signal(s: SignalIn):
+    """Log something you saw yourself — a question in a LinkedIn group nobody can
+    notify us about. The manual path is not a fallback here, it's the main one for
+    Tier 2 communities where membership is the only API."""
+    if not s.title.strip():
+        raise HTTPException(400, "title is required")
+    d = s.model_dump()
+    d["channel"] = "manual"
+    d["dedupe"] = signals.dedupe_key(s.platform, s.url, s.title, s.person)
+    return {"added": open_store().add_signal(d)}
+
+
+class SignalAction(BaseModel):
+    status: str = "engaged"
+
+
+@app.post("/api/signals/{sid}/status")
+def signal_status(sid: str, a: SignalAction):
+    if a.status not in ("new", "engaged", "ignored"):
+        raise HTTPException(400, "status must be new, engaged or ignored")
+    open_store().set_signal_status(sid, a.status)
+    return {"ok": True}
+
+
+@app.delete("/api/signals/{sid}")
+def remove_signal(sid: str):
+    open_store().delete_signal(sid)
+    return {"ok": True}
+
+
+@app.post("/api/signals/poll")
+def poll_signals():
+    """Poll every feed now, rather than waiting for the half-hourly cycle."""
+    return signals.poll_all(open_store())
+
+
+class FeedIn(BaseModel):
+    url: str
+    name: str = ""
+    keywords: list[str] = []
+    source_id: str = ""
+
+
+@app.get("/api/feeds")
+def list_feeds():
+    return [{"id": f["_id"], "url": f.get("url", ""), "name": f.get("name", ""),
+             "keywords": f.get("keywords", []), "enabled": f.get("enabled", True),
+             "last_poll": f.get("last_poll", ""), "last_ok": f.get("last_ok", ""),
+             "last_note": f.get("last_note", ""), "ok": f.get("last_ok_flag", True)}
+            for f in open_store().list_feeds()]
+
+
+@app.post("/api/feeds")
+def add_feed(f: FeedIn):
+    if not f.url.strip().lower().startswith("http"):
+        raise HTTPException(400, "url must start with http")
+    store = open_store()
+    fid = store.add_feed(f.url.strip(), f.name.strip(), f.keywords, f.source_id)
+    try:                                    # poll immediately: a feed that's wrong
+        n = signals.poll_feed(store, {"_id": fid, "url": f.url.strip(),   # should say so now
+                                      "name": f.name.strip(), "keywords": f.keywords,
+                                      "source_id": f.source_id})
+        store.mark_feed_polled(fid, ok=True, note=f"{n} new")
+        return {"id": fid, "new": n}
+    except Exception as e:
+        store.mark_feed_polled(fid, ok=False, note=str(e)[:160])
+        raise HTTPException(400, f"Feed added but could not be read: {e}")
+
+
+@app.delete("/api/feeds/{fid}")
+def remove_feed(fid: str):
+    open_store().delete_feed(fid)
+    return {"ok": True}
+
+
+@app.post("/api/feeds/{fid}/toggle")
+def toggle_feed(fid: str, a: SignalAction):
+    open_store().set_feed_enabled(fid, a.status == "on")
+    return {"ok": True}
+
+
+# --- backlog: what the buyers asked, which is what we write next --------------
+class BacklogIn(BaseModel):
+    question: str
+    source_id: str = ""
+    signal_id: str = ""
+    url: str = ""
+
+
+@app.get("/api/backlog")
+def list_backlog():
+    store = open_store()
+    names = {s["_id"]: s.get("name", "") for s in store.list_sources()}
+    return [{"id": b["_id"], "question": b.get("question", ""), "url": b.get("url", ""),
+             "status": b.get("status", "idea"), "created_at": b.get("created_at", ""),
+             "source_id": b.get("source_id", ""),
+             "source": names.get(b.get("source_id", ""), "")}
+            for b in store.list_backlog()]
+
+
+@app.post("/api/backlog")
+def add_backlog(b: BacklogIn):
+    if not b.question.strip():
+        raise HTTPException(400, "question is required")
+    return {"id": open_store().add_backlog(b.question.strip(), b.source_id, b.signal_id, b.url)}
+
+
+@app.post("/api/backlog/{bid}/status")
+def backlog_status(bid: str, a: SignalAction):
+    open_store().set_backlog_status(bid, a.status)
+    return {"ok": True}
+
+
+@app.delete("/api/backlog/{bid}")
+def remove_backlog(bid: str):
+    open_store().delete_backlog(bid)
     return {"ok": True}
 
 
