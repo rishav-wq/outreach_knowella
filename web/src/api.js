@@ -63,7 +63,9 @@ export const deleteSignal = (id) => apiSend(`/api/signals/${encodeURIComponent(i
 export const pollSignals = () => apiSend('/api/signals/poll', 'POST', {})
 export const listFeeds = () => apiGet('/api/feeds')
 export const addFeed = (f) => apiSend('/api/feeds', 'POST', f)
+export const updateFeed = (id, f) => apiSend(`/api/feeds/${encodeURIComponent(id)}`, 'PUT', f)
 export const deleteFeed = (id) => apiSend(`/api/feeds/${encodeURIComponent(id)}`, 'DELETE', {})
+export const clearSignals = (channel = '') => apiSend('/api/signals/clear', 'POST', { channel })
 export const toggleFeed = (id, on) => apiSend(`/api/feeds/${encodeURIComponent(id)}/toggle`, 'POST', { status: on ? 'on' : 'off' })
 // backlog: the questions buyers asked — what to write next
 export const listBacklog = () => apiGet('/api/backlog')

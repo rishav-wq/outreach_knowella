@@ -1521,3 +1521,17 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 /* The Signals empty state IS the setup path, so it sits up near the tabs rather
    than floating in the middle of an otherwise blank page. */
 .sig-empty { margin-top: 4px; padding: 30px 20px 40px; }
+
+/* Signals: keyword tuning. An unfiltered feed is the difference between a monitor
+   and a firehose, so the state is a control, not a caption — click it to fix it. */
+.sig-kw {
+  display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px dashed var(--line-strong); background: none; font: inherit; font-size: 11.5px;
+  color: var(--muted); text-align: left; max-width: 100%;
+}
+.sig-kw:hover { border-color: var(--signal); color: var(--signal); border-style: solid; }
+.sig-kw.is-open { border-color: var(--caution); color: var(--caution); }
+.sig-tune { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; line-height: 1.55; }
+.sig-tune-acts { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.sig-h-act { margin-left: auto; font-size: 12px; padding: 3px 10px; }
+.sig-more { display: block; margin: 10px auto 0; }

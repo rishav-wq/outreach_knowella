@@ -659,6 +659,26 @@ class MongoStore:
     def list_feeds(self) -> list[dict]:
         return list(self.db.feeds.find({}).sort("created_at", 1))
 
+    def update_feed(self, fid: str, name: str = "", keywords: list | None = None,
+                    url: str = "") -> None:
+        patch: dict = {"keywords": keywords or []}
+        if name:
+            patch["name"] = name
+        if url:
+            patch["url"] = url
+        self.db.feeds.update_one({"_id": fid}, {"$set": patch})
+
+    def clear_signals(self, channel: str = "") -> int:
+        """Dismiss every open signal (optionally just one channel). Marks them
+        ignored rather than deleting, so the dedupe keys survive and a cleared item
+        doesn't come straight back on the next poll."""
+        q: dict = {"status": "new"}
+        if channel:
+            q["channel"] = channel
+        return self.db.signals.update_many(q, {"$set": {
+            "status": "ignored",
+            "acted_at": datetime.now(timezone.utc).isoformat()}}).modified_count
+
     def delete_feed(self, fid: str) -> None:
         self.db.feeds.delete_one({"_id": fid})
 

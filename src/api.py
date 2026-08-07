@@ -1893,10 +1893,31 @@ def add_feed(f: FeedIn):
         raise HTTPException(400, f"Feed added but could not be read: {e}")
 
 
+@app.put("/api/feeds/{fid}")
+def update_feed(fid: str, f: FeedIn):
+    """Retune a feed in place. Keywords are the difference between a monitor and a
+    firehose, and the right ones are only obvious once you've seen what a feed
+    actually carries — so they have to be editable, not set once at creation."""
+    open_store().update_feed(fid, f.name.strip(), f.keywords, f.url.strip())
+    return {"ok": True}
+
+
 @app.delete("/api/feeds/{fid}")
 def remove_feed(fid: str):
     open_store().delete_feed(fid)
     return {"ok": True}
+
+
+class ClearIn(BaseModel):
+    channel: str = ""        # "rss" clears topics only; blank clears the whole queue
+
+
+@app.post("/api/signals/clear")
+def clear_signals(c: ClearIn):
+    """Dismiss the queue in one go. Retuning a feed's keywords doesn't retroactively
+    remove what the old settings let through, so there has to be a way to wipe the
+    slate rather than clicking 111 checkmarks."""
+    return {"cleared": open_store().clear_signals(c.channel)}
 
 
 @app.post("/api/feeds/{fid}/toggle")

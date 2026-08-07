@@ -20,13 +20,25 @@ const PLATFORM = {
 }
 // Verified live on 2026-08-07 — each one fetched and parsed before shipping.
 // Overdrive is deliberately absent: its feed 403s behind Cloudflare.
+//
+// The keywords matter more than the feeds. Unfiltered, these six deliver ~111
+// items a day and most of it is crash reporting written for drivers — a firehose,
+// not a monitor. Filtered on what a SAFETY MANAGER has to deal with (a citation, an
+// audit, a rule change) it drops to ~33 and reads like a briefing. Measured, not
+// guessed: 70% of the volume removed, and the OSHA enforcement stories survive.
+const EHS_KW = ['osha', 'ehs', 'safety manager', 'recordkeeping', '300a', 'citation', 'inspection',
+  'violation', 'penalty', 'compliance', 'audit', 'injury rate', 'incident report', 'training',
+  'heat', 'silica', 'lockout', 'ergonomic']
+const TRUCK_KW = ['fmcsa', 'csa', 'dot audit', 'compliance review', 'safety rating', 'out-of-service',
+  'out of service', 'eld', 'hours of service', 'driver qualification', 'clearinghouse', 'violation',
+  'citation', 'audit', 'inspection', 'osha']
 const STARTER_FEEDS = [
-  { name: 'EHS Today', url: 'https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D' },
-  { name: 'Safety+Health', url: 'https://www.safetyandhealthmagazine.com/feed/' },
-  { name: 'Occupational Health & Safety', url: 'https://ohsonline.com/rss-feeds/news.aspx' },
-  { name: 'FreightWaves', url: 'https://www.freightwaves.com/feed' },
-  { name: 'Trucking Dive', url: 'https://www.truckingdive.com/feeds/news/' },
-  { name: 'CDLLife', url: 'https://cdllife.com/feed/' },
+  { name: 'EHS Today', url: 'https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D', keywords: EHS_KW },
+  { name: 'Safety+Health', url: 'https://www.safetyandhealthmagazine.com/feed/', keywords: EHS_KW },
+  { name: 'Occupational Health & Safety', url: 'https://ohsonline.com/rss-feeds/news.aspx', keywords: EHS_KW },
+  { name: 'FreightWaves', url: 'https://www.freightwaves.com/feed', keywords: TRUCK_KW },
+  { name: 'Trucking Dive', url: 'https://www.truckingdive.com/feeds/news/', keywords: TRUCK_KW },
+  { name: 'CDLLife', url: 'https://cdllife.com/feed/', keywords: TRUCK_KW },
 ]
 
 const ago = (iso) => {
@@ -62,11 +74,23 @@ export default function Signals() {
     const r = await api.pollSignals()
     return { msg: `Polled ${feeds.length} feed${feeds.length === 1 ? '' : 's'} — ${r.new} new${r.errors ? `, ${r.errors} failed` : ''}` }
   }, 'Polling…')
+  // Add-or-retune: the same call sets the recommended keywords on feeds that are
+  // already there, so a feed added before we tuned them doesn't stay a firehose.
   const addStarters = () => act(async () => {
     let ok = 0
-    for (const f of STARTER_FEEDS) { try { await api.addFeed(f); ok++ } catch { /* keep going */ } }
-    return { msg: `${ok} of ${STARTER_FEEDS.length} feeds added and polled` }
-  }, 'Adding feeds…')
+    for (const f of STARTER_FEEDS) {
+      try {
+        const r = await api.addFeed(f)
+        await api.updateFeed(r.id, f)
+        ok++
+      } catch { /* one bad feed must not stop the rest */ }
+    }
+    return { msg: `${ok} of ${STARTER_FEEDS.length} feeds set up with recommended keywords` }
+  }, 'Setting up feeds…')
+  const clearTopics = () => act(async () => {
+    const r = await api.clearSignals('rss')
+    return { msg: `Cleared ${r.cleared} topic${r.cleared === 1 ? '' : 's'}` }
+  }, 'Clearing…')
 
   const open = (data?.signals || []).filter((s) => s.status === 'new')
   const people = useMemo(() => open.filter((s) => s.channel !== 'rss' && PERSON_KINDS.has(s.kind)), [data])
@@ -143,10 +167,13 @@ export default function Signals() {
         <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
           {view === 'queue' && (
             <Queue people={people} topics={topics} feeds={feeds} busy={busy}
-              onAddStarters={addStarters} onReload={load} onNote={setNote} />
+              onAddStarters={addStarters} onClearTopics={clearTopics}
+              onReload={load} onNote={setNote} onTuneFeeds={() => setView('feeds')} />
           )}
           {view === 'backlog' && <Backlog rows={backlog} onReload={load} />}
-          {view === 'feeds' && <Feeds rows={feeds} onReload={load} onNote={setNote} />}
+          {view === 'feeds' && (
+            <Feeds rows={feeds} busy={busy} onAddStarters={addStarters} onReload={load} onNote={setNote} />
+          )}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -155,8 +182,10 @@ export default function Signals() {
 
 // --- queue -------------------------------------------------------------------
 
-function Queue({ people, topics, feeds, busy, onAddStarters, onReload, onNote }) {
+function Queue({ people, topics, feeds, busy, onAddStarters, onClearTopics, onReload, onNote, onTuneFeeds }) {
   const [adding, setAdding] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const unfiltered = feeds.filter((f) => !(f.keywords || []).length).length
 
   if (!people.length && !topics.length) {
     return (
@@ -205,11 +234,34 @@ function Queue({ people, topics, feeds, busy, onAddStarters, onReload, onNote })
 
       {topics.length > 0 && (
         <section className="sig-sect">
-          <h4 className="sig-h sig-h-quiet">Topics moving <span className="sig-h-n">{topics.length}</span></h4>
+          <h4 className="sig-h sig-h-quiet">
+            Topics moving <span className="sig-h-n">{topics.length}</span>
+            <button className="btn ghost sig-h-act" onClick={onClearTopics} disabled={!!busy}>Clear all</button>
+          </h4>
           <p className="sig-h-sub">Nobody is waiting on these. Useful for what to post about, not who to talk to.</p>
+          {unfiltered > 0 && (
+            <div className="banner sig-tune">
+              <span>
+                <b>{unfiltered} {unfiltered === 1 ? 'feed has' : 'feeds have'} no keywords</b>, so everything they
+                publish lands here — including crash reporting written for drivers. Filtering on what a safety
+                manager deals with cuts roughly 70% of it.
+              </span>
+              <span className="sig-tune-acts">
+                <button className="btn primary" onClick={onAddStarters} disabled={!!busy}>
+                  {busy ? 'Applying…' : 'Apply recommended keywords'}
+                </button>
+                <button className="btn" onClick={onTuneFeeds}>Tune by hand</button>
+              </span>
+            </div>
+          )}
           <div className="sig-topics">
-            {topics.map((s) => <TopicRow key={s.id} s={s} onReload={onReload} />)}
+            {(showAll ? topics : topics.slice(0, 20)).map((s) => <TopicRow key={s.id} s={s} onReload={onReload} />)}
           </div>
+          {topics.length > 20 && (
+            <button className="btn sig-more" onClick={() => setShowAll(!showAll)}>
+              {showAll ? 'Show fewer' : `Show all ${topics.length}`}
+            </button>
+          )}
         </section>
       )}
     </>
@@ -357,18 +409,26 @@ function Backlog({ rows, onReload }) {
 
 // --- feeds -------------------------------------------------------------------
 
-function Feeds({ rows, onReload, onNote }) {
+function Feeds({ rows, busy, onAddStarters, onReload, onNote }) {
   const [f, setF] = useState({ url: '', name: '', keywords: '' })
-  const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(null)     // feed id whose keywords are open
+  const [kw, setKw] = useState('')
+  const unfiltered = rows.filter((r) => !(r.keywords || []).length).length
+
+  const saveKw = async (r) => {
+    await api.updateFeed(r.id, { url: r.url, name: r.name, keywords: kw.split(',').map((s) => s.trim()).filter(Boolean) })
+    setEditing(null); onReload()
+  }
   const add = async () => {
     if (!f.url.trim()) return
-    setBusy(true)
+    setAdding(true)
     try {
       const r = await api.addFeed({ url: f.url.trim(), name: f.name.trim(), keywords: f.keywords.split(',').map((s) => s.trim()).filter(Boolean) })
       onNote(`Added — ${r.new} item${r.new === 1 ? '' : 's'} on the first read`)
       setF({ url: '', name: '', keywords: '' }); onReload()
     } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
-    finally { setBusy(false) }
+    finally { setAdding(false) }
   }
 
   return (
@@ -376,13 +436,25 @@ function Feeds({ rows, onReload, onNote }) {
       <p className="sig-h-sub sig-backlog-lede">
         A publisher hosts a feed on purpose, so polling one is reading what was published for reading.
         For a Google Alert, set <b>Deliver to → RSS feed</b> and paste the URL it gives you.
-        Keywords are optional — leave them blank to keep everything.
+        <b> Keywords are what make a feed useful</b> — without them a trade publication delivers its whole
+        day, most of which is written for someone other than our buyer.
       </p>
+      {unfiltered > 0 && (
+        <div className="banner sig-tune">
+          <span><b>{unfiltered} {unfiltered === 1 ? 'feed is' : 'feeds are'} unfiltered.</b> The recommended
+            keywords are the ones a safety manager's problems are described with — citations, audits, rule changes.</span>
+          <span className="sig-tune-acts">
+            <button className="btn primary" onClick={onAddStarters} disabled={!!busy}>
+              {busy ? 'Applying…' : 'Apply recommended keywords'}
+            </button>
+          </span>
+        </div>
+      )}
       <div className="sig-add-row sig-feed-form">
         <input className="field-input" placeholder="Feed URL" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
         <input className="field-input" placeholder="Name it" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <input className="field-input" placeholder="Keywords, comma separated" value={f.keywords} onChange={(e) => setF({ ...f, keywords: e.target.value })} />
-        <button className="btn primary" onClick={add} disabled={busy}>{busy ? 'Checking…' : 'Add feed'}</button>
+        <button className="btn primary" onClick={add} disabled={adding}>{adding ? 'Checking…' : 'Add feed'}</button>
       </div>
       {rows.length === 0 ? (
         <div className="empty"><h3>No feeds yet</h3><p className="muted">Add one above, or use the starter set on the Queue tab.</p></div>
@@ -395,9 +467,24 @@ function Feeds({ rows, onReload, onNote }) {
                 <div className="sig-bl-q">{r.name}</div>
                 <div className="sig-meta">
                   <a href={r.url} target="_blank" rel="noreferrer">{r.url.slice(0, 62)}{r.url.length > 62 ? '…' : ''}</a>
-                  {r.keywords?.length > 0 && <> · filtered on <b>{r.keywords.join(', ')}</b></>}
                   {r.last_poll && <> · checked {ago(r.last_poll)}{r.last_note ? ` — ${r.last_note}` : ''}</>}
                 </div>
+                {editing === r.id ? (
+                  <div className="ready-form">
+                    <input className="field-input" autoFocus value={kw} placeholder="Keywords, comma separated — blank keeps everything"
+                      onChange={(e) => setKw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveKw(r)} />
+                    <button className="btn primary" onClick={() => saveKw(r)}>Save</button>
+                    <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <button className={`sig-kw ${r.keywords?.length ? '' : 'is-open'}`}
+                    title="Click to edit which words this feed is filtered on"
+                    onClick={() => { setEditing(r.id); setKw((r.keywords || []).join(', ')) }}>
+                    {r.keywords?.length
+                      ? <>filtered on <b>{r.keywords.slice(0, 6).join(', ')}</b>{r.keywords.length > 6 ? ` +${r.keywords.length - 6} more` : ''}</>
+                      : 'no filter — everything gets through'}
+                  </button>
+                )}
               </div>
               <button className="btn ghost" onClick={() => api.toggleFeed(r.id, !r.enabled).then(onReload)}>
                 {r.enabled ? 'Pause' : 'Resume'}
