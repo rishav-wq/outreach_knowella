@@ -29,8 +29,10 @@ const PLATFORM = {
 const EHS_KW = ['osha', 'ehs', 'safety manager', 'recordkeeping', '300a', 'citation', 'inspection',
   'violation', 'penalty', 'compliance', 'audit', 'injury rate', 'incident report', 'training',
   'heat', 'silica', 'lockout', 'ergonomic']
+// Hyphens and spaces are interchangeable when matching, so "out-of-service" alone
+// covers both spellings — no need to list each variant.
 const TRUCK_KW = ['fmcsa', 'csa', 'dot audit', 'compliance review', 'safety rating', 'out-of-service',
-  'out of service', 'eld', 'hours of service', 'driver qualification', 'clearinghouse', 'violation',
+  'eld', 'hours of service', 'driver qualification', 'clearinghouse', 'violation',
   'citation', 'audit', 'inspection', 'osha']
 //
 // Trade press needs filtering because it's written for a mixed audience. The
@@ -69,7 +71,9 @@ export default function Signals() {
   const [note, setNote] = useState('')
 
   const load = () => Promise.all([
-    api.listSignals().then(setData).catch(() => setData({ signals: [], counts: {} })),
+    // Only the open queue: dismissed signals are kept for dedupe, never displayed,
+    // and shipping them to the browser just to filter them out wastes the payload.
+    api.listSignals('new').then(setData).catch(() => setData({ signals: [], counts: {} })),
     api.listFeeds().then(setFeeds).catch(() => setFeeds([])),
     api.listBacklog().then(setBacklog).catch(() => setBacklog([])),
   ])

@@ -23,6 +23,7 @@ import html
 import re
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import httpx
 
@@ -241,11 +242,25 @@ def fetch_feed(url: str, timeout: float = 20.0) -> list[dict]:
     return parse_feed(r.content)
 
 
+@lru_cache(maxsize=512)
+def _kw_re(keyword: str):
+    """Whole words only, plural tolerated, hyphens and spaces interchangeable.
+
+    Whole words because a bare substring test lets three-letter industry acronyms
+    match anything: 'eld' hits held/welding/fields (a story about factory job cuts
+    got through that way) and 'csa' hits inside 'FMCSA'. The trailing s? keeps 'ELD'
+    matching 'ELDs'. The separator class is what makes 'hours of service' find
+    "Companies seek hours-of-service exemptions" — publications write these terms
+    both ways and the hyphenated form is the more common one in headlines."""
+    parts = [re.escape(p) for p in re.split(r"[\s\-]+", keyword.strip()) if p]
+    return re.compile(r"\b" + r"[\s\-]+".join(parts) + r"s?\b", re.I)
+
+
 def _matches(item: dict, keywords: list[str]) -> bool:
     if not keywords:
         return True
-    blob = f"{item.get('title','')} {item.get('text','')}".lower()
-    return any(k.strip().lower() in blob for k in keywords if k.strip())
+    blob = f"{item.get('title','')} {item.get('text','')}"
+    return any(_kw_re(k.strip().lower()).search(blob) for k in keywords if k.strip())
 
 
 def poll_feed(store, feed: dict) -> int:
