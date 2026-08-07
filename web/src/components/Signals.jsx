@@ -363,18 +363,127 @@ function MapView({ cited, pin, setPin, onReload, onNote }) {
       </div>
     )
   }
-  const shown = pin ? cited.filter((s) => s.state === pin) : cited
   return (
     <>
-      <USTileMap rows={cited} selected={pin} onSelect={setPin} />
+      <USTileMap rows={cited} selected={pin} onSelect={setPin}
+        renderPopover={(st) => (
+          <PinPopover rows={cited.filter((s) => s.state === st)} state={st}
+            onReload={onReload} onNote={onNote} />
+        )} />
       <h4 className="sig-h" style={{ marginTop: 26 }}>
-        {pin ? `${pin} — ${shown.length} cited` : 'Every cited employer'}
-        <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
+        Every cited employer <span className="sig-h-n sig-h-n-hot">{cited.length}</span>
       </h4>
       <div className="sig-cards" style={{ marginTop: 12 }}>
-        {shown.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
+        {cited.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
       </div>
     </>
+  )
+}
+
+// What a pin does when you click it. Looking a company up costs nothing, so the
+// popup resolves on open and can say "1 lead found" straight away — the decision
+// left to you is the one that costs credits and the one a machine shouldn't make:
+// is this the right company, and which campaign does it belong in.
+function PinPopover({ rows, state, onReload, onNote }) {
+  const [i, setI] = useState(0)
+  const [found, setFound] = useState(null)   // {candidates} | 'error'
+  const [pickOther, setPickOther] = useState(false)
+  const [campaigns, setCampaigns] = useState([])
+  const [campaign, setCampaign] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(null)
+  const s = rows[i]
+
+  useEffect(() => {
+    let live = true
+    setFound(null); setDone(null); setPickOther(false)
+    Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
+      .then(([r, cs]) => {
+        if (!live) return
+        setFound(r); setCampaigns(cs); setCampaign((c) => c || cs[0] || '')
+      })
+      .catch(() => live && setFound('error'))
+    return () => { live = false }
+  }, [s.id])
+
+  const best = found && found !== 'error'
+    ? (found.candidates || []).filter((o) => o.contacts.length)[0] : null
+  const others = found && found !== 'error'
+    ? (found.candidates || []).filter((o) => o !== best) : []
+
+  const add = async (org) => {
+    setBusy(true)
+    try {
+      const r = await api.promoteCitation(s.id, org.id, campaign)
+      setDone(r); onReload()
+      onNote(`${r.added} added to ${r.campaign} — ${r.credits} Apollo credit${r.credits === 1 ? '' : 's'}`)
+    } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="pin">
+      <div className="pin-src">OSHA citations · {state}</div>
+      <div className="pin-co">{s.company}</div>
+      <div className="pin-meta">
+        {s.penalty > 0 && <b>${Number(s.penalty).toLocaleString()}</b>} {s.location}
+      </div>
+      {rows.length > 1 && (
+        <div className="pin-pager">
+          <button className="btn ghost" disabled={i === 0} onClick={() => setI(i - 1)}>‹</button>
+          <span>{i + 1} of {rows.length} in {state}</span>
+          <button className="btn ghost" disabled={i === rows.length - 1} onClick={() => setI(i + 1)}>›</button>
+        </div>
+      )}
+
+      {done ? (
+        <div className="pin-done">✓ Added {done.added} to <b>{done.campaign}</b></div>
+      ) : found === null ? (
+        <div className="pin-load">Looking up the employer…</div>
+      ) : found === 'error' || !best ? (
+        <div className="pin-none">
+          No reachable contact at <b>{s.company}</b>. Small contractors often aren’t in Apollo.
+          <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
+        </div>
+      ) : (
+        <>
+          <div className="pin-found">
+            <b>{best.contacts.length} lead{best.contacts.length === 1 ? '' : 's'} found</b>
+            <span className="sig-dom">{best.domain}</span>
+          </div>
+          <ul className="pin-people">
+            {best.contacts.slice(0, 3).map((p, n) => (
+              <li key={n}><b>{p.first_name}</b> — {p.title}</li>
+            ))}
+          </ul>
+          <div className="pin-act">
+            <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+              {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button className="btn primary" disabled={busy || !campaign} onClick={() => add(best)}>
+              {busy ? 'Adding…' : 'Add to campaign'}
+            </button>
+          </div>
+          {others.length > 0 && (
+            pickOther ? (
+              <div className="pin-others">
+                {others.map((o) => (
+                  <button key={o.id} className="pin-other" disabled={!o.contacts.length || busy}
+                    onClick={() => add(o)}>
+                    {o.name} <span className="sig-dom">{o.domain || 'no domain'}</span>
+                    <em>{o.contacts.length ? `${o.contacts.length} contacts` : 'nobody'}</em>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button className="pin-link" onClick={() => setPickOther(true)}>
+                Not this company? {others.length} other match{others.length === 1 ? '' : 'es'}
+              </button>
+            )
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

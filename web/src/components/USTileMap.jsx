@@ -24,7 +24,7 @@ const GAP = 4
 const COLS = 11
 const ROWS = GRID.length
 
-export default function USTileMap({ rows, selected, onSelect }) {
+export default function USTileMap({ rows, selected, onSelect, renderPopover }) {
   // rows: [{ state, penalty, company }] — one entry per citation
   const byState = {}
   let placed = 0
@@ -42,6 +42,20 @@ export default function USTileMap({ rows, selected, onSelect }) {
 
   const w = COLS * (CELL + GAP) - GAP
   const h = ROWS * (CELL + GAP) - GAP
+
+  // Where the selected tile sits, as a percentage of the SVG box — the SVG scales
+  // with the container, so percentages track it without measuring the DOM.
+  let anchor = null
+  for (let y = 0; y < ROWS && !anchor; y++) {
+    const x = GRID[y].indexOf(selected)
+    if (selected && x >= 0) {
+      anchor = {
+        left: `${((x * (CELL + GAP) + CELL / 2) / w) * 100}%`,
+        top: `${((y * (CELL + GAP) + CELL) / h) * 100}%`,
+        side: x > COLS / 2 ? 'right' : 'left',
+      }
+    }
+  }
 
   return (
     <div className="map-wrap">
@@ -63,6 +77,7 @@ export default function USTileMap({ rows, selected, onSelect }) {
       </div>
 
       <div className="map-scroll">
+        <div className="map-stage">
         <svg viewBox={`0 0 ${w} ${h}`} className="map-svg" role="img"
           aria-label={`United States by state, ${placed} cited employers`}>
           {GRID.map((row, y) => row.map((code, x) => {
@@ -99,6 +114,16 @@ export default function USTileMap({ rows, selected, onSelect }) {
             )
           }))}
         </svg>
+        {anchor && renderPopover && (
+          <motion.div className={`map-pop map-pop-${anchor.side}`} style={{ left: anchor.left, top: anchor.top }}
+            initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
+            <span className="map-pop-arrow" />
+            <button className="map-pop-x" onClick={() => onSelect('')} aria-label="Close">×</button>
+            {renderPopover(selected, byState[selected])}
+          </motion.div>
+        )}
+        </div>
       </div>
 
       <p className="map-note">
