@@ -1392,25 +1392,7 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .sig-title-sub { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 
 /* the intake meter: both channels, honest about what's actually on */
-.sig-intake { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 22px; }
-.sig-chan {
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 14px 16px; position: relative; overflow: hidden;
-}
-.sig-chan::before {           /* the channel's state, as a hairline edge */
-  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--line-strong);
-}
-.sig-chan.on::before { background: var(--petal-teal); }
-.sig-chan-quiet::before { background: var(--petal-yellow); }
-.sig-chan-k {
-  display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600;
-  letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
-}
 .sig-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
-.sig-chan.on .sig-dot { background: var(--petal-teal); box-shadow: 0 0 0 3px rgba(4, 180, 146, 0.16); }
-.sig-chan-v { font-family: var(--font-display); font-size: 19px; font-weight: 700; margin: 6px 0 4px; letter-spacing: -0.01em; }
-.sig-chan-n { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-.sig-warn { color: var(--caution); }
 
 .sig-seg { margin-bottom: 18px; }
 .sig-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
@@ -1479,7 +1461,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-add-head .muted { font-size: 12.5px; line-height: 1.5; }
 .sig-add-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 .sig-add-foot { display: flex; gap: 8px; margin-top: 12px; }
-.sig-feed-form { grid-template-columns: 2fr 1fr 1fr auto; margin-bottom: 16px; }
 
 /* the setup path, which IS the product on day one */
 .sig-empty { max-width: 560px; }
@@ -1489,7 +1470,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 
 /* backlog + feeds share one list shape */
 .sig-list { display: grid; gap: 8px; margin-top: 14px; }
-.sig-bl, .sig-feed {
+.sig-bl {
   display: flex; align-items: center; gap: 12px; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px;
 }
@@ -1512,7 +1493,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 @media (max-width: 900px) {
   .sig-intake, .sig-add-row, .sig-feed-form { grid-template-columns: 1fr; }
   .sig-topic-src { width: 88px; }
-  .sig-bl, .sig-feed { flex-wrap: wrap; }
+  .sig-bl { flex-wrap: wrap; }
 }
 
 /* Sources: reply rate is the comparison column — a rate that beats the bought-list
@@ -1524,15 +1505,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 
 /* Signals: keyword tuning. An unfiltered feed is the difference between a monitor
    and a firehose, so the state is a control, not a caption — click it to fix it. */
-.sig-kw {
-  display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 999px; cursor: pointer;
-  border: 1px dashed var(--line-strong); background: none; font: inherit; font-size: 11.5px;
-  color: var(--muted); text-align: left; max-width: 100%;
-}
-.sig-kw:hover { border-color: var(--signal); color: var(--signal); border-style: solid; }
-.sig-kw.is-open { border-color: var(--caution); color: var(--caution); }
-.sig-tune { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; line-height: 1.55; }
-.sig-tune-acts { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
 .sig-h-act { margin-left: auto; font-size: 12px; padding: 3px 10px; }
 .sig-more { display: block; margin: 10px auto 0; }
 
@@ -1621,3 +1593,20 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .flow-stat { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
 .flow-stat-k { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
 .flow-clear { margin-left: auto; align-self: center; }
+
+/* One status line where three cards used to be. It reports the only thing the list
+   itself can't: whether the inbound address is actually receiving. */
+.sig-bar-status {
+  display: flex; align-items: flex-start; gap: 10px; margin: 14px 0 20px;
+  padding: 11px 14px; border: 1px solid var(--line); border-left: 3px solid var(--caution);
+  border-radius: var(--radius-sm); background: var(--panel);
+  font-size: 12.5px; color: var(--muted); line-height: 1.55;
+}
+.sig-bar-status.on { border-left-color: var(--verify); }
+.sig-bar-status b { color: var(--text); }
+.sig-bar-status .sig-dot { margin-top: 6px; flex-shrink: 0; background: var(--caution); }
+.sig-bar-status.on .sig-dot { background: var(--verify); box-shadow: 0 0 0 3px rgba(4,180,146,0.16); }
+.sig-bar-status code {
+  font-size: 11.5px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 1px 5px; color: var(--text-2);
+}

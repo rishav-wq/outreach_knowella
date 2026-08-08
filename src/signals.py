@@ -3,14 +3,13 @@
 Nothing here is scraped. Every signal arrives because a platform *pushed* it to us,
 through one of two channels:
 
-  email  Postmark inbound. Forward the notification mail LinkedIn / G2 / Capterra /
-         Trustpilot / Google Alerts already send us, and it lands here as a named
-         person who did something. This is the only automatic PERSON-level signal
-         available, and it only fires where we have a presence — our page, our
-         posts, our listing. See docs/monitoring-sources.md.
-  rss    Publisher feeds, polled. A Google Alert set to "Deliver to → RSS feed"
-         becomes a pollable URL too. TOPIC-level: tells you the subject is live,
-         not that a person asked something.
+  email  Postmark inbound, and now the only intake that matters. Forward the mail
+         LinkedIn / G2 / Trustpilot / Google Alerts / F5Bot already send, and it
+         lands here — a named person for the first three, a page mention for the
+         last two. Digests are split: one Google Alert becomes eight signals.
+  poll   Named sources only, e.g. OSHA citations (src/integrations/osha.py). Trade
+         RSS feeds were removed: an article is never someone you can email, and
+         they buried the signals that were.
 
 House rule: a signal we cannot parse is still a signal. Unrecognised mail is filed
 under its subject line rather than dropped, so a changed notification format costs
@@ -63,8 +62,14 @@ _SENDERS = (
     ("g2", ("g2.com", "g2crowd.com")),
     ("capterra", ("capterra.com", "softwareadvice.com", "getapp.com", "gartner.com")),
     ("trustpilot", ("trustpilot.com",)),
+    ("f5bot", ("f5bot.com",)),
     ("google_alert", ("googlealerts-noreply@google.com", "google.com")),
 )
+# Senders that mail a DIGEST — one message carrying many separate finds. Treating
+# those as a single signal keeps the first result and silently discards the rest,
+# which is what the first version did.
+_DIGEST = {"google_alert", "f5bot"}
+_ANCHOR = re.compile(r"""(?is)<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""")
 
 # "Rishav Kumar commented on your post", "Dana Ruiz replied to your comment", …
 _LI_ACTION = re.compile(
@@ -120,6 +125,48 @@ def _is_question(*parts: str) -> bool:
     return "?" in blob or bool(_QUESTION_WORDS.search(blob))
 
 
+def _digest_items(platform: str, subject: str, text: str, html_body: str) -> list[dict]:
+    """Split a digest into its individual finds.
+
+    Google Alerts and F5Bot both mail a batch: one message, eight results. The
+    anchors in the HTML body are the reliable structure — each result is a link
+    whose text is the headline — so items are read from those, with the plain-text
+    body as the fallback when a message arrives text-only.
+    """
+    seen: set[str] = set()
+    items: list[dict] = []
+    for href, label in _ANCHOR.findall(html_body or ""):
+        url = _unwrap(html.unescape(href.strip()))
+        title = _strip_html(label)
+        if not title or len(title) < 12 or _LINK_NOISE.search(url) or not url.startswith("http"):
+            continue
+        if "google.com/alerts" in url or url in seen:
+            continue                     # the "edit this alert" footer link
+        seen.add(url)
+        items.append({"title": title, "url": url})
+    if not items:                        # text-only digest: a URL per line, title above it
+        lines = [ln.strip() for ln in _strip_html(text or "").splitlines() if ln.strip()]
+        for i, ln in enumerate(lines):
+            m = _LINK.search(ln)
+            if not m:
+                continue
+            url = _unwrap(m.group(0).rstrip(".,)"))
+            if _LINK_NOISE.search(url) or url in seen:
+                continue
+            seen.add(url)
+            title = ln.replace(m.group(0), "").strip(" -–—:") or (lines[i - 1] if i else "")
+            items.append({"title": title[:200] or url, "url": url})
+    label = re.sub(r"^google alert\s*[-–]\s*", "", subject, flags=re.I).strip()
+    out = []
+    for it in items:
+        out.append({"channel": "email", "platform": platform, "kind": "mention",
+                    "person": "", "title": _clip(it["title"], 240),
+                    "text": f"matched “{label}”" if label else "",
+                    "url": it["url"], "topic": label,
+                    "dedupe": dedupe_key(platform, it["url"], it["title"])})
+    return out
+
+
 def parse_email(sender: str, subject: str, text: str, html_body: str = "") -> dict:
     """A Postmark inbound payload → one signal. Always returns a signal: when the
     format is unrecognised we keep the subject and the raw body, which is enough
@@ -152,6 +199,22 @@ def parse_email(sender: str, subject: str, text: str, html_body: str = "") -> di
     return {"channel": "email", "platform": platform, "kind": kind, "person": person,
             "title": _clip(title, 240) or "(no subject)", "text": _clip(body),
             "url": url, "dedupe": dedupe_key(platform, url, title, person)}
+
+
+def parse_inbound(sender: str, subject: str, text: str, html_body: str = "") -> list[dict]:
+    """A Postmark inbound payload → one or more signals.
+
+    One message is usually one event ("Dana Ruiz commented on your post"), but the
+    keyword services batch — a Google Alert carries every page it found that day.
+    Returning a list lets a digest become eight signals instead of one, and a digest
+    we fail to split still degrades to the single-signal path rather than vanishing.
+    """
+    platform = platform_of(sender)
+    if platform in _DIGEST:
+        items = _digest_items(platform, subject, text, html_body)
+        if items:
+            return items
+    return [parse_email(sender, subject, text, html_body)]
 
 
 # --- RSS / Atom ---------------------------------------------------------------
@@ -256,56 +319,21 @@ def _kw_re(keyword: str):
     return re.compile(r"\b" + r"[\s\-]+".join(parts) + r"s?\b", re.I)
 
 
-def _matches(item: dict, keywords: list[str]) -> bool:
-    if not keywords:
-        return True
-    blob = f"{item.get('title','')} {item.get('text','')}"
-    return any(_kw_re(k.strip().lower()).search(blob) for k in keywords if k.strip())
-
-
-def poll_feed(store, feed: dict) -> int:
-    """One feed → new signals. Returns how many were new (upserts are keyed on the
-    item URL, so re-polling the same feed is free)."""
-    items = fetch_feed(feed["url"])
-    plat = "google_alert" if "google.com/alerts" in feed["url"].lower() else "rss"
-    kws = feed.get("keywords") or []
-    new = 0
-    for it in items:
-        if not _matches(it, kws):
-            continue
-        sig = {"channel": "rss", "platform": plat, "kind": "article", "person": "",
-               "title": it["title"], "text": it["text"], "url": it["url"],
-               "source_id": feed.get("source_id", ""), "feed": feed.get("name") or feed["url"],
-               "dedupe": dedupe_key(plat, it["url"], it["title"])}
-        if store.add_signal(sig):
-            new += 1
-    return new
-
-
-def poll_all(store) -> dict:
-    """Every enabled feed, one pass. Failures are per-feed: a dead URL records its
-    error on the feed row and never stops the others."""
-    total, errors = 0, 0
-    for f in store.list_feeds():
-        if not f.get("enabled", True):
-            continue
-        try:
-            n = poll_feed(store, f)
-            store.mark_feed_polled(f["_id"], ok=True, note=f"{n} new")
-            total += n
-        except Exception as e:                       # network, XML, HTTP status
-            errors += 1
-            store.mark_feed_polled(f["_id"], ok=False, note=str(e)[:160])
-    return {"new": total, "errors": errors, "at": _now()}
 
 
 _poller_started = False
 
 
 def start_poller(open_store, extra=None) -> None:
-    """Background loop, started once per process. Single uvicorn process (see the
-    Dockerfile), so there is exactly one poller; even so every write is an idempotent
-    upsert on the dedupe key, which keeps a restart or a second process harmless."""
+    """Background loop, started once per process.
+
+    There are no user-configurable feeds any more — a trade publication produces
+    articles, and an article is never someone you can email. What remains are named
+    sources (OSHA citations), passed in as `extra` because they import this module.
+    Single uvicorn process (see the Dockerfile), so there is exactly one poller; even
+    so every write is an idempotent upsert on the dedupe key, which keeps a restart
+    or a second process harmless.
+    """
     global _poller_started
     if _poller_started:
         return
@@ -315,21 +343,9 @@ def start_poller(open_store, extra=None) -> None:
     def loop():
         time.sleep(20)          # let the app finish coming up before the first poll
         while True:
-            store = None
-            try:
-                store = open_store()
-                if store.list_feeds():
-                    res = poll_all(store)
-                    if res["new"] or res["errors"]:
-                        print(f"[signals] polled feeds: {res['new']} new, {res['errors']} error(s)")
-            except Exception as e:
-                print(f"[signals] poll cycle failed: {e}")
-            # Sources that aren't plain feeds (OSHA citations) are injected by the
-            # caller rather than imported here — they import this module, and a poller
-            # that only ran feeds would leave citations arriving only on a manual click.
             for fn in (extra or []):
                 try:
-                    n = fn(store or open_store())
+                    n = fn(open_store())
                     if n:
                         print(f"[signals] {fn.__module__.split('.')[-1]}: {n} new")
                 except Exception as e:

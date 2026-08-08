@@ -1794,11 +1794,16 @@ async def signals_inbound(request: Request):
     except Exception:
         raise HTTPException(400, "invalid JSON")
     frm = ev.get("From") or (ev.get("FromFull") or {}).get("Email") or ""
-    sig = signals.parse_email(frm, ev.get("Subject") or "",
-                              ev.get("TextBody") or "", ev.get("HtmlBody") or "")
-    sig["from"] = frm
-    added = open_store().add_signal(sig)
-    return {"ok": True, "added": added, "platform": sig["platform"], "kind": sig["kind"]}
+    sigs = signals.parse_inbound(frm, ev.get("Subject") or "",
+                                 ev.get("TextBody") or "", ev.get("HtmlBody") or "")
+    store = open_store()
+    added = 0
+    for sig in sigs:
+        sig["from"] = frm
+        if store.add_signal(sig):
+            added += 1
+    return {"ok": True, "added": added, "of": len(sigs),
+            "platform": sigs[0]["platform"] if sigs else "", "kind": sigs[0]["kind"] if sigs else ""}
 
 
 @app.get("/api/signals")
@@ -1861,16 +1866,24 @@ def remove_signal(sid: str):
     return {"ok": True}
 
 
+class ClearIn(BaseModel):
+    scope: str = ""          # "mentions" clears only the nobody-to-contact register
+
+
+@app.post("/api/signals/clear")
+def clear_signals(c: ClearIn):
+    """Dismiss the queue in one go — mentions accumulate faster than anyone reads
+    them, and clicking them off one at a time is not a feature."""
+    return {"cleared": open_store().clear_signals(c.scope)}
+
+
 @app.post("/api/signals/poll")
 def poll_signals():
-    """Poll every feed now, rather than waiting for the half-hourly cycle."""
-    store = open_store()
-    res = signals.poll_all(store)
+    """Check the named sources now instead of waiting for the half-hourly cycle."""
     try:
-        res["citations"] = osha.poll(store)
+        return {"citations": osha.poll(open_store())}
     except Exception as e:
-        res["citations_error"] = str(e)[:160]
-    return res
+        raise HTTPException(502, f"OSHA check failed: {e}")
 
 
 @app.get("/api/routing")
@@ -1985,71 +1998,6 @@ def promote_citation(sid: str, r: PromoteCitation):
     store.set_signal_status(sid, "engaged")
     return {"added": len(made), "credits": credits, "leads": made, "campaign": cfg["name"]}
 
-
-class FeedIn(BaseModel):
-    url: str
-    name: str = ""
-    keywords: list[str] = []
-    source_id: str = ""
-
-
-@app.get("/api/feeds")
-def list_feeds():
-    return [{"id": f["_id"], "url": f.get("url", ""), "name": f.get("name", ""),
-             "keywords": f.get("keywords", []), "enabled": f.get("enabled", True),
-             "last_poll": f.get("last_poll", ""), "last_ok": f.get("last_ok", ""),
-             "last_note": f.get("last_note", ""), "ok": f.get("last_ok_flag", True)}
-            for f in open_store().list_feeds()]
-
-
-@app.post("/api/feeds")
-def add_feed(f: FeedIn):
-    if not f.url.strip().lower().startswith("http"):
-        raise HTTPException(400, "url must start with http")
-    store = open_store()
-    fid = store.add_feed(f.url.strip(), f.name.strip(), f.keywords, f.source_id)
-    try:                                    # poll immediately: a feed that's wrong
-        n = signals.poll_feed(store, {"_id": fid, "url": f.url.strip(),   # should say so now
-                                      "name": f.name.strip(), "keywords": f.keywords,
-                                      "source_id": f.source_id})
-        store.mark_feed_polled(fid, ok=True, note=f"{n} new")
-        return {"id": fid, "new": n}
-    except Exception as e:
-        store.mark_feed_polled(fid, ok=False, note=str(e)[:160])
-        raise HTTPException(400, f"Feed added but could not be read: {e}")
-
-
-@app.put("/api/feeds/{fid}")
-def update_feed(fid: str, f: FeedIn):
-    """Retune a feed in place. Keywords are the difference between a monitor and a
-    firehose, and the right ones are only obvious once you've seen what a feed
-    actually carries — so they have to be editable, not set once at creation."""
-    open_store().update_feed(fid, f.name.strip(), f.keywords, f.url.strip())
-    return {"ok": True}
-
-
-@app.delete("/api/feeds/{fid}")
-def remove_feed(fid: str):
-    open_store().delete_feed(fid)
-    return {"ok": True}
-
-
-class ClearIn(BaseModel):
-    channel: str = ""        # "rss" clears topics only; blank clears the whole queue
-
-
-@app.post("/api/signals/clear")
-def clear_signals(c: ClearIn):
-    """Dismiss the queue in one go. Retuning a feed's keywords doesn't retroactively
-    remove what the old settings let through, so there has to be a way to wipe the
-    slate rather than clicking 111 checkmarks."""
-    return {"cleared": open_store().clear_signals(c.channel)}
-
-
-@app.post("/api/feeds/{fid}/toggle")
-def toggle_feed(fid: str, a: SignalAction):
-    open_store().set_feed_enabled(fid, a.status == "on")
-    return {"ok": True}
 
 
 # --- backlog: what the buyers asked, which is what we write next --------------

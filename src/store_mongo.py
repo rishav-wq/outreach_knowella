@@ -643,56 +643,23 @@ class MongoStore:
     def delete_signal(self, sid: str) -> None:
         self.db.signals.delete_one({"_id": sid})
 
-    # --- feeds: the RSS side of the monitor ------------------------------------
-    def add_feed(self, url: str, name: str = "", keywords: list | None = None,
-                 source_id: str = "") -> str:
-        d = self.db.feeds.find_one({"url": url})
-        if d:
-            return d["_id"]
-        fid = uuid.uuid4().hex[:10]
-        self.db.feeds.insert_one({"_id": fid, "url": url, "name": name or url,
-                                  "keywords": keywords or [], "source_id": source_id,
-                                  "enabled": True, "last_ok": "", "last_note": "",
-                                  "created_at": datetime.now(timezone.utc).isoformat()})
-        return fid
+    def clear_signals(self, scope: str = "") -> int:
+        """Dismiss open signals. Marks them ignored rather than deleting, so the
+        dedupe keys survive and a cleared item doesn't return on the next poll.
 
-    def list_feeds(self) -> list[dict]:
-        return list(self.db.feeds.find({}).sort("created_at", 1))
-
-    def update_feed(self, fid: str, name: str = "", keywords: list | None = None,
-                    url: str = "") -> None:
-        patch: dict = {"keywords": keywords or []}
-        if name:
-            patch["name"] = name
-        if url:
-            patch["url"] = url
-        self.db.feeds.update_one({"_id": fid}, {"$set": patch})
-
-    def clear_signals(self, channel: str = "") -> int:
-        """Dismiss every open signal (optionally just one channel). Marks them
-        ignored rather than deleting, so the dedupe keys survive and a cleared item
-        doesn't come straight back on the next poll."""
+        scope='mentions' clears only the third register — the signals with nobody to
+        contact. Filtering by channel would be wrong: a LinkedIn comment and a Google
+        Alert hit both arrive by email, and only one of them is a person.
+        """
         q: dict = {"status": "new"}
-        if channel:
-            q["channel"] = channel
+        if scope == "mentions":
+            q["kind"] = {"$ne": "citation"}
+            q["channel"] = {"$ne": "manual"}
+            q["$or"] = [{"person": ""}, {"person": {"$exists": False}}]
         return self.db.signals.update_many(q, {"$set": {
             "status": "ignored",
             "acted_at": datetime.now(timezone.utc).isoformat()}}).modified_count
 
-    def delete_feed(self, fid: str) -> None:
-        self.db.feeds.delete_one({"_id": fid})
-
-    def set_feed_enabled(self, fid: str, on: bool) -> None:
-        self.db.feeds.update_one({"_id": fid}, {"$set": {"enabled": bool(on)}})
-
-    def mark_feed_polled(self, fid: str, ok: bool, note: str = "") -> None:
-        """Record the outcome on the feed row — a feed that quietly stopped working
-        should be visible in the UI, not discovered months later."""
-        now = datetime.now(timezone.utc).isoformat()
-        patch = {"last_poll": now, "last_note": note, "last_ok_flag": bool(ok)}
-        if ok:
-            patch["last_ok"] = now
-        self.db.feeds.update_one({"_id": fid}, {"$set": patch})
 
     # --- backlog: the questions buyers asked, which is what to write next ------
     def add_backlog(self, question: str, source_id: str = "", signal_id: str = "",

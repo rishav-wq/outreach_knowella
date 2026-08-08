@@ -11,107 +11,50 @@ crowd and will mostly deliver noise for us.
 
 ---
 
-## First: how "monitoring" works here — nothing on this list is scraped
+## First: how "monitoring" works here — nothing is scraped, and one rule decides everything
 
-Every source below **pushes to us**. There are exactly three channels, and it matters which
-one a source uses, because only two of them tell you *a person asked something*.
+**An intake earns its place only if it names someone you can contact.**
 
-| Channel | How it works | What it catches |
+That rule is why this list is shorter than it was. Trade RSS feeds were built and then
+removed: six publications delivered ~110 items a day, filtering cut that to ~33, and not
+one of the 33 was a person you could email. They buried the signals that were.
+
+Everything now arrives by **email**, through one Postmark inbound address:
+
+| Source | What it gives you | Level |
 |---|---|---|
-| **RSS** | The publisher hosts a machine-readable feed at a fixed URL, on purpose. We poll it. | New articles — **topic level** |
-| **Google Alerts → RSS** | Google already crawled the web. In the alert, set *Deliver to → RSS feed* and you get a pollable URL instead of email. | Any public page mentioning a keyword, incl. indexed forum threads — **topic level** |
-| **Notification email** | The platform emails us: "X commented on your post", "someone asked a question about your product", "new review". | **Person level** — a named human with a question |
+| **LinkedIn notifications** | "X commented on your post", mentions of the company page | **person** |
+| **G2 / Capterra / Trustpilot** | a new review, a buyer question on our listing | **person** |
+| **Add by hand** (in the app) | what Sid read in a group no webhook can reach | **person** |
+| **Google Alerts** (email delivery) | any public page matching a keyword | page |
+| **F5Bot** (free) | Reddit / Hacker News keyword hits | page |
 
-The third channel is the only automatic one that answers *"notify us when someone asks a
-question"* — and it only fires **where we have an account and a presence**: our LinkedIn
-page and posts, our G2/Capterra listing, our Trustpilot profile. That reframes the whole
-exercise: you don't monitor the internet for questions, you become the place questions get
-asked, and the platform notifies you.
+Digests are split: one Google Alert carrying eight results becomes eight signals, not one.
 
-Which is why **Tier 2 is human-monitored, and that is the mechanism, not a shortcut.** Sid
-joins the group → switches on its notifications → LinkedIn emails him when someone posts or
-comments → he answers → the extension captures whoever engaged. There is no feed to poll:
-membership is the API. See *Explicitly ruled out* for why no tool can do this instead.
+The only thing still polled is **OSHA news releases**, and only because every item is a
+named employer that was just cited — a lead, not an article. It's built in, not a feed
+you configure.
 
----
+Person-level signals only fire **where we have an account and a presence** — our page,
+our posts, our listing. You don't monitor the internet for questions; you become the
+place questions get asked, and the platform tells you. Which is why **Tier 2 is
+human-monitored, and that is the mechanism, not a shortcut.** Sid joins the group →
+switches on notifications → LinkedIn emails him → he answers → the extension captures
+whoever engaged. Membership is the API.
 
-## Tier 1 — automate today, free (about one hour of setup)
+### Setup — one address, everything points at it
 
-### A. RSS feeds — built into the app (Signals → Feeds)
-
-No Feedly account needed: the app polls these itself every 30 minutes and files
-matches in the Signals queue. **Signals → Queue → "Add the verified feeds"** adds
-the whole set in one click. Every URL below was fetched and parsed on 2026-08-07.
-
-| Publication | Feed URL | Why |
-|---|---|---|
-| **OSHA news releases** | `https://www.osha.gov/news/newsreleases.xml` | **The best feed we have.** Every item is an enforcement action against a named company — no filter needed |
-| EHS Today | `https://www.ehstoday.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D` | Endeavor's flagship for manufacturing/construction EHS |
-| Safety+Health | `https://www.safetyandhealthmagazine.com/feed/` | National Safety Council, ~92,000 subscribers |
-| Occupational Health & Safety | `https://ohsonline.com/rss-feeds/news.aspx` | Industry news + webinars |
-| FreightWaves | `https://www.freightwaves.com/feed` | Freight/logistics news, big practitioner audience |
-| Land Line (OOIDA) | `https://landline.media/feed/` | Roadside enforcement sweeps, HOS exemptions, state crackdowns |
-| CDLLife | `https://cdllife.com/feed/` | 2M+ Facebook followers, driver-side sentiment |
-
-**Go to the regulator before the trade press.** Trade publications serve a mixed
-audience, so they need keyword filtering to be readable. OSHA's own release feed
-doesn't — *"cites Maine hardwood pulp mill more than $700K"*, *"fines Houston utility
-contractor $343K after worker hospitalized"* — every line is a named company with an
-expensive, public, current safety problem.
-
-**Dropped after inspection, with reasons:**
-
-| Feed | Why not |
-|---|---|
-| Trucking Dive | Covers the *business* of trucking — M&A, quarterly earnings, plant closures. Ten items, zero matches on any safety or compliance term |
-| Overdrive, Transport Topics, CCJ, FMCSA newsroom | All return **403** to non-browser clients (Cloudflare). Cannot be polled at all |
-| DOL newsroom | Mostly unemployment-claims statistics |
-| OSHA QuickTakes | A newsletter digest, so every item is just "QuickTakes 8/06/2026" — no per-story detail |
-
-More to add later, if the six aren't enough:
-- [Feedspot: Top 100 Trucking RSS Feeds](https://rss.feedspot.com/trucking_rss_feeds/)
-- [Feedspot: Top 15 Occupational Health & Safety magazines](https://magazine.feedspot.com/occupational_health_and_safety_magazines/)
-
-Add keywords to a feed to filter it (`OSHA, recordkeeping, CSA`); leave them blank to
-keep everything.
-
-### B. Google Alerts (free)
-
-Set **Deliver to → RSS feed** on each one (not email) — that gives a URL the app can poll,
-and keeps the alerts out of a person's inbox. Create one alert each for:
-- `Knowella` (brand)
-- Competitors: `VelocityEHS`, `Intelex`, `Cority`, `EHS Insight`, `SafetyCulture`, `Samsara`
-- Category phrases: `"OSHA recordkeeping software"`, `"fleet safety compliance software"`,
-  `"CSA score improvement"`, `"EHS software"` + `trucking` / `manufacturing`
-
-### C. Native notifications — already ours, just switch on
-
-**The only automatic person-level signal we get.** Each of these emails us when a named
-human does something; nothing is polled or scraped.
-
-- **G2 / Capterra** — new review and buyer-question alerts
-- **LinkedIn** — company page mentions + comments on our own posts *(highest-value single
-  source: it is exactly where the capture extension then works)*
-- **Trustpilot** — if we claim a profile
-
-Point them all at one address so they land in a single queue rather than five inboxes —
-literally: forward them to the app's inbound address and they become Signals, parsed into
-who asked, on what platform, with a link. Setup:
-
-1. In Postmark, add an inbound address (or an inbound domain) and set its webhook to
+1. In Postmark, add an inbound address and set its webhook to
    `https://outreach.knowella.com/api/signals/inbound?token=YOUR_TOKEN`.
 2. On the VM, **append** the token — never overwrite the file:
    `echo 'SIGNALS_WEBHOOK_TOKEN=YOUR_TOKEN' | sudo tee -a /opt/outreach-agent/.env`
-3. Forward (or auto-forward a filter for) LinkedIn / G2 / Trustpilot notification mail there.
+3. Forward LinkedIn / G2 / Trustpilot notification mail there. Create the Google Alerts
+   on **email** delivery (not RSS) addressed to it. Sign up for F5Bot with it.
+4. Claim the review listings under a **role address**, not a personal one.
 
-Mail we can't parse is filed under its subject line rather than dropped, so a changed
+Mail we can't parse keeps its subject line rather than being dropped, so a changed
 notification format costs us the labelling and never the lead.
 
-### D. F5Bot (free) — Reddit + Hacker News keyword alerts
-
-Low yield for our ICP, but it costs nothing and catches the occasional competitor thread.
-
----
 
 ## Tier 2 — where the buyers actually are (human presence, no API)
 
