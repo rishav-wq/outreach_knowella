@@ -315,9 +315,15 @@ function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
           printing it here as well is how the page ended up saying everything twice. */}
       {picked ? (
         <div style={{ marginTop: 24 }}>
+          {/* The route carries 3, the table shows 1 — the other two are folded away as
+              poor fit. Badging the route total made the table look like it had lost
+              rows, so say both numbers. */}
           <h4 className="sig-h">
             {picked.source} → {picked.campaign || 'unrouted'}
-            <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
+            <span className="sig-h-n sig-h-n-hot">
+              {shown.filter((c) => c.fit !== 'poor').length}
+              {shown.some((c) => c.fit === 'poor') && ` of ${shown.length}`}
+            </span>
           </h4>
           <div style={{ marginTop: 12 }}>
             <CitationTable rows={shown} hideHeading onReload={onReload} onNote={onNote} />
@@ -359,13 +365,17 @@ function CitationTable({ rows, hideHeading, onReload, onNote }) {
 
   return (
     <>
-      <h4 className="sig-h">
-        Just cited by OSHA <span className="sig-h-n sig-h-n-hot">{sorted.length - poor.length}</span>
-      </h4>
-      <p className="sig-h-sub">
-        Ranked by whether they'll buy, not by penalty. A company cited for <b>serious</b> violations
-        had a gap; one cited for <b>willful</b> or <b>repeat</b> decided — and software doesn't fix intent.
-      </p>
+      {!hideHeading && (
+        <>
+          <h4 className="sig-h">
+            Just cited by OSHA <span className="sig-h-n sig-h-n-hot">{sorted.length - poor.length}</span>
+          </h4>
+          <p className="sig-h-sub">
+            Ranked by whether they'll buy, not by penalty. A company cited for <b>serious</b> violations
+            had a gap; one cited for <b>willful</b> or <b>repeat</b> decided — and software doesn't fix intent.
+          </p>
+        </>
+      )}
       <div className="cit">
         <div className="cit-head">
           <span>Employer</span><span>Where</span><span>Violations</span>
