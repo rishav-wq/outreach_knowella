@@ -1819,6 +1819,8 @@ def list_signals(status: str = ""):
             # only present on OSHA citations — the fields that make one a lead
             "company": d.get("company", ""), "location": d.get("location", ""),
             "state": d.get("state", ""), "penalty": d.get("penalty", 0),
+            "fit": d.get("fit", ""), "fit_why": d.get("fit_why", ""),
+            "violations": d.get("violations", {}), "priors": d.get("priors", 0),
             "source": names.get(d.get("source_id", ""), "")}
            for d in store.list_signals(status)]
     return {"signals": out, "counts": store.signal_counts(),

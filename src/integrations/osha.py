@@ -112,6 +112,69 @@ def state_of(location: str, text: str = "") -> str:
     return ""
 
 
+# --- fit: which citations are actually prospects -----------------------------
+# Reading all four of the first batch showed the ranking we shipped was backwards.
+# The $700K double-fatality gas release is the WORST lead on the list (process
+# safety management, four willful citations, a company now surrounded by lawyers)
+# and the $264K confined-space case is the best. Penalty size measures how bad the
+# harm was; it says nothing about whether the employer will buy software.
+#
+# What predicts a buyer is the CHARACTER of the citation:
+#   serious only            they were trying and had a gap          -> prospect
+#   willful                 they knew and did it anyway             -> not a prospect
+#   repeat / prior history  seven inspections, same violation       -> not a prospect
+# Documentation-shaped findings (missing training certificates, no written program,
+# no inspection records) are the strongest tell of all: that IS the product.
+_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+        "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+_VIOL = re.compile(
+    r"\b(\d{1,3}|" + "|".join(_NUM) + r")\s+(willful|repeat|serious|other-than-serious)\b", re.I)
+_PRIORS = re.compile(r"inspected\s+(\d{1,3}|" + "|".join(_NUM) + r")\s+times", re.I)
+# The paperwork failures Knowella replaces, in OSHA's own phrasing.
+_DOC_FAIL = re.compile(
+    r"(training certificate|written .{0,24}program|failed to (?:prepare|maintain|document|record|train)|"
+    r"recordkeep|injury and illness|300 log|certification record|inspection record|"
+    r"permit[- ]required|did not (?:train|document|certify))", re.I)
+
+
+def _count(text: str) -> dict:
+    out = {"willful": 0, "repeat": 0, "serious": 0, "other-than-serious": 0}
+    for num, kind in _VIOL.findall(text):
+        n = int(num) if num.isdigit() else _NUM.get(num.lower(), 0)
+        k = kind.lower()
+        out[k] = max(out[k], n)          # the same count is restated; don't double it
+    return out
+
+
+def assess(text: str) -> dict:
+    """Is this employer a prospect? Returns the verdict and the reason for it.
+
+    Never silently drops a citation — a wrong judgement should be arguable, so the
+    counts and the reason travel with it and the UI can show the rejects on request.
+    """
+    v = _count(text)
+    m = _PRIORS.search(text)
+    priors = (int(m.group(1)) if m and m.group(1).isdigit() else _NUM.get((m.group(1).lower() if m else ""), 0))
+    doc = bool(_DOC_FAIL.search(text))
+    if v["willful"]:
+        return {"fit": "poor", "why": f"{v['willful']} willful — they knew and did it anyway",
+                "violations": v, "priors": priors, "doc_failure": doc}
+    if priors >= 3:
+        return {"fit": "poor", "why": f"inspected {priors} times for the same thing",
+                "violations": v, "priors": priors, "doc_failure": doc}
+    if v["repeat"]:
+        return {"fit": "fair", "why": f"{v['repeat']} repeat — has been told before",
+                "violations": v, "priors": priors, "doc_failure": doc}
+    if doc:
+        return {"fit": "good", "why": "missing records or training documentation — that is the product",
+                "violations": v, "priors": priors, "doc_failure": doc}
+    if v["serious"]:
+        return {"fit": "good", "why": f"{v['serious']} serious, none willful or repeat — a gap, not a choice",
+                "violations": v, "priors": priors, "doc_failure": doc}
+    return {"fit": "fair", "why": "no violation detail in the release",
+            "violations": v, "priors": priors, "doc_failure": doc}
+
+
 def _penalty(text: str) -> int:
     """Dollars as an integer. '$343K' and '$264,380' both appear; the largest figure in
     a release is the proposed penalty (smaller ones are per-violation maximums)."""
@@ -164,9 +227,12 @@ def parse_release(title: str, url: str, html: str) -> dict | None:
         location = c.group(1) if c else ""
     lede = re.sub(r"\s+", " ", lede)[:400].strip()
 
+    verdict = assess(text)
     return {
         "company": company,
         "location": location,
+        "fit": verdict["fit"], "fit_why": verdict["why"],
+        "violations": verdict["violations"], "priors": verdict["priors"],
         "state": state_of(location, text),
         "penalty": _penalty(title) or _penalty(text),
         "violation": lede or title,
@@ -199,6 +265,8 @@ def to_signal(rec: dict) -> dict:
         "channel": "rss", "platform": "osha", "kind": "citation",
         "person": "", "company": rec["company"], "location": rec.get("location", ""),
         "state": rec.get("state", ""), "penalty": rec.get("penalty", 0),
+        "fit": rec.get("fit", "fair"), "fit_why": rec.get("fit_why", ""),
+        "violations": rec.get("violations", {}), "priors": rec.get("priors", 0),
         "title": f"{rec['company']}{pen}",
         "text": rec.get("violation", ""), "url": rec["url"],
         "dedupe": signals.dedupe_key("osha", rec["url"], rec["company"]),

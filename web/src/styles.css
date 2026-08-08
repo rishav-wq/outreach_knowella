@@ -1620,3 +1620,51 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 }
 .sig-dormant .dot { margin-top: 6px; flex-shrink: 0; }
 .sig-dormant b { color: var(--text-2); }
+
+/* Citations as a dashboard. Fit leads and penalty is a column, because reading the
+   releases showed the biggest fine is usually the worst lead — a willful citation
+   means the employer decided, and no software fixes intent. */
+.cit { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); overflow: hidden; }
+.cit-head, .cit-line {
+  display: grid; grid-template-columns: minmax(0,2.2fr) 1fr minmax(0,1.6fr) 0.9fr 0.6fr 24px;
+  gap: 14px; align-items: center; padding: 9px 14px; text-align: left;
+}
+.cit-head {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint); background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.cit-row { border-left: 3px solid transparent; }
+.cit-row + .cit-row { border-top: 1px solid var(--line); }
+.cit-row.f-good { border-left-color: var(--verify); }
+.cit-row.f-fair { border-left-color: var(--petal-yellow); }
+.cit-row.f-poor { border-left-color: var(--line-strong); opacity: 0.62; }
+.cit-line { width: 100%; border: none; background: none; font: inherit; cursor: pointer; }
+.cit-line:hover { background: var(--bg); }
+.cit-row.is-open .cit-line { background: var(--bg); }
+.cit-co { font-weight: 600; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cit-mut { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cit-pen { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cit-fit {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  border-radius: 999px; padding: 2px 9px; text-align: center; cursor: help;
+}
+.cit-fit.f-good { color: #0b6b58; background: var(--verify-tint); }
+.cit-fit.f-fair { color: #7a5c00; background: #fff6cc; }
+.cit-fit.f-poor { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+.cit-chev { color: var(--faint); font-size: 12px; text-align: right; }
+.cit-detail { padding: 4px 16px 16px 16px; border-top: 1px dashed var(--line); }
+.cit-why { font-size: 12.5px; color: var(--text-2); margin: 10px 0; }
+.cit-act { display: flex; gap: 8px; margin-top: 10px; }
+.cit-pick { margin-top: 10px; }
+.cit-more {
+  display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm); background: none; font: inherit; font-size: 12px;
+  color: var(--muted); cursor: pointer;
+}
+.cit-more:hover { border-color: var(--signal); color: var(--signal); }
+
+@media (max-width: 900px) {
+  .cit-head { display: none; }
+  .cit-line { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .cit-line .cit-mut:nth-of-type(2) { display: none; }
+}

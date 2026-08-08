@@ -186,11 +186,7 @@ function Queue({ people, cited, talk, busy, inboundReady, onClearTalk, onReload,
 
       {cited.length > 0 && (
         <section className="sig-sect">
-          <h4 className="sig-h">Just cited by OSHA <span className="sig-h-n sig-h-n-hot">{cited.length}</span></h4>
-          <p className="sig-h-sub">A named employer with a public, dated, expensive problem they have to fix.</p>
-          <div className="sig-cards">
-            {cited.map((s) => <CitationCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
-          </div>
+          <CitationTable rows={cited} onReload={onReload} onNote={onNote} />
         </section>
       )}
 
@@ -312,14 +308,9 @@ function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
         <SourceFlow data={route} selected={flow} onSelect={setFlow} />
       )}
 
-      <h4 className="sig-h" style={{ marginTop: 26 }}>
-        {picked ? `${picked.source} → ${picked.campaign || 'unrouted'}` : 'Every cited employer'}
-        <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
-      </h4>
-      <div className="sig-cards" style={{ marginTop: 12 }}>
-        {shown.map((s) => (
-          <CitationCard key={s.id} s={s} suggest={suggestion[s.id]} onReload={onReload} onNote={onNote} />
-        ))}
+      <div style={{ marginTop: 26 }}>
+        <CitationTable rows={shown.map((c) => ({ ...c, campaign_fit: suggestion[c.id]?.campaign }))}
+          onReload={onReload} onNote={onNote} />
       </div>
 
     </>
@@ -327,11 +318,73 @@ function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
 }
 
 
-// A citation is the only signal that becomes a lead, so it's the only one with a
-// two-step action: look the employer up (free) and then reveal contacts (credits).
-// Apollo's top hit for "FleetPride" included a spring retailer — the choice stays
-// with the human, because the alternative is emailing a stranger about a fatality.
-function CitationCard({ s, suggest, onReload, onNote }) {
+// Citations, as a dashboard rather than a stack of cards.
+//
+// Reading the first four releases in full showed the ranking was backwards: the
+// $700K double-fatality gas release is the worst lead on the list and the $264K
+// confined-space case is the best. Penalty measures how bad the harm was, not
+// whether the employer will buy anything — so fit leads, penalty is a column, and
+// poor-fit rows are folded away rather than competing for attention.
+const FIT_ORDER = { good: 0, fair: 1, poor: 2 }
+const VIOL_ORDER = ['willful', 'repeat', 'serious', 'other-than-serious']
+
+function violText(v) {
+  if (!v) return '—'
+  const parts = VIOL_ORDER.filter((k) => v[k]).map((k) => `${v[k]} ${k}`)
+  return parts.length ? parts.join(', ') : '—'
+}
+
+function CitationTable({ rows, onReload, onNote }) {
+  const [open, setOpen] = useState('')
+  const [showPoor, setShowPoor] = useState(false)
+  const sorted = [...rows].sort((a, b) => (FIT_ORDER[a.fit] ?? 1) - (FIT_ORDER[b.fit] ?? 1))
+  const poor = sorted.filter((r) => r.fit === 'poor')
+  const shown = showPoor ? sorted : sorted.filter((r) => r.fit !== 'poor')
+
+  return (
+    <>
+      <h4 className="sig-h">
+        Just cited by OSHA <span className="sig-h-n sig-h-n-hot">{sorted.length - poor.length}</span>
+      </h4>
+      <p className="sig-h-sub">
+        Ranked by whether they'll buy, not by penalty. A company cited for <b>serious</b> violations
+        had a gap; one cited for <b>willful</b> or <b>repeat</b> decided — and software doesn't fix intent.
+      </p>
+      <div className="cit">
+        <div className="cit-head">
+          <span>Employer</span><span>Where</span><span>Violations</span>
+          <span>Penalty</span><span>Fit</span><span />
+        </div>
+        {shown.map((r) => (
+          <div key={r.id} className={`cit-row f-${r.fit} ${open === r.id ? 'is-open' : ''}`}>
+            <button className="cit-line" onClick={() => setOpen(open === r.id ? '' : r.id)}>
+              <span className="cit-co">{r.company || r.title}</span>
+              <span className="cit-mut">{r.location || '—'}</span>
+              <span className="cit-mut">{violText(r.violations)}</span>
+              <span className="cit-pen">${Number(r.penalty || 0).toLocaleString()}</span>
+              <span className={`cit-fit f-${r.fit}`} title={r.fit_why}>{r.fit}</span>
+              <span className="cit-chev">{open === r.id ? '⌃' : '⌄'}</span>
+            </button>
+            {open === r.id && (
+              <div className="cit-detail">
+                <p className="cit-why"><b>{r.fit_why}</b>{r.priors > 0 && <> · inspected {r.priors} times before</>}</p>
+                {r.text && <p className="sig-card-text">{r.text}</p>}
+                <CitationActions s={r} onReload={onReload} onNote={onNote} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {poor.length > 0 && (
+        <button className="cit-more" onClick={() => setShowPoor(!showPoor)}>
+          {showPoor ? 'Hide' : `Show ${poor.length} poor fit`} — willful or repeat offenders, not prospects
+        </button>
+      )}
+    </>
+  )
+}
+
+function CitationActions({ s, onReload, onNote }) {
   const [cands, setCands] = useState(null)
   const [busy, setBusy] = useState('')
   const [campaigns, setCampaigns] = useState([])
@@ -339,99 +392,63 @@ function CitationCard({ s, suggest, onReload, onNote }) {
   const [done, setDone] = useState(null)
 
   const resolve = async () => {
-    setBusy('looking up')
+    setBusy('look')
     try {
       const [r, cs] = await Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
       setCands(r.candidates || []); setCampaigns(cs)
-      // Pre-select what the router worked out; the human can still override it,
-      // which is why this is a select and not a decision made on their behalf.
-      setCampaign(suggest?.campaign && cs.includes(suggest.campaign) ? suggest.campaign : cs[0] || '')
+      setCampaign(s.campaign_fit && cs.includes(s.campaign_fit) ? s.campaign_fit : cs[0] || '')
     } catch (e) { onNote(String(e.message || e).slice(0, 180)) }
     finally { setBusy('') }
   }
-  const promote = async (org) => {
+  const add = async (org) => {
     setBusy(org.id)
     try {
       const r = await api.promoteCitation(s.id, org.id, campaign)
-      setDone(r)
-      onNote(`${r.added} lead${r.added === 1 ? '' : 's'} added to ${r.campaign} — ${r.credits} Apollo credit${r.credits === 1 ? '' : 's'}`)
-      onReload()
+      setDone(r); onReload()
+      onNote(`${r.added} added to ${r.campaign} — ${r.credits} credit${r.credits === 1 ? '' : 's'}`)
     } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
     finally { setBusy('') }
   }
 
-  return (
-    <motion.article layout className="sig-card k-citation" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <header className="sig-card-head">
-        <span className="sig-kind sig-kind-cite">OSHA citation</span>
-        {s.location && <span className="sig-meta">{s.location}</span>}
-        <span className="sig-meta sig-when">{ago(s.created_at)}</span>
-      </header>
-      <div className="sig-cite-top">
-        <div className="sig-who">{s.company || s.title}</div>
-        {s.penalty > 0 && <div className="sig-penalty">${Number(s.penalty).toLocaleString()}<small>proposed penalty</small></div>}
+  if (done) return <div className="pin-done">✓ Added {done.added} to <b>{done.campaign}</b></div>
+  if (cands === null) {
+    return (
+      <div className="cit-act">
+        <button className="btn primary" onClick={resolve} disabled={!!busy}>
+          {busy ? 'Looking up…' : 'Find who to contact'}
+        </button>
+        <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
       </div>
-      {s.text && <p className="sig-card-text">{s.text}</p>}
-
-      {done ? (
-        <div className="sig-cite-done">
-          Added {done.added} to <b>{done.campaign}</b>: {done.leads.map((l) => l.name).join(', ')}.
-          The citation is attached as the fact the draft is written from.
-        </div>
-      ) : cands === null ? (
-        <footer className="sig-card-foot">
-          {suggest && (suggest.campaign
-            ? <span className="sig-fit" title={`Matched on: ${(suggest.why || []).join(', ')}`}>
-                → {suggest.campaign}
-              </span>
-            : <span className="sig-fit sig-fit-none" title="No campaign declares an industry this employer matches">
-                no campaign matches
-              </span>)}
-          <button className="btn primary" onClick={resolve} disabled={!!busy}>
-            {busy ? 'Looking up…' : 'Find who to contact'}
-          </button>
-          <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
-        </footer>
-      ) : cands.length === 0 ? (
-        <div className="sig-cite-none">
-          Apollo has no record of <b>{s.company}</b>. Small contractors often aren't in it at all —
-          this one has to be found by hand or skipped.
-        </div>
-      ) : (
-        <div className="sig-cite-pick">
-          <div className="sig-cite-pick-h">
-            Which company is it? <span className="muted">Apollo matches by name, so check the domain.</span>
-            {suggest?.campaign && (
-              <span className="sig-fit" title={`Matched on: ${(suggest.why || []).join(', ')}`}>
-                fits <b>{suggest.campaign}</b>
-              </span>
-            )}
-            <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
-              {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+    )
+  }
+  const usable = cands.filter((o) => o.contacts.length)
+  if (!usable.length) {
+    return <div className="pin-none">Apollo has no reachable contact at <b>{s.company}</b>. Small
+      contractors often aren't in it at all.</div>
+  }
+  return (
+    <div className="cit-pick">
+      <div className="sig-cite-pick-h">
+        Which company is it? <span className="muted">Apollo matches by name — check the domain.</span>
+        <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+          {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      {usable.map((o) => (
+        <div key={o.id} className="sig-cand">
+          <div className="sig-bl-main">
+            <div className="sig-bl-q">{o.name} <span className="sig-dom">{o.domain}</span></div>
+            <div className="sig-meta">{o.contacts.slice(0, 3).map((p) => `${p.first_name} — ${p.title}`).join(' · ')}</div>
           </div>
-          {cands.map((o) => (
-            <div key={o.id} className="sig-cand">
-              <div className="sig-bl-main">
-                <div className="sig-bl-q">{o.name} {o.domain && <span className="sig-dom">{o.domain}</span>}</div>
-                <div className="sig-meta">
-                  {o.contacts.length
-                    ? o.contacts.slice(0, 3).map((p) => `${p.first_name} — ${p.title}`).join(' · ')
-                    : 'nobody reachable at this record'}
-                </div>
-              </div>
-              <button className="btn primary" disabled={!o.contacts.length || !!busy || !campaign}
-                onClick={() => promote(o)}>
-                {busy === o.id ? 'Adding…' : `Add ${Math.min(o.contacts.length, 3) || ''}`}
-              </button>
-            </div>
-          ))}
-          <button className="btn ghost" onClick={() => setCands(null)}>Cancel</button>
+          <button className="btn primary" disabled={!!busy || !campaign} onClick={() => add(o)}>
+            {busy === o.id ? 'Adding…' : `Add ${Math.min(o.contacts.length, 3)}`}
+          </button>
         </div>
-      )}
-    </motion.article>
+      ))}
+    </div>
   )
 }
+
 
 function TopicRow({ s, onReload }) {
   return (
