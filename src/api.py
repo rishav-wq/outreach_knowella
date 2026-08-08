@@ -1609,6 +1609,13 @@ async def postmark_events(request: Request):
     want = os.environ.get("POSTMARK_WEBHOOK_TOKEN", "")
     if want and request.query_params.get("token", "") != want:
         raise HTTPException(401, "bad webhook token")
+    if not want:
+        # Deliberately NOT failing closed here: Postmark may already be posting
+        # delivery and bounce events to this URL, and silently rejecting them would
+        # lose suppression data — worse than the hole. Loud instead, because forged
+        # events on this route can add addresses to the do-not-contact list.
+        print("[postmark] WARNING: /api/postmark/events is UNAUTHENTICATED — "
+              "set POSTMARK_WEBHOOK_TOKEN and add ?token=… to the webhook URL")
     try:
         ev = await request.json()
     except Exception:
@@ -1786,8 +1793,14 @@ async def signals_inbound(request: Request):
     SIGNALS_WEBHOOK_TOKEN set, then forward LinkedIn / G2 / Capterra / Trustpilot /
     Google Alerts notification mail to it. Every message becomes a signal — the
     ones we can't parse keep their subject line rather than being dropped."""
+    # Fail CLOSED. `if want and …` meant an unconfigured deploy left a public write
+    # endpoint open — verified against production, which happily accepted an
+    # unauthenticated post. Nothing depends on this route yet (inbound mail isn't
+    # wired), so refusing until a token exists costs nothing and shuts the hole.
     want = os.environ.get("SIGNALS_WEBHOOK_TOKEN", "")
-    if want and request.query_params.get("token", "") != want:
+    if not want:
+        raise HTTPException(503, "inbound is not configured — set SIGNALS_WEBHOOK_TOKEN")
+    if request.query_params.get("token", "") != want:
         raise HTTPException(401, "bad webhook token")
     try:
         ev = await request.json()
