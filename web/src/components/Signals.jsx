@@ -70,6 +70,13 @@ export default function Signals() {
   const people = useMemo(() => open.filter(isPerson), [data])
   const cited = useMemo(() => open.filter((s) => s.kind === 'citation'), [data])
   const talk = useMemo(() => open.filter((s) => !isPerson(s) && s.kind !== 'citation'), [data])
+  // Which campaign each citation routes to — computed once here so the Queue table
+  // can show it as a column instead of the Routing tab repeating the whole list.
+  const citedRouted = useMemo(() => {
+    const fit = {}
+    for (const f of route?.flows || []) for (const i of f.items) fit[i.id] = f.campaign
+    return cited.map((c) => ({ ...c, campaign_fit: fit[c.id] || '' }))
+  }, [cited, route])
   const actionable = people.length + cited.length
 
   if (data === null) return <div><Skeleton h={44} /><Skeleton h={54} r={10} style={{ marginTop: 16 }} /><Skeleton h={260} r={12} style={{ marginTop: 14 }} /></div>
@@ -118,12 +125,12 @@ export default function Signals() {
       <AnimatePresence mode="wait">
         <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
           {view === 'queue' && (
-            <Queue people={people} cited={cited} talk={talk} busy={busy}
+            <Queue people={people} cited={citedRouted} talk={talk} busy={busy}
               inboundReady={data.inbound_ready} onClearTalk={clearTalk}
               onReload={load} onNote={setNote} />
           )}
           {view === 'routing' && (
-            <RoutingView cited={cited} route={route} flow={flow}
+            <RoutingView cited={citedRouted} route={route} flow={flow}
               setFlow={setFlow} onReload={load} onNote={setNote} />
           )}
           {view === 'backlog' && <Backlog rows={backlog} onReload={load} />}
@@ -295,12 +302,8 @@ function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
       </div>
     )
   }
-  // The board first: what is waiting, and which campaign it fits. The map is a
-  // second read on the same set — useful for territory, not for deciding.
   const picked = route?.flows?.find((f) => `${f.source_id}|${f.campaign}` === flow)
-  const shown = picked ? cited.filter((c) => picked.items.some((i) => i.id === c.id)) : cited
-  const suggestion = {}
-  for (const f of route?.flows || []) for (const i of f.items) suggestion[i.id] = { campaign: f.campaign, why: i.why }
+  const shown = picked ? cited.filter((c) => picked.items.some((i) => i.id === c.id)) : []
 
   return (
     <>
@@ -308,11 +311,24 @@ function RoutingView({ cited, route, flow, setFlow, onReload, onNote }) {
         <SourceFlow data={route} selected={flow} onSelect={setFlow} />
       )}
 
-      <div style={{ marginTop: 26 }}>
-        <CitationTable rows={shown.map((c) => ({ ...c, campaign_fit: suggestion[c.id]?.campaign }))}
-          onReload={onReload} onNote={onNote} />
-      </div>
-
+      {/* Only what you asked to see. The full list is one tab away on Queue, and
+          printing it here as well is how the page ended up saying everything twice. */}
+      {picked ? (
+        <div style={{ marginTop: 24 }}>
+          <h4 className="sig-h">
+            {picked.source} → {picked.campaign || 'unrouted'}
+            <span className="sig-h-n sig-h-n-hot">{shown.length}</span>
+          </h4>
+          <div style={{ marginTop: 12 }}>
+            <CitationTable rows={shown} hideHeading onReload={onReload} onNote={onNote} />
+          </div>
+        </div>
+      ) : (
+        <p className="sig-h-sub" style={{ marginTop: 18 }}>
+          Click a route above to see which employers it covers. The full list, with fit and
+          the add flow, is on <b>Queue</b>.
+        </p>
+      )}
     </>
   )
 }
@@ -334,7 +350,7 @@ function violText(v) {
   return parts.length ? parts.join(', ') : '—'
 }
 
-function CitationTable({ rows, onReload, onNote }) {
+function CitationTable({ rows, hideHeading, onReload, onNote }) {
   const [open, setOpen] = useState('')
   const [showPoor, setShowPoor] = useState(false)
   const sorted = [...rows].sort((a, b) => (FIT_ORDER[a.fit] ?? 1) - (FIT_ORDER[b.fit] ?? 1))
@@ -353,7 +369,7 @@ function CitationTable({ rows, onReload, onNote }) {
       <div className="cit">
         <div className="cit-head">
           <span>Employer</span><span>Where</span><span>Violations</span>
-          <span>Penalty</span><span>Fit</span><span />
+          <span>Penalty</span><span>Campaign</span><span>Fit</span><span />
         </div>
         {shown.map((r) => (
           <div key={r.id} className={`cit-row f-${r.fit} ${open === r.id ? 'is-open' : ''}`}>
@@ -362,6 +378,9 @@ function CitationTable({ rows, onReload, onNote }) {
               <span className="cit-mut">{r.location || '—'}</span>
               <span className="cit-mut">{violText(r.violations)}</span>
               <span className="cit-pen">${Number(r.penalty || 0).toLocaleString()}</span>
+              <span className={`cit-camp ${r.campaign_fit ? '' : 'none'}`}>
+                {r.campaign_fit || 'unrouted'}
+              </span>
               <span className={`cit-fit f-${r.fit}`} title={r.fit_why}>{r.fit}</span>
               <span className="cit-chev">{open === r.id ? '⌃' : '⌄'}</span>
             </button>
