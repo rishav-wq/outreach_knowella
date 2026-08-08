@@ -26,8 +26,22 @@ BASE = "https://api.postmarkapp.com"
 BATCH = 500
 
 
+def _token() -> str:
+    """The Postmark server token, under either name it has been stored as.
+
+    The deployed .env sets POSTMARK_API while this module was written for
+    POSTMARK_SERVER_TOKEN, which meant has_key() answered False and the whole
+    marketing engine reported itself disconnected with a perfectly valid key
+    sitting in the file. Accepting both removes the failure mode rather than
+    trusting everyone to spell it the same way.
+    """
+    return (os.environ.get("POSTMARK_SERVER_TOKEN")
+            or os.environ.get("POSTMARK_API")
+            or os.environ.get("POSTMARK_TOKEN") or "")
+
+
 def has_key() -> bool:
-    return bool(os.environ.get("POSTMARK_SERVER_TOKEN"))
+    return bool(_token())
 
 
 def from_address() -> str:
@@ -38,7 +52,7 @@ def _hdr() -> dict:
     return {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "X-Postmark-Server-Token": os.environ["POSTMARK_SERVER_TOKEN"],
+        "X-Postmark-Server-Token": _token(),
     }
 
 

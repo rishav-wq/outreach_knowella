@@ -1610,3 +1610,13 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   font-size: 11.5px; background: var(--bg); border: 1px solid var(--line);
   border-radius: 4px; padding: 1px 5px; color: var(--text-2);
 }
+
+/* A register with nothing in it still has to be visible — otherwise four OSHA
+   citations read as "OSHA is all this does", which is exactly how it read. */
+.sig-dormant {
+  display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg); font-size: 12.5px; color: var(--muted); line-height: 1.55;
+}
+.sig-dormant .dot { margin-top: 6px; flex-shrink: 0; }
+.sig-dormant b { color: var(--text-2); }
