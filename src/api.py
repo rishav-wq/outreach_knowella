@@ -1970,19 +1970,25 @@ class PromoteCitation(BaseModel):
     org_id: str
     campaign: str
     limit: int = 3
+    person_ids: list[str] = []      # exactly who to reveal; empty means the top match
 
 
 @app.post("/api/signals/{sid}/promote")
 def promote_citation(sid: str, r: PromoteCitation):
     """Turn a citation into leads in a campaign. Reveals contacts (credits), attaches
     the citation itself as the grounded fact the draft is written from — which is the
-    whole point: this lead has a reason, unlike anything on a bought list."""
+    whole point: this lead has a reason, unlike anything on a bought list.
+
+    person_ids is the caller's explicit choice. Revealing three colleagues at one
+    employer costs three credits and, worse, sends three people the same email about
+    the same citation — which is exactly what a blast looks like from the inside."""
     store = open_store()
     cfg = _load(r.campaign)
     sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
     if not sig:
         raise HTTPException(404, "signal not found")
-    leads, credits = apollo.contacts_at_org(r.org_id, limit=max(1, min(r.limit, 10)))
+    leads, credits = apollo.contacts_at_org(r.org_id, limit=max(1, min(r.limit, 10)),
+                                            person_ids=r.person_ids or None)
     leads = [ld for ld in leads if ld.email]        # no email, no campaign
     if not leads:
         raise HTTPException(400, "Apollo revealed no reachable contact at that company")

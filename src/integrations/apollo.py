@@ -404,7 +404,7 @@ def find_org(name: str, limit: int = 5) -> list[dict]:
 
 
 def contacts_at_org(org_id: str, titles: list[str] | None = None,
-                    limit: int = 5) -> tuple[list[Lead], int]:
+                    limit: int = 5, person_ids: list[str] | None = None) -> tuple[list[Lead], int]:
     """The safety leadership at one org → revealed leads, and the credits it cost.
     Falls back to any senior contact when nobody carries a safety title: a small
     contractor often has no EHS function, which is rather the point of the pitch."""
@@ -417,9 +417,46 @@ def contacts_at_org(org_id: str, titles: list[str] | None = None,
     if not previews:
         previews = _search_previews({**base, "person_seniorities": ["owner", "founder", "c_suite",
                                                                     "vp", "director"]}, limit, hdr)
+    if person_ids:            # the human picked; reveal exactly those and nobody else
+        chosen = [p for p in previews if p.get("id") in set(person_ids)]
+        previews = chosen or previews[:1]
     if not previews:
         return [], 0
     return _reveal(previews, hdr)
+
+
+# Which of three safety people at one company should hear about a citation?
+# Emailing all of them is the failure mode: colleagues compare notes, near-identical
+# cold mail reads as a blast, and the single shot a real trigger buys you is gone.
+# So rank by whose job the citation actually IS, and default to sending one.
+_FUNCTION = [
+    (re.compile(r"\b(ehs|hse|e\.h\.s)\b", re.I), 5, "EHS is their function"),
+    (re.compile(r"environment\w*[, ]+health[, ]+(and )?safety", re.I), 5, "EHS is their function"),
+    (re.compile(r"\bhealth and safety\b", re.I), 5, "health and safety"),
+    (re.compile(r"\bsafety\b", re.I), 4, "safety in the title"),
+    (re.compile(r"\b(risk|loss prevention|compliance)\b", re.I), 3, "risk/compliance"),
+    (re.compile(r"\b(plant|operations|facilit)\w*", re.I), 2, "runs the site"),
+]
+_SENIORITY = [
+    (re.compile(r"\b(chief|vp|vice president|head of)\b", re.I), 3, "senior"),
+    (re.compile(r"\bdirector\b", re.I), 2, "director"),
+    (re.compile(r"\bmanager\b", re.I), 1, "manager"),
+]
+# A qualifier that narrows the remit: "Fleet Safety" owns vehicles, not the plant
+# where the citation happened. Still a safety person, just not THE one.
+_NARROWING = re.compile(r"\b(fleet|region\w*|district|service|driver|transport)\b", re.I)
+
+
+def score_title(title: str) -> tuple[int, str]:
+    """How likely is this person the one who has to answer for the citation?"""
+    t = title or ""
+    fn = max(((w, why) for rx, w, why in _FUNCTION if rx.search(t)), default=(0, ""))
+    sn = max(((w, why) for rx, w, why in _SENIORITY if rx.search(t)), default=(0, ""))
+    narrow = 1 if _NARROWING.search(t) else 0
+    why = ", ".join(x for x in (fn[1], sn[1]) if x) or "no safety signal in the title"
+    if narrow:
+        why += " — but a narrowed remit"
+    return fn[0] + sn[0] - narrow, why
 
 
 def preview_contacts_at_org(org_id: str, limit: int = 5) -> list[dict]:
@@ -434,4 +471,10 @@ def preview_contacts_at_org(org_id: str, limit: int = 5) -> list[dict]:
     if not pv:
         pv = _search_previews({**base, "person_seniorities": ["owner", "founder", "c_suite",
                                                               "vp", "director"]}, limit, hdr)
-    return [{"first_name": p["first_name"], "title": p["title"]} for p in pv]
+    out = []
+    for p in pv:
+        sc, why = score_title(p["title"])
+        out.append({"id": p["id"], "first_name": p["first_name"], "title": p["title"],
+                    "score": sc, "why": why})
+    out.sort(key=lambda x: -x["score"])
+    return out

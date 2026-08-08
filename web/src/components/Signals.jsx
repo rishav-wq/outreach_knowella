@@ -400,10 +400,22 @@ function CitationActions({ s, onReload, onNote }) {
     } catch (e) { onNote(String(e.message || e).slice(0, 180)) }
     finally { setBusy('') }
   }
+  const [picked, setPicked] = useState({})     // org id -> Set of person ids
+  const toggle = (orgId, pid) => setPicked((p) => {
+    const cur = new Set(p[orgId] || [])
+    cur.has(pid) ? cur.delete(pid) : cur.add(pid)
+    return { ...p, [orgId]: cur }
+  })
+  const chosen = (o) => {
+    const set = picked[o.id]
+    // Default to the single best-ranked contact. One email to the right person beats
+    // three to the same company, which is what a blast looks like from the inside.
+    return set ? [...set] : (o.contacts[0] ? [o.contacts[0].id] : [])
+  }
   const add = async (org) => {
     setBusy(org.id)
     try {
-      const r = await api.promoteCitation(s.id, org.id, campaign)
+      const r = await api.promoteCitation(s.id, org.id, campaign, chosen(org))
       setDone(r); onReload()
       onNote(`${r.added} added to ${r.campaign} — ${r.credits} credit${r.credits === 1 ? '' : 's'}`)
     } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
@@ -429,22 +441,38 @@ function CitationActions({ s, onReload, onNote }) {
   return (
     <div className="cit-pick">
       <div className="sig-cite-pick-h">
-        Which company is it? <span className="muted">Apollo matches by name — check the domain.</span>
+        Who should hear about it? <span className="muted">One person, usually — three colleagues
+        getting the same email reads as a blast.</span>
         <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
           {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
-      {usable.map((o) => (
-        <div key={o.id} className="sig-cand">
-          <div className="sig-bl-main">
-            <div className="sig-bl-q">{o.name} <span className="sig-dom">{o.domain}</span></div>
-            <div className="sig-meta">{o.contacts.slice(0, 3).map((p) => `${p.first_name} — ${p.title}`).join(' · ')}</div>
+      {usable.map((o) => {
+        const sel = chosen(o)
+        return (
+          <div key={o.id} className="cit-org">
+            <div className="cit-org-h">
+              <b>{o.name}</b> <span className="sig-dom">{o.domain}</span>
+              <button className="btn primary" disabled={!!busy || !campaign || !sel.length}
+                onClick={() => add(o)}>
+                {busy === o.id ? 'Adding…' : `Add ${sel.length}`}
+              </button>
+            </div>
+            <ul className="cit-people">
+              {o.contacts.map((p) => (
+                <li key={p.id}>
+                  <label>
+                    <input type="checkbox" checked={sel.includes(p.id)} onChange={() => toggle(o.id, p.id)} />
+                    <span className="cit-p-name">{p.first_name}</span>
+                    <span className="cit-p-title">{p.title}</span>
+                    <span className="cit-p-why" title="Why this ranking">{p.why}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
           </div>
-          <button className="btn primary" disabled={!!busy || !campaign} onClick={() => add(o)}>
-            {busy === o.id ? 'Adding…' : `Add ${Math.min(o.contacts.length, 3)}`}
-          </button>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

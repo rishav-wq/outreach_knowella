@@ -1668,3 +1668,26 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .cit-line { grid-template-columns: 1fr auto; row-gap: 4px; }
   .cit-line .cit-mut:nth-of-type(2) { display: none; }
 }
+
+/* Choosing who hears about a citation. Ranked by whose job it actually is, with the
+   best one pre-selected — sending three colleagues the same email about the same
+   citation is what a blast looks like from the inside, and it costs 3x the credits. */
+.cit-org { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); padding: 11px 13px; }
+.cit-org + .cit-org { margin-top: 8px; }
+.cit-org-h { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.cit-org-h .btn { margin-left: auto; }
+.cit-people { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 3px; }
+.cit-people label {
+  display: grid; grid-template-columns: 18px minmax(0,90px) minmax(0,1fr) minmax(0,1fr);
+  gap: 9px; align-items: center; padding: 5px 7px; border-radius: 6px; cursor: pointer; font-size: 12px;
+}
+.cit-people label:hover { background: var(--panel); }
+.cit-people input { accent-color: var(--signal); width: 14px; height: 14px; }
+.cit-p-name { font-weight: 600; color: var(--text); }
+.cit-p-title { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cit-p-why { color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .cit-people label { grid-template-columns: 18px 1fr; }
+  .cit-p-title, .cit-p-why { grid-column: 2; }
+}
