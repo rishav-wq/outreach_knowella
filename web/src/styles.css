@@ -1691,3 +1691,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .cit-people label { grid-template-columns: 18px 1fr; }
   .cit-p-title, .cit-p-why { grid-column: 2; }
 }
+/* The lookup/reveal cost split, said out loud — the header pill shows requests per
+   hour, not credits, and reading it as credits makes a free action look expensive. */
+.cit-free { font-size: 11.5px; color: var(--faint); line-height: 1.5; align-self: center; }
+.cit-act .cit-free { margin-left: 4px; }

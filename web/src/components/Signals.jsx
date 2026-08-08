@@ -430,10 +430,12 @@ function CitationActions({ s, onReload, onNote }) {
           {busy ? 'Looking up…' : 'Find who to contact'}
         </button>
         <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
+        <span className="cit-free">Looking up is free — credits are only spent when you add someone</span>
       </div>
     )
   }
   const usable = cands.filter((o) => o.contacts.length)
+  const skipped = cands.filter((o) => !o.checked).length
   if (!usable.length) {
     return <div className="pin-none">Apollo has no reachable contact at <b>{s.company}</b>. Small
       contractors often aren't in it at all.</div>
@@ -442,7 +444,7 @@ function CitationActions({ s, onReload, onNote }) {
     <div className="cit-pick">
       <div className="sig-cite-pick-h">
         Who should hear about it? <span className="muted">One person, usually — three colleagues
-        getting the same email reads as a blast.</span>
+        getting the same email reads as a blast. 1 Apollo credit each.</span>
         <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
           {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -473,6 +475,12 @@ function CitationActions({ s, onReload, onNote }) {
           </div>
         )
       })}
+      {skipped > 0 && (
+        <p className="cit-free">
+          {skipped} other name {skipped === 1 ? 'match' : 'matches'} had no domain, so {skipped === 1 ? 'it wasn’t' : 'they weren’t'} looked
+          up — Apollo matches loosely and those are usually duplicates or unrelated businesses.
+        </p>
+      )}
     </div>
   )
 }

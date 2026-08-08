@@ -1956,13 +1956,23 @@ def resolve_citation(sid: str):
     company = sig.get("company") or sig.get("title", "")
     if not company:
         raise HTTPException(400, "this signal has no company on it")
+    cands = apollo.find_org(company)
+    # Looking people up at a record with no domain is wasted effort twice over: we
+    # can't confirm it's the right company (the UI tells you to check the domain),
+    # and Apollo name-matching returns junk — "FleetPride Inc." also matched a
+    # duplicate and a spring retailer. Previewing all of them cost 6 requests where
+    # 2 would do. Domain-less records are still returned, just not looked up.
+    withdomain = [o for o in cands if o.get("domain")][:3]
+    lookup = {o["id"] for o in (withdomain or cands[:1])}
     out = []
-    for org in apollo.find_org(company):
-        try:
-            people = apollo.preview_contacts_at_org(org["id"])
-        except Exception:
-            people = []
-        out.append({**org, "contacts": people})
+    for org in cands:
+        people = []
+        if org["id"] in lookup:
+            try:
+                people = apollo.preview_contacts_at_org(org["id"])
+            except Exception:
+                people = []
+        out.append({**org, "contacts": people, "checked": org["id"] in lookup})
     return {"company": company, "candidates": out}
 
 
