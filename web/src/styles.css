@@ -1761,3 +1761,60 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .lp-hero-panel { animation: none; }
   .src-checking { animation: none; }
 }
+
+/* ============================================================
+   Hero — BRAND VIOLET FIELD.
+   The pale gradient was the generic SaaS default and no amount of effects layered
+   on top would fix that. One saturated block of Knowella's own primary instead:
+   white type on violet, the document bright and floating on it. Nothing is washed
+   out, there is exactly one focal object, and the palette is unmistakably theirs.
+   Teal keeps its meaning throughout — it is the verified colour, so it is what the
+   eyebrow, the highlight and the ticks are made of.
+   ============================================================ */
+.lp-nav {
+  background: rgba(72, 63, 190, 0.92);
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+.lp-nav .lp-logo { color: #fff; }
+.lp-nav .lp-logo .muted { color: rgba(255, 255, 255, 0.6); }
+.lp-links a { color: rgba(255, 255, 255, 0.72); }
+.lp-links a:hover { color: #fff; }
+/* on violet the primary button has to invert or it disappears into the field */
+.lp-nav .btn.primary { background: #fff; border-color: #fff; color: var(--signal-deep); }
+.lp-nav .btn.primary:hover { background: rgba(255, 255, 255, 0.88); border-color: rgba(255, 255, 255, 0.88); color: var(--signal-deep); }
+
+.lp-hero-panel {
+  background:
+    radial-gradient(70% 90% at 12% 92%, rgba(4, 180, 146, 0.34) 0%, rgba(4, 180, 146, 0) 60%),
+    linear-gradient(152deg, #7b70ff 0%, #6257e0 42%, #4f46bd 100%);
+  border-bottom: none;
+}
+/* a single soft bloom behind the document, not a white haze */
+.lp-hero-panel::before {
+  inset: 0; width: auto; height: auto;
+  background: radial-gradient(58% 62% at 74% 26%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+.lp-eyebrow-hero { color: #74ecd0; letter-spacing: 0.17em; }
+.lp-hero .lp-hero-left h1 { color: #fff; font-size: clamp(38px, 4.7vw, 62px); }
+.lp-hero .lp-hero-left h1 .hl {
+  background: none; -webkit-background-clip: initial; background-clip: initial;
+  -webkit-text-fill-color: initial; color: #74ecd0;
+}
+.lp-hero .lp-hero-left p { color: rgba(255, 255, 255, 0.76); }
+.lp-hero-note { color: rgba(255, 255, 255, 0.5); }
+.lp-hero-note b { color: rgba(255, 255, 255, 0.86); }
+
+.lp-cta-hero .btn.primary { background: #fff; border-color: #fff; color: var(--signal-deep); }
+.lp-cta-hero .btn.primary:hover { background: rgba(255, 255, 255, 0.9); border-color: rgba(255, 255, 255, 0.9); color: var(--signal-deep); }
+.lp-cta-hero .btn:not(.primary) {
+  background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.34); color: #fff;
+}
+.lp-cta-hero .btn:not(.primary):hover { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.5); }
+
+/* the one lit object on a saturated field — elevation is what stops it looking
+   pasted on, and it is the page's only exception to the no-shadow house rule */
+.lp-hero .src-doc {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 30px 64px -24px rgba(28, 22, 84, 0.55), 0 4px 12px rgba(28, 22, 84, 0.12);
+}
