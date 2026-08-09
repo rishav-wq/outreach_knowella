@@ -46,15 +46,36 @@ const CLAIMS = [
   },
 ]
 
+// The sequence IS the product: a draft is written, each claim is checked against a
+// real source, then a human approves it. So the hero performs that once on arrival
+// rather than fading everything in at once — the claim lights up, its source slides
+// in beneath, the tick lands. Then it rests and cycles slowly so the link between a
+// sentence and its evidence stays visible without anyone touching it.
+const STAGE = { HEAD: 1, BODY: 2, VERIFY_1: 3, VERIFY_2: 4, APPROVED: 5, RESTING: 6 }
+const BEATS = [[STAGE.HEAD, 250], [STAGE.BODY, 550], [STAGE.VERIFY_1, 1250],
+  [STAGE.VERIFY_2, 2050], [STAGE.APPROVED, 2800], [STAGE.RESTING, 3600]]
+
 function SourcedEmail({ reduce }) {
+  const [stage, setStage] = useState(reduce ? STAGE.RESTING : 0)
   const [live, setLive] = useState(1)
   const [held, setHeld] = useState(null)
+
   useEffect(() => {
     if (reduce) return
-    const t = setInterval(() => setLive((n) => (n === 1 ? 2 : 1)), 3200)
-    return () => clearInterval(t)
+    const timers = BEATS.map(([s, ms]) => setTimeout(() => setStage(s), ms))
+    return () => timers.forEach(clearTimeout)
   }, [reduce])
-  const on = held ?? live
+
+  useEffect(() => {
+    if (reduce || stage < STAGE.RESTING) return
+    const t = setInterval(() => setLive((n) => (n === 1 ? 2 : 1)), 3400)
+    return () => clearInterval(t)
+  }, [reduce, stage])
+
+  // While verifying, the claim being checked is the lit one; at rest it cycles.
+  const verifying = stage === STAGE.VERIFY_1 ? 1 : stage === STAGE.VERIFY_2 ? 2 : null
+  const on = held ?? verifying ?? (stage >= STAGE.RESTING ? live : null)
+  const shown = (s) => (reduce ? true : stage >= s)
 
   const rise = (delay) => (reduce ? {} : {
     initial: { opacity: 0, y: 10 },
@@ -76,41 +97,64 @@ function SourcedEmail({ reduce }) {
 
       <div className="src-body" aria-hidden="true">
         <motion.div className="src-subj" {...rise(0.15)}>Your new Dayton hub</motion.div>
-        <motion.p {...rise(0.25)}>
+        <motion.p {...rise(0.3)}>
           Hi Maria — saw Meridian{' '}
-          <span className={`src-claim ${on === 1 ? 'on' : ''}`}
+          <span className={`src-claim ${on === 1 ? 'on' : ''} ${shown(STAGE.VERIFY_1) ? 'ok' : ''}`}
             onMouseEnter={() => setHeld(1)} onMouseLeave={() => setHeld(null)}>
             opened a second distribution hub in Dayton<sup>1</sup>
           </span>{' '}and that you&apos;re{' '}
-          <span className={`src-claim ${on === 2 ? 'on' : ''}`}
+          <span className={`src-claim ${on === 2 ? 'on' : ''} ${shown(STAGE.VERIFY_2) ? 'ok' : ''}`}
             onMouseEnter={() => setHeld(2)} onMouseLeave={() => setHeld(null)}>
             hiring two operations coordinators<sup>2</sup>
           </span>. Usually that means the paperwork volume jumped before the headcount did.
         </motion.p>
       </div>
 
-      <motion.div className="src-foot" {...rise(0.45)} aria-hidden="true">
-        <div className="src-foot-k">Sources</div>
-        {CLAIMS.map((c, i) => (
-          <motion.div key={c.n} className={`src-ref ${on === c.n ? 'on' : ''}`}
-            onMouseEnter={() => setHeld(c.n)} onMouseLeave={() => setHeld(null)}
-            {...rise(0.55 + i * 0.12)}>
-            <span className="src-num">{c.n}</span>
-            <div>
-              <div className="src-where">{c.src}<span className="src-when">{c.when}</span></div>
-              <div className="src-quote">{c.quote}</div>
-            </div>
-            <span className="src-tick">✓</span>
-          </motion.div>
-        ))}
-      </motion.div>
+      <div className="src-foot" aria-hidden="true">
+        <div className="src-foot-k">
+          Sources
+          {!reduce && stage < STAGE.APPROVED && stage >= STAGE.BODY && (
+            <span className="src-checking">checking…</span>
+          )}
+        </div>
+        {/* Each source arrives only when its claim is verified — the reveal order is
+            the work being done, not a decorative stagger. */}
+        <div className="src-refs">
+          {CLAIMS.map((c) => {
+            const here = shown(c.n === 1 ? STAGE.VERIFY_1 : STAGE.VERIFY_2)
+            return (
+              <motion.div key={c.n} className={`src-ref ${on === c.n ? 'on' : ''}`}
+                onMouseEnter={() => setHeld(c.n)} onMouseLeave={() => setHeld(null)}
+                initial={reduce ? false : { opacity: 0, y: 8, height: 0 }}
+                animate={here ? { opacity: 1, y: 0, height: 'auto' } : { opacity: 0, y: 8, height: 0 }}
+                transition={{ duration: 0.45, ease: EASE }}>
+                <span className="src-num">{c.n}</span>
+                <div>
+                  <div className="src-where">{c.src}<span className="src-when">{c.when}</span></div>
+                  <div className="src-quote">{c.quote}</div>
+                </div>
+                <motion.span className="src-tick"
+                  initial={reduce ? false : { scale: 0, opacity: 0 }}
+                  animate={here ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
+                  transition={{ delay: here && !reduce ? 0.28 : 0, type: 'spring', stiffness: 520, damping: 17 }}>
+                  ✓
+                </motion.span>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
 
       <motion.div className="src-stamp" aria-hidden="true"
-        {...(reduce ? {} : {
-          initial: { opacity: 0, scale: 0.94 }, animate: { opacity: 1, scale: 1 },
-          transition: { delay: 0.95, duration: 0.45, ease: EASE },
-        })}>
-        <span className="src-approved">Approved by you</span>
+        initial={reduce ? false : { opacity: 0 }}
+        animate={shown(STAGE.APPROVED) ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ duration: 0.4, ease: EASE }}>
+        <motion.span className="src-approved"
+          initial={reduce ? false : { scale: 0.8, rotate: -4, opacity: 0 }}
+          animate={shown(STAGE.APPROVED) ? { scale: 1, rotate: 0, opacity: 1 } : { scale: 0.8, rotate: -4, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 15 }}>
+          Approved by you
+        </motion.span>
         <span className="src-sent">sent from your mailbox · follows up until they reply</span>
       </motion.div>
     </motion.div>

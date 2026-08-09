@@ -1728,3 +1728,36 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .lp-hero-left .lp-hero-note { text-align: center; }
   .lp-hero-right { width: min(660px, 100%); }
 }
+
+/* Hero container matched to the sections below it. The panel bled to 1240px while
+   every section uses .lp-inner at 1080px, so the headline started ~80px left of
+   "From a raw list to a sent…" — the page looked mis-set rather than deliberate. */
+.lp-hero-panel { padding-left: max(24px, calc((100vw - 1080px) / 2)); padding-right: max(24px, calc((100vw - 1080px) / 2)); }
+
+/* Ambient drift on Knowella's login gradient — 26s, barely perceptible. Atmosphere,
+   not an effect you're meant to notice. */
+.lp-hero-panel { background-size: 220% 220%; animation: lp-drift 26s ease-in-out infinite; }
+@keyframes lp-drift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* A claim is unverified until its source lands: dotted while pending, solid once
+   checked. The state of the underline IS the state of the evidence. */
+.src-claim { border-bottom-style: dashed; border-bottom-color: var(--line-strong); }
+.src-claim.ok { border-bottom-style: solid; border-bottom-color: var(--signal-line); }
+.src-claim sup { opacity: 0.45; transition: opacity 0.3s ease; }
+.src-claim.ok sup { opacity: 1; }
+
+.src-refs { display: flex; flex-direction: column; overflow: hidden; }
+.src-checking {
+  margin-left: 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--signal); text-transform: none; animation: blink 1.2s ease-in-out infinite;
+}
+.src-tick { display: inline-block; transform-origin: center; }
+.src-stamp { min-height: 46px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero-panel { animation: none; }
+  .src-checking { animation: none; }
+}
