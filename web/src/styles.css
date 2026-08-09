@@ -1690,3 +1690,20 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .lp-hero-head { max-width: none; }
   .lp-hero-panel { padding: 44px 24px 52px; }
 }
+/* Two cascade traps, both mine:
+   - `max-width: 20ch` on the head resolves against the PARENT's 16px font, not the
+     58px headline, so the box was ~160px wide and the headline broke one word per
+     line. Sized in px against the container instead.
+   - the panel's base rule is a grid with justify-items:center, which kept centring
+     the children whatever display I set later. Stated explicitly rather than
+     relying on an override winning. */
+.lp-hero-panel { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.lp-hero-panel > * { max-width: 100%; margin-left: 0; margin-right: 0; }
+.lp-hero-head { max-width: 640px; text-align: left; }
+.lp-hero h1 { text-align: left; }
+.wired { width: 100%; }
+.lp-cta-hero { width: 100%; }
+
+@media (max-width: 940px) {
+  .lp-hero-head { max-width: none; }
+}
