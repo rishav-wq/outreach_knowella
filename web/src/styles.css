@@ -1597,224 +1597,96 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .cit-camp.none { color: var(--caution); }
 
 /* ============================================================
-   Hero signature — THE SOURCED EMAIL.
-   The page's claim is "every sentence has a source", so the hero is the artefact
-   making that true rather than a diagram of the process that produces it. It reads
-   as a document: hairlines, a numbered apparatus, quotes set apart. Teal is the
-   check colour because teal already means verified everywhere else in this system.
+   Hero — WIRED PROOF.
+   The draft on the left, its evidence on the right, and a dashed line drawn
+   between each claim and the source it came from. Colour carries the pairing:
+   violet claim to violet source, teal claim to teal source, so the link reads
+   before a word does. The page argues by showing the wiring instead of
+   describing it — and the last line argues the other way, by naming what never
+   makes it in at all.
    ============================================================ */
-.src-doc {
-  position: relative; z-index: 1; width: min(680px, 100%); margin: 38px auto 4px;
-  background: var(--panel); border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg); overflow: hidden; text-align: left;
+.lp-hero-panel {
+  background: var(--bg); border-bottom: 1px solid var(--line);
+  display: block; overflow: visible;
+  padding: 60px max(24px, calc((100vw - 1080px) / 2)) 72px;
 }
-.src-bar {
-  display: flex; align-items: center; gap: 8px; padding: 11px 18px;
-  border-bottom: 1px solid var(--line); background: var(--bg);
-  font-size: 12.5px; color: var(--text-2);
-}
-.src-to {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--faint);
-}
-.src-tag {
-  margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
-  text-transform: uppercase; color: var(--signal); background: var(--signal-pill);
-  border-radius: 999px; padding: 3px 10px;
-}
-.src-body { padding: 20px 22px 18px; }
-.src-subj {
-  font-family: var(--font-display); font-size: 17px; font-weight: 700;
-  letter-spacing: -0.01em; margin-bottom: 10px;
-}
-.src-body p { font-size: 14.5px; line-height: 1.75; color: var(--text-2); margin: 0; }
+.lp-hero-panel::before { display: none; }
 
-/* A claim and its source are one object; hovering either lifts both. */
-.src-claim {
-  border-bottom: 1.5px solid var(--signal-line); border-radius: 2px;
-  padding: 1px 2px; margin: 0 -2px; cursor: default;
-  transition: background 0.25s ease, border-color 0.25s ease;
+.lp-hero-head { position: relative; z-index: 1; max-width: 20ch; }
+.lp-eyebrow-hero {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--signal); margin-bottom: 18px;
 }
-.src-claim sup {
-  font-size: 9.5px; font-weight: 800; color: var(--signal);
-  margin-left: 2px; vertical-align: super;
+.lp-hero h1 {
+  font-family: var(--font-display); font-size: clamp(36px, 4.6vw, 58px); font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1.05; color: var(--ink); margin: 0;
 }
-.src-claim.on { background: var(--signal-pill); border-color: var(--signal); }
 
-.src-foot { padding: 0 22px 16px; }
-.src-foot-k {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--faint); padding: 12px 0 9px; border-top: 1px solid var(--line);
+/* --- the wiring ------------------------------------------------------------ */
+.wired {
+  position: relative; margin-top: 40px;
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 70px;
+  align-items: start;
 }
-.src-ref {
-  display: grid; grid-template-columns: 20px 1fr 18px; gap: 10px; align-items: start;
-  padding: 8px 9px; border-radius: 8px; border: 1px solid transparent;
-  transition: background 0.25s ease, border-color 0.25s ease;
-}
-.src-ref.on { background: var(--signal-tint); border-color: var(--signal-line); }
-.src-num {
-  font-size: 10.5px; font-weight: 800; color: var(--signal); text-align: center;
-  line-height: 1.6;
-}
-.src-where { font-size: 12.5px; font-weight: 600; color: var(--text); }
-.src-when { font-size: 11px; font-weight: 500; color: var(--faint); margin-left: 8px; }
-.src-quote { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin-top: 2px; }
-.src-tick { color: var(--verify); font-size: 13px; font-weight: 700; line-height: 1.4; }
+.wired-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.wired-link { fill: none; stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.75; }
+.wired-link.t-violet { stroke: var(--signal); }
+.wired-link.t-teal { stroke: var(--verify); }
 
-.src-stamp {
+.wired-draft {
+  position: relative; z-index: 1; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px 26px 22px;
+  box-shadow: 0 18px 40px -26px rgba(36, 42, 50, 0.25);
+}
+.wired-k {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint);
+}
+.wired-subj { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -0.015em; margin: 12px 0 12px; }
+.wired-body { font-size: 15px; line-height: 1.8; color: var(--text-2); margin: 0; }
+
+/* a highlighted claim IS its source's colour — that pairing is the whole idea */
+.mark { border-radius: 3px; padding: 2px 4px; margin: 0 -1px; }
+.mark.m-violet { background: var(--signal-pill); box-shadow: inset 0 -1.5px 0 var(--signal-line); }
+.mark.m-teal { background: #d5f4ec; box-shadow: inset 0 -1.5px 0 rgba(4, 180, 146, 0.45); }
+
+.wired-actions {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 12px 22px; border-top: 1px solid var(--line); background: var(--verify-tint);
+  margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line);
 }
-.src-approved {
-  font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
-  color: #0b6b58; border: 1.5px solid rgba(4, 180, 146, 0.45);
-  border-radius: 5px; padding: 4px 10px;
-}
-.src-sent { font-size: 12px; color: #0b6b58; }
+.wired-approve { background: var(--verify); border-color: var(--verify); color: #fff; font-weight: 600; }
+.wired-approve:hover:not(:disabled) { background: var(--verify-hover); border-color: var(--verify-hover); color: #fff; }
+.wired-note { margin-left: auto; font-size: 12px; color: var(--faint); }
 
-.lp-hero-note {
-  position: relative; z-index: 1; text-align: center; font-size: 12.5px;
-  color: var(--muted); margin: 22px auto 0; max-width: 46em; line-height: 1.7;
+.wired-sources { position: relative; z-index: 1; display: grid; gap: 14px; padding-top: 46px; }
+.wired-src {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 14px 16px;
 }
-.lp-hero-note b { color: var(--text-2); font-weight: 600; }
-
-@media (max-width: 640px) {
-  .src-body, .src-foot, .src-stamp { padding-left: 15px; padding-right: 15px; }
-  .src-ref { grid-template-columns: 18px 1fr 16px; gap: 8px; }
-  .src-doc { margin-top: 28px; }
+.wired-src.t-violet { border-left: 3px solid var(--signal); }
+.wired-src.t-teal { border-left: 3px solid var(--verify); }
+.wired-src-k {
+  display: flex; align-items: baseline; font-family: var(--font-mono); font-size: 10px;
+  font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
 }
+.wired-src.t-violet .wired-src-k { color: var(--signal); }
+.wired-src.t-teal .wired-src-k { color: var(--verify); }
+.wired-when { margin-left: auto; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); text-transform: none; font-size: 11px; }
+.wired-where { font-size: 14.5px; font-weight: 700; color: var(--ink); margin-top: 8px; letter-spacing: -0.01em; }
+.wired-quote { font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 4px; }
 
-/* ============================================================
-   Hero, final shape — ARGUMENT LEFT, EVIDENCE RIGHT.
-   Centred and stacked read as a template and gave the eye nowhere to settle; the
-   dark experiment fixed contrast but lost the brand. This keeps Knowella's own
-   login gradient and gets its focal point from asymmetry instead: the claim on
-   the left, the document proving it on the right, both in one glance — which is
-   literally what the product does.
-   ============================================================ */
-.lp-hero-panel {
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  justify-items: stretch; align-items: center; gap: 48px;
-  padding: 64px max(52px, calc((100vw - 1240px) / 2)) 68px;
-}
-.lp-hero-left {
-  position: relative; z-index: 1; text-align: left;
-  display: flex; flex-direction: column; align-items: flex-start; max-width: 34em;
-}
-.lp-hero-right { position: relative; z-index: 1; min-width: 0; }
-
-.lp-hero .lp-hero-left h1 {
-  font-size: clamp(36px, 4.2vw, 56px); font-weight: 800;
-  letter-spacing: -0.035em; line-height: 1.04; margin: 0;
-}
-.lp-hero .lp-hero-left p { font-size: 16px; margin: 18px 0 0; max-width: 30em; }
-.lp-eyebrow-hero { margin-bottom: 16px; }
-.lp-hero-left .lp-cta-hero { justify-content: flex-start; margin-top: 26px; padding-bottom: 0; }
-.lp-hero-left .lp-hero-note { text-align: left; margin: 20px 0 0; max-width: 33em; }
-
-/* The document carries its own type scale; the hero's paragraph rule must not
-   reach inside it. Both selectors are (0,1,1), so without this the later one
-   silently repainted the email body — which is exactly what happened. */
-.lp-hero .src-doc { margin: 0; width: 100%; }
-.lp-hero .src-doc p { color: var(--text-2); font-size: 14.5px; line-height: 1.75; max-width: none; }
-
-@media (max-width: 980px) {
-  .lp-hero-panel {
-    grid-template-columns: minmax(0, 1fr); gap: 34px; padding: 48px 24px 52px;
-    justify-items: center;
-  }
-  .lp-hero-left { align-items: center; text-align: center; max-width: 40em; }
-  .lp-hero-left .lp-cta-hero { justify-content: center; }
-  .lp-hero-left .lp-hero-note { text-align: center; }
-  .lp-hero-right { width: min(660px, 100%); }
+/* the negative proof — what never reaches the draft argues as hard as what does */
+.wired-neg {
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  padding: 13px 16px; font-size: 13px; color: var(--faint); background: none;
 }
 
-/* Hero container matched to the sections below it. The panel bled to 1240px while
-   every section uses .lp-inner at 1080px, so the headline started ~80px left of
-   "From a raw list to a sent…" — the page looked mis-set rather than deliberate. */
-.lp-hero-panel { padding-left: max(24px, calc((100vw - 1080px) / 2)); padding-right: max(24px, calc((100vw - 1080px) / 2)); }
+.lp-cta-hero { position: relative; z-index: 1; justify-content: flex-start; margin-top: 40px; }
 
-/* Ambient drift on Knowella's login gradient — 26s, barely perceptible. Atmosphere,
-   not an effect you're meant to notice. */
-.lp-hero-panel { background-size: 220% 220%; animation: lp-drift 26s ease-in-out infinite; }
-@keyframes lp-drift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* A claim is unverified until its source lands: dotted while pending, solid once
-   checked. The state of the underline IS the state of the evidence. */
-.src-claim { border-bottom-style: dashed; border-bottom-color: var(--line-strong); }
-.src-claim.ok { border-bottom-style: solid; border-bottom-color: var(--signal-line); }
-.src-claim sup { opacity: 0.45; transition: opacity 0.3s ease; }
-.src-claim.ok sup { opacity: 1; }
-
-.src-refs { display: flex; flex-direction: column; overflow: hidden; }
-.src-checking {
-  margin-left: 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
-  color: var(--signal); text-transform: none; animation: blink 1.2s ease-in-out infinite;
-}
-.src-tick { display: inline-block; transform-origin: center; }
-.src-stamp { min-height: 46px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .lp-hero-panel { animation: none; }
-  .src-checking { animation: none; }
-}
-
-/* ============================================================
-   Hero — BRAND VIOLET FIELD.
-   The pale gradient was the generic SaaS default and no amount of effects layered
-   on top would fix that. One saturated block of Knowella's own primary instead:
-   white type on violet, the document bright and floating on it. Nothing is washed
-   out, there is exactly one focal object, and the palette is unmistakably theirs.
-   Teal keeps its meaning throughout — it is the verified colour, so it is what the
-   eyebrow, the highlight and the ticks are made of.
-   ============================================================ */
-.lp-nav {
-  background: rgba(72, 63, 190, 0.92);
-  border-bottom-color: rgba(255, 255, 255, 0.14);
-}
-.lp-nav .lp-logo { color: #fff; }
-.lp-nav .lp-logo .muted { color: rgba(255, 255, 255, 0.6); }
-.lp-links a { color: rgba(255, 255, 255, 0.72); }
-.lp-links a:hover { color: #fff; }
-/* on violet the primary button has to invert or it disappears into the field */
-.lp-nav .btn.primary { background: #fff; border-color: #fff; color: var(--signal-deep); }
-.lp-nav .btn.primary:hover { background: rgba(255, 255, 255, 0.88); border-color: rgba(255, 255, 255, 0.88); color: var(--signal-deep); }
-
-.lp-hero-panel {
-  background:
-    radial-gradient(70% 90% at 12% 92%, rgba(4, 180, 146, 0.34) 0%, rgba(4, 180, 146, 0) 60%),
-    linear-gradient(152deg, #7b70ff 0%, #6257e0 42%, #4f46bd 100%);
-  border-bottom: none;
-}
-/* a single soft bloom behind the document, not a white haze */
-.lp-hero-panel::before {
-  inset: 0; width: auto; height: auto;
-  background: radial-gradient(58% 62% at 74% 26%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 70%);
-}
-
-.lp-eyebrow-hero { color: #74ecd0; letter-spacing: 0.17em; }
-.lp-hero .lp-hero-left h1 { color: #fff; font-size: clamp(38px, 4.7vw, 62px); }
-.lp-hero .lp-hero-left h1 .hl {
-  background: none; -webkit-background-clip: initial; background-clip: initial;
-  -webkit-text-fill-color: initial; color: #74ecd0;
-}
-.lp-hero .lp-hero-left p { color: rgba(255, 255, 255, 0.76); }
-.lp-hero-note { color: rgba(255, 255, 255, 0.5); }
-.lp-hero-note b { color: rgba(255, 255, 255, 0.86); }
-
-.lp-cta-hero .btn.primary { background: #fff; border-color: #fff; color: var(--signal-deep); }
-.lp-cta-hero .btn.primary:hover { background: rgba(255, 255, 255, 0.9); border-color: rgba(255, 255, 255, 0.9); color: var(--signal-deep); }
-.lp-cta-hero .btn:not(.primary) {
-  background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.34); color: #fff;
-}
-.lp-cta-hero .btn:not(.primary):hover { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.5); }
-
-/* the one lit object on a saturated field — elevation is what stops it looking
-   pasted on, and it is the page's only exception to the no-shadow house rule */
-.lp-hero .src-doc {
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 30px 64px -24px rgba(28, 22, 84, 0.55), 0 4px 12px rgba(28, 22, 84, 0.12);
+@media (max-width: 940px) {
+  .wired { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .wired-sources { padding-top: 0; }
+  .wired-links { display: none; }          /* stacked: there is nothing to wire */
+  .lp-hero-head { max-width: none; }
+  .lp-hero-panel { padding: 44px 24px 52px; }
 }

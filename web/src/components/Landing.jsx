@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
 import Logo from './Logo'
@@ -15,149 +15,107 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// Hero signature: THE SOURCED EMAIL.
+// Hero signature: WIRED PROOF.
 //
-// The old hero diagrammed the process — four dots, four labels, a card that
-// changed state. Every outreach tool on the internet has that. But the thing
-// nobody else can put on a page is the ARTEFACT: a cold email whose every factual
-// claim carries a footnote, and a sources block underneath where each one resolves
-// to a quote. That is the whole product, and showing it argues better than any
-// adjective. It also speaks the customer's own language — safety directors live in
-// citations, standard references and audit trails.
+// The draft on the left, its evidence on the right, and a dashed line actually
+// drawn between each claim and the source it came from. The colour carries the
+// pairing — violet claim to violet source, teal claim to teal source — so the
+// link is legible before a word is read. That is the product in one picture:
+// nothing in the sentence exists without something on the right holding it up.
 //
-// Claim and evidence are linked: hover a marker and its source lifts. Left alone,
-// it cycles slowly so the connection is visible without anyone touching anything.
-// Teal is the check colour because in this design system teal means verified;
-// nothing here is decorative.
-const CLAIMS = [
-  {
-    n: 1,
-    text: 'opened a second distribution hub in Dayton',
-    src: 'meridianlogistics.com/news',
-    quote: '“…our second Dayton hub is now operational.”',
-    when: '11 days ago',
-  },
-  {
-    n: 2,
-    text: 'hiring two operations coordinators',
-    src: 'Apollo · 2 open roles',
-    quote: '“Operations Coordinator” ×2, posted this month',
-    when: '4 days ago',
-  },
+// Connectors are measured from the live DOM rather than hardcoded, because the
+// claim spans wrap differently at every width and a guessed curve would point at
+// nothing the moment the text reflowed.
+const PAIRS = [
+  { n: 1, tone: 'violet', kind: 'Press', where: 'meridianlogistics.com/news',
+    quote: '“…our second Dayton hub is now operational.”', when: '11 days ago' },
+  { n: 2, tone: 'teal', kind: 'Hiring', where: 'Apollo · 2 open roles',
+    quote: '“Operations Coordinator” ×2, posted this month', when: '4 days ago' },
 ]
 
-// The sequence IS the product: a draft is written, each claim is checked against a
-// real source, then a human approves it. So the hero performs that once on arrival
-// rather than fading everything in at once — the claim lights up, its source slides
-// in beneath, the tick lands. Then it rests and cycles slowly so the link between a
-// sentence and its evidence stays visible without anyone touching it.
-const STAGE = { HEAD: 1, BODY: 2, VERIFY_1: 3, VERIFY_2: 4, APPROVED: 5, RESTING: 6 }
-const BEATS = [[STAGE.HEAD, 250], [STAGE.BODY, 550], [STAGE.VERIFY_1, 1250],
-  [STAGE.VERIFY_2, 2050], [STAGE.APPROVED, 2800], [STAGE.RESTING, 3600]]
+function WiredProof({ reduce }) {
+  const wrap = useRef(null)
+  const claims = useRef({})
+  const cards = useRef({})
+  const [paths, setPaths] = useState([])
 
-function SourcedEmail({ reduce }) {
-  const [stage, setStage] = useState(reduce ? STAGE.RESTING : 0)
-  const [live, setLive] = useState(1)
-  const [held, setHeld] = useState(null)
-
-  useEffect(() => {
-    if (reduce) return
-    const timers = BEATS.map(([s, ms]) => setTimeout(() => setStage(s), ms))
-    return () => timers.forEach(clearTimeout)
-  }, [reduce])
-
-  useEffect(() => {
-    if (reduce || stage < STAGE.RESTING) return
-    const t = setInterval(() => setLive((n) => (n === 1 ? 2 : 1)), 3400)
-    return () => clearInterval(t)
-  }, [reduce, stage])
-
-  // While verifying, the claim being checked is the lit one; at rest it cycles.
-  const verifying = stage === STAGE.VERIFY_1 ? 1 : stage === STAGE.VERIFY_2 ? 2 : null
-  const on = held ?? verifying ?? (stage >= STAGE.RESTING ? live : null)
-  const shown = (s) => (reduce ? true : stage >= s)
-
-  const rise = (delay) => (reduce ? {} : {
-    initial: { opacity: 0, y: 10 },
-    animate: { opacity: 1, y: 0 },
-    transition: { delay, duration: 0.5, ease: EASE },
-  })
+  useLayoutEffect(() => {
+    const draw = () => {
+      const box = wrap.current?.getBoundingClientRect()
+      if (!box) return
+      const next = []
+      for (const p of PAIRS) {
+        const a = claims.current[p.n]?.getBoundingClientRect()
+        const b = cards.current[p.n]?.getBoundingClientRect()
+        if (!a || !b || b.left < a.right) continue      // stacked: no line to draw
+        const x1 = a.right - box.left
+        const y1 = a.top + a.height / 2 - box.top
+        const x2 = b.left - box.left
+        const y2 = b.top + Math.min(34, b.height / 2) - box.top
+        const dx = Math.max(40, (x2 - x1) * 0.55)
+        next.push({ ...p, d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}` })
+      }
+      setPaths(next)
+    }
+    draw()
+    const ro = new ResizeObserver(draw)
+    if (wrap.current) ro.observe(wrap.current)
+    window.addEventListener('resize', draw)
+    return () => { ro.disconnect(); window.removeEventListener('resize', draw) }
+  }, [])
 
   return (
-    <motion.div className="src-doc" {...(reduce ? {} : {
-      initial: { opacity: 0, y: 22 }, animate: { opacity: 1, y: 0 },
-      transition: { duration: 0.6, ease: EASE },
-    })}
-      role="img"
-      aria-label="A cold email in which every factual claim carries a numbered footnote, with a sources block beneath showing the quote each one came from, and an approved stamp.">
-      <div className="src-bar" aria-hidden="true">
-        <span className="src-to">To</span> maria@meridianlogistics.com
-        <span className="src-tag">draft</span>
-      </div>
+    <div className="wired" ref={wrap}>
+      <svg className="wired-links" aria-hidden="true">
+        {paths.map((p, i) => (
+          <motion.path key={p.n} d={p.d} className={`wired-link t-${p.tone}`}
+            initial={reduce ? false : { pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ delay: reduce ? 0 : 0.9 + i * 0.35, duration: 0.7, ease: EASE }} />
+        ))}
+      </svg>
 
-      <div className="src-body" aria-hidden="true">
-        <motion.div className="src-subj" {...rise(0.15)}>Your new Dayton hub</motion.div>
-        <motion.p {...rise(0.3)}>
+      <motion.div className="wired-draft"
+        initial={reduce ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: EASE }}>
+        <div className="wired-k">Draft · Meridian Logistics</div>
+        <div className="wired-subj">Your new Dayton hub</div>
+        <p className="wired-body">
           Hi Maria — saw Meridian{' '}
-          <span className={`src-claim ${on === 1 ? 'on' : ''} ${shown(STAGE.VERIFY_1) ? 'ok' : ''}`}
-            onMouseEnter={() => setHeld(1)} onMouseLeave={() => setHeld(null)}>
-            opened a second distribution hub in Dayton<sup>1</sup>
+          <span className="mark m-violet" ref={(el) => { claims.current[1] = el }}>
+            opened a second distribution hub in Dayton
           </span>{' '}and that you&apos;re{' '}
-          <span className={`src-claim ${on === 2 ? 'on' : ''} ${shown(STAGE.VERIFY_2) ? 'ok' : ''}`}
-            onMouseEnter={() => setHeld(2)} onMouseLeave={() => setHeld(null)}>
-            hiring two operations coordinators<sup>2</sup>
+          <span className="mark m-teal" ref={(el) => { claims.current[2] = el }}>
+            hiring two operations coordinators
           </span>. Usually that means the paperwork volume jumped before the headcount did.
-        </motion.p>
-      </div>
-
-      <div className="src-foot" aria-hidden="true">
-        <div className="src-foot-k">
-          Sources
-          {!reduce && stage < STAGE.APPROVED && stage >= STAGE.BODY && (
-            <span className="src-checking">checking…</span>
-          )}
+        </p>
+        <div className="wired-actions">
+          <button className="btn wired-approve" type="button">Approve &amp; queue</button>
+          <button className="btn" type="button">Edit</button>
+          <span className="wired-note">sends from you · follows up until they reply</span>
         </div>
-        {/* Each source arrives only when its claim is verified — the reveal order is
-            the work being done, not a decorative stagger. */}
-        <div className="src-refs">
-          {CLAIMS.map((c) => {
-            const here = shown(c.n === 1 ? STAGE.VERIFY_1 : STAGE.VERIFY_2)
-            return (
-              <motion.div key={c.n} className={`src-ref ${on === c.n ? 'on' : ''}`}
-                onMouseEnter={() => setHeld(c.n)} onMouseLeave={() => setHeld(null)}
-                initial={reduce ? false : { opacity: 0, y: 8, height: 0 }}
-                animate={here ? { opacity: 1, y: 0, height: 'auto' } : { opacity: 0, y: 8, height: 0 }}
-                transition={{ duration: 0.45, ease: EASE }}>
-                <span className="src-num">{c.n}</span>
-                <div>
-                  <div className="src-where">{c.src}<span className="src-when">{c.when}</span></div>
-                  <div className="src-quote">{c.quote}</div>
-                </div>
-                <motion.span className="src-tick"
-                  initial={reduce ? false : { scale: 0, opacity: 0 }}
-                  animate={here ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
-                  transition={{ delay: here && !reduce ? 0.28 : 0, type: 'spring', stiffness: 520, damping: 17 }}>
-                  ✓
-                </motion.span>
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
-
-      <motion.div className="src-stamp" aria-hidden="true"
-        initial={reduce ? false : { opacity: 0 }}
-        animate={shown(STAGE.APPROVED) ? { opacity: 1 } : { opacity: 0 }}
-        transition={{ duration: 0.4, ease: EASE }}>
-        <motion.span className="src-approved"
-          initial={reduce ? false : { scale: 0.8, rotate: -4, opacity: 0 }}
-          animate={shown(STAGE.APPROVED) ? { scale: 1, rotate: 0, opacity: 1 } : { scale: 0.8, rotate: -4, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 15 }}>
-          Approved by you
-        </motion.span>
-        <span className="src-sent">sent from your mailbox · follows up until they reply</span>
       </motion.div>
-    </motion.div>
+
+      <div className="wired-sources">
+        {PAIRS.map((p, i) => (
+          <motion.div key={p.n} className={`wired-src t-${p.tone}`}
+            ref={(el) => { cards.current[p.n] = el }}
+            initial={reduce ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: reduce ? 0 : 1.05 + i * 0.35, duration: 0.5, ease: EASE }}>
+            <div className="wired-src-k">
+              Source {p.n} · {p.kind}<span className="wired-when">{p.when}</span>
+            </div>
+            <div className="wired-where">{p.where}</div>
+            <div className="wired-quote">{p.quote}</div>
+          </motion.div>
+        ))}
+        <motion.div className="wired-neg"
+          initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+          transition={{ delay: reduce ? 0 : 1.9, duration: 0.5 }}>
+          Anything we can’t source never reaches the draft.
+        </motion.div>
+      </div>
+    </div>
   )
 }
 
@@ -186,33 +144,24 @@ export default function Landing({ onLaunch }) {
       {/* hero: one contained panel in Knowella's login gradient — copy left,
           the live product window right, metrics as a frosted strip along the bottom */}
       <header className="lp-hero">
-        {/* Two columns: the argument on the left, the artefact proving it on the
-            right. Centred and stacked read as a template and left the page with no
-            focal point; side by side, the claim and its evidence are in the same
-            glance — which is the product's whole idea. */}
+        {/* Headline across the top, the proof beneath it — the layout the mockup
+            settled on. The evidence sits to the right of the draft with a line
+            drawn between each claim and its source, so the page argues by showing
+            the wiring rather than describing it. */}
         <div className="lp-hero-panel">
-          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-left">
-            <div className="lp-eyebrow-hero">No invented claims · nothing sends without you</div>
-            <h1>Every sentence in this email <span className="hl">has a source.</span></h1>
-            <p>We research each lead, cite what we find, and put the evidence beside the draft.
-              You approve it. Then it sends from your own mailbox and follows up until they reply.</p>
-
-            <div className="lp-cta lp-cta-hero">
-              <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
-              <a className="btn lg" href="#how">See how it works →</a>
-            </div>
-
-            {/* The four-number strip that was here said what the email now shows.
-                One quiet line instead, carrying what the artefact can't. */}
-            <p className="lp-hero-note">
-              Sends from your own mailboxes · Apollo, CSV or LinkedIn as the source ·
-              <b> no claim reaches a draft without a source behind it</b>
-            </p>
+          <motion.div className="lp-hero-head"
+            {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })}>
+            <div className="lp-eyebrow-hero">Research → Draft → Your approval</div>
+            <h1>The proof travels with the sentence.</h1>
           </motion.div>
 
-          <div className="lp-hero-right">
-            <SourcedEmail reduce={reduce} />
-          </div>
+          <WiredProof reduce={reduce} />
+
+          <motion.div className="lp-cta lp-cta-hero"
+            {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 1.6, duration: 0.5, ease: EASE } })}>
+            <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
+            <a className="btn lg" href="#how">See how it works →</a>
+          </motion.div>
         </div>
       </header>
 
