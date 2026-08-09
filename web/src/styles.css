@@ -1072,7 +1072,7 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   border: none; border-bottom: 1px solid var(--line);
   box-shadow: none;
   display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0;
-  padding: 72px max(52px, calc((100vw - 1180px) / 2)) 0;
+  padding: 72px max(52px, calc((100vw - 1180px) / 2)) 56px;   /* the metrics strip used to close this edge */
 }
 /* centered grid items size to fit-content — cap them so text wraps on small screens */
 .lp-hero-panel > * { max-width: 100%; min-width: 0;
@@ -1169,97 +1169,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
    works), yellow (you approve), teal (sent) — with one lead card traveling
    the line on a 16s pure-CSS loop. Base (non-animated) styles are the FINAL
    state, so reduced-motion and mobile show a complete, truthful still. */
-.pipe { position: relative; z-index: 1; width: min(880px, 100%); margin: 40px auto 30px; padding-top: 148px; }
-
-.pipe-track { position: relative; height: 14px; }
-.pipe-line { position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); background: var(--line-strong); border-radius: 99px; }
-.pipe-fill {
-  position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); border-radius: 99px;
-  background: linear-gradient(90deg, var(--petal-green) 12.5%, var(--petal-indigo) 37.5%, var(--petal-yellow) 62.5%, var(--petal-teal) 87.5%);
-  clip-path: inset(0 12.5% 0 0);
-  animation: pipe-fill 16s linear infinite;
-}
-@keyframes pipe-fill {
-  0%, 16%  { clip-path: inset(0 87.5% 0 0); }
-  26%, 41% { clip-path: inset(0 62.5% 0 0); }
-  51%, 66% { clip-path: inset(0 37.5% 0 0); }
-  76%, 100% { clip-path: inset(0 12.5% 0 0); }
-}
-.pnode { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line-strong); }
-.pnode.n1 { left: 12.5%; background: var(--petal-green); }
-.pnode.n2 { left: 37.5%; background: var(--petal-indigo); animation: pipe-n2 16s linear infinite; }
-.pnode.n3 { left: 62.5%; background: var(--petal-yellow); animation: pipe-n3 16s linear infinite; }
-.pnode.n4 { left: 87.5%; background: var(--petal-teal); animation: pipe-n4 16s linear infinite; }
-@keyframes pipe-n2 { 0%, 25% { background: var(--line-strong); } 27% { transform: translate(-50%, -50%) scale(1.5); } 29%, 100% { background: var(--petal-indigo); transform: translate(-50%, -50%) scale(1); } }
-@keyframes pipe-n3 { 0%, 50% { background: var(--line-strong); } 52% { transform: translate(-50%, -50%) scale(1.5); } 54%, 100% { background: var(--petal-yellow); transform: translate(-50%, -50%) scale(1); } }
-@keyframes pipe-n4 { 0%, 75% { background: var(--line-strong); } 77% { transform: translate(-50%, -50%) scale(1.5); } 79%, 100% { background: var(--petal-teal); transform: translate(-50%, -50%) scale(1); } }
-
-.pipe-labels { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 14px; text-align: center; }
-.pipe-labels b { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); }
-.pipe-labels span { font-size: 11px; color: var(--faint); }
-
-/* the traveling lead card — stacked state layers crossfade at each petal */
-.pipe-card {
-  position: absolute; top: 0; left: 87.5%; transform: translateX(-50%);
-  display: grid; width: 300px; min-height: 118px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: var(--shadow-pop); padding: 13px 15px;
-  animation: pipe-travel 16s ease-in-out infinite;
-}
-.pipe-card::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-@keyframes pipe-travel {
-  0% { left: 12.5%; opacity: 0; }
-  2%, 16% { left: 12.5%; opacity: 1; }
-  26%, 41% { left: 37.5%; opacity: 1; }
-  51%, 66% { left: 62.5%; opacity: 1; }
-  76%, 96% { left: 87.5%; opacity: 1; }
-  99%, 100% { left: 87.5%; opacity: 0; }
-}
-.pl { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 8px; opacity: 0; }
-.pl1 { animation: pipe-l1 16s linear infinite; }
-.pl2 { animation: pipe-l2 16s linear infinite; }
-.pl3 { animation: pipe-l3 16s linear infinite; }
-.pl4 { opacity: 1; animation: pipe-l4 16s linear infinite; }
-@keyframes pipe-l1 { 0%, 18% { opacity: 1; } 23%, 100% { opacity: 0; } }
-@keyframes pipe-l2 { 0%, 24% { opacity: 0; } 28%, 43% { opacity: 1; } 48%, 100% { opacity: 0; } }
-@keyframes pipe-l3 { 0%, 49% { opacity: 0; } 53%, 68% { opacity: 1; } 73%, 100% { opacity: 0; } }
-@keyframes pipe-l4 { 0%, 74% { opacity: 0; } 78%, 97% { opacity: 1; } 100% { opacity: 0; } }
-
-.pl-top { display: flex; align-items: center; gap: 10px; text-align: left; }
-.pl-av { width: 32px; height: 32px; border-radius: 50%; background: #e5f6de; color: #3e8a2e; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; flex: none; }
-.pl-top b { display: block; font-size: 13.5px; color: var(--ink); line-height: 1.2; }
-.pl-top span { font-size: 11.5px; color: var(--muted); }
-.pl-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 10.5px; color: var(--faint); text-align: left; }
-.pl-chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.pl-chip.green { background: #e5f6de; color: #3e8a2e; }
-.pl-chip.indigo { background: var(--signal-pill); color: var(--petal-indigo); }
-.pl-chip.teal { background: #04b49229; color: #005343; }
-.pl-fact { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--text-2); text-align: left; }
-.pl-fact i { font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--petal-indigo); }
-.pl-fact em { font-style: normal; color: var(--verify); margin-left: auto; }
-.pl-subj { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
-.pl-body { font-size: 12px; color: var(--muted); line-height: 1.5; text-align: left; }
-.pl-stamp {
-  position: absolute; right: 12px; bottom: 10px; transform: rotate(-6deg);
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em;
-  color: var(--verify); border: 2px solid var(--verify); border-radius: 4px; padding: 2px 8px;
-  animation: pipe-stamp 16s linear infinite;
-}
-@keyframes pipe-stamp {
-  0%, 55% { opacity: 0; transform: rotate(-6deg) scale(1.6); }
-  58%, 100% { opacity: 1; transform: rotate(-6deg) scale(1); }
-}
-.pl-sent { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--verify); text-align: left; }
-.pl-sent em { font-style: normal; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #04b49229; }
-
-@media (prefers-reduced-motion: reduce) {
-  .pipe *, .pipe { animation: none !important; }   /* statics = the final state */
-}
-@media (max-width: 720px) {
-  .pipe { padding-top: 0; margin-top: 26px; }
-  .pipe-card { display: none; }                    /* the track + labels tell the story */
-  .pipe-labels { grid-template-columns: repeat(2, 1fr); gap: 12px 8px; }
-}
 
 .lp-section { padding: 96px 0; }
 .lp-section.alt { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -1325,18 +1234,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 /* metric strip under the window (the reference's logo-strip slot) */
 /* Metrics: a frosted strip bleeding to the panel's edges — part of the hero,
    not four cards floating in dead space. */
-.lp-metrics {
-  position: relative; z-index: 1; grid-column: 1 / -1; justify-self: stretch; display: flex; flex-wrap: wrap;
-  max-width: none;   /* exempt from the panel child cap so it bleeds edge-to-edge */
-  margin: 30px calc(-1 * max(52px, (100vw - 1180px) / 2)) 0;
-  padding: 20px max(40px, calc((100vw - 1180px) / 2));
-  background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.9);
-}
-.lp-metrics > div { flex: 1; min-width: 150px; text-align: center; padding: 2px 12px; }
-.lp-metrics > div + div { border-left: 1px solid rgba(36, 42, 50, 0.1); }
-.lp-metrics b { display: block; font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; color: var(--signal-deep); line-height: 1.15; }
-.lp-metrics span { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
 
 /* alternating feature rows with product crops */
 .lp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 44px 0; }
@@ -1372,9 +1269,7 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 
 @media (max-width: 880px) {
   .lp-hero { padding: 0; }
-  .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 44px 24px 0; gap: 32px; }
-  .lp-metrics { margin: 18px -24px 0; padding: 16px 12px; }
-  .lp-metrics > div + div { border-left: none; }
+  .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 44px 24px 36px; gap: 32px; }
   .lp-steps { grid-template-columns: 1fr; }
   .lp-step + .lp-step { border-left: none; border-top: 1px solid var(--line); }
   .lp-features, .lp-quotes, .lp-foot, .lp-foot-cols { grid-template-columns: 1fr; }
@@ -1700,3 +1595,91 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
    separate tab that repeated the whole table. */
 .cit-camp { font-size: 11.5px; color: var(--verify); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cit-camp.none { color: var(--caution); }
+
+/* ============================================================
+   Hero signature — THE SOURCED EMAIL.
+   The page's claim is "every sentence has a source", so the hero is the artefact
+   making that true rather than a diagram of the process that produces it. It reads
+   as a document: hairlines, a numbered apparatus, quotes set apart. Teal is the
+   check colour because teal already means verified everywhere else in this system.
+   ============================================================ */
+.src-doc {
+  position: relative; z-index: 1; width: min(680px, 100%); margin: 38px auto 4px;
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg); overflow: hidden; text-align: left;
+}
+.src-bar {
+  display: flex; align-items: center; gap: 8px; padding: 11px 18px;
+  border-bottom: 1px solid var(--line); background: var(--bg);
+  font-size: 12.5px; color: var(--text-2);
+}
+.src-to {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--faint);
+}
+.src-tag {
+  margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--signal); background: var(--signal-pill);
+  border-radius: 999px; padding: 3px 10px;
+}
+.src-body { padding: 20px 22px 18px; }
+.src-subj {
+  font-family: var(--font-display); font-size: 17px; font-weight: 700;
+  letter-spacing: -0.01em; margin-bottom: 10px;
+}
+.src-body p { font-size: 14.5px; line-height: 1.75; color: var(--text-2); margin: 0; }
+
+/* A claim and its source are one object; hovering either lifts both. */
+.src-claim {
+  border-bottom: 1.5px solid var(--signal-line); border-radius: 2px;
+  padding: 1px 2px; margin: 0 -2px; cursor: default;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.src-claim sup {
+  font-size: 9.5px; font-weight: 800; color: var(--signal);
+  margin-left: 2px; vertical-align: super;
+}
+.src-claim.on { background: var(--signal-pill); border-color: var(--signal); }
+
+.src-foot { padding: 0 22px 16px; }
+.src-foot-k {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); padding: 12px 0 9px; border-top: 1px solid var(--line);
+}
+.src-ref {
+  display: grid; grid-template-columns: 20px 1fr 18px; gap: 10px; align-items: start;
+  padding: 8px 9px; border-radius: 8px; border: 1px solid transparent;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.src-ref.on { background: var(--signal-tint); border-color: var(--signal-line); }
+.src-num {
+  font-size: 10.5px; font-weight: 800; color: var(--signal); text-align: center;
+  line-height: 1.6;
+}
+.src-where { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.src-when { font-size: 11px; font-weight: 500; color: var(--faint); margin-left: 8px; }
+.src-quote { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin-top: 2px; }
+.src-tick { color: var(--verify); font-size: 13px; font-weight: 700; line-height: 1.4; }
+
+.src-stamp {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 22px; border-top: 1px solid var(--line); background: var(--verify-tint);
+}
+.src-approved {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #0b6b58; border: 1.5px solid rgba(4, 180, 146, 0.45);
+  border-radius: 5px; padding: 4px 10px;
+}
+.src-sent { font-size: 12px; color: #0b6b58; }
+
+.lp-hero-note {
+  position: relative; z-index: 1; text-align: center; font-size: 12.5px;
+  color: var(--muted); margin: 22px auto 0; max-width: 46em; line-height: 1.7;
+}
+.lp-hero-note b { color: var(--text-2); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .src-body, .src-foot, .src-stamp { padding-left: 15px; padding-right: 15px; }
+  .src-ref { grid-template-columns: 18px 1fr 16px; gap: 8px; }
+  .src-doc { margin-top: 28px; }
+}

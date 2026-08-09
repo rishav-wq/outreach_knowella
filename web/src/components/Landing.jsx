@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
 import Logo from './Logo'
@@ -14,47 +15,105 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// Hero signature: THE PINWHEEL PIPELINE. The four petals of the logo become the
-// lifecycle itself — green (lead in), indigo (the AI researches + drafts),
-// yellow (you approve), teal (sent) — and one lead card travels the line,
-// changing state at every petal. Pure CSS timeline (16s loop) so it runs
-// forever at zero cost; the non-animated default IS the final state, which is
-// exactly what prefers-reduced-motion and small screens show.
-function PipelineHero() {
+// Hero signature: THE SOURCED EMAIL.
+//
+// The old hero diagrammed the process — four dots, four labels, a card that
+// changed state. Every outreach tool on the internet has that. But the thing
+// nobody else can put on a page is the ARTEFACT: a cold email whose every factual
+// claim carries a footnote, and a sources block underneath where each one resolves
+// to a quote. That is the whole product, and showing it argues better than any
+// adjective. It also speaks the customer's own language — safety directors live in
+// citations, standard references and audit trails.
+//
+// Claim and evidence are linked: hover a marker and its source lifts. Left alone,
+// it cycles slowly so the connection is visible without anyone touching anything.
+// Teal is the check colour because in this design system teal means verified;
+// nothing here is decorative.
+const CLAIMS = [
+  {
+    n: 1,
+    text: 'opened a second distribution hub in Dayton',
+    src: 'meridianlogistics.com/news',
+    quote: '“…our second Dayton hub is now operational.”',
+    when: '11 days ago',
+  },
+  {
+    n: 2,
+    text: 'hiring two operations coordinators',
+    src: 'Apollo · 2 open roles',
+    quote: '“Operations Coordinator” ×2, posted this month',
+    when: '4 days ago',
+  },
+]
+
+function SourcedEmail({ reduce }) {
+  const [live, setLive] = useState(1)
+  const [held, setHeld] = useState(null)
+  useEffect(() => {
+    if (reduce) return
+    const t = setInterval(() => setLive((n) => (n === 1 ? 2 : 1)), 3200)
+    return () => clearInterval(t)
+  }, [reduce])
+  const on = held ?? live
+
+  const rise = (delay) => (reduce ? {} : {
+    initial: { opacity: 0, y: 10 },
+    animate: { opacity: 1, y: 0 },
+    transition: { delay, duration: 0.5, ease: EASE },
+  })
+
   return (
-    <div className="pipe" role="img"
-      aria-label="A lead travels the pipeline: pulled in, researched and drafted by the AI with quote-verified claims, approved by you, then sent with automatic follow-ups.">
-      <div className="pipe-card" aria-hidden="true">
-        <div className="pl pl1">
-          <div className="pl-top"><span className="pl-av">MC</span><div><b>Maria Chen</b><span>VP Operations · Meridian Logistics</span></div></div>
-          <div className="pl-foot"><span className="pl-chip green">new lead</span><span>pulled from Apollo</span></div>
-        </div>
-        <div className="pl pl2">
-          <div className="pl-fact"><i>[1]</i> opened a second Dayton hub <em>✓</em></div>
-          <div className="pl-fact"><i>[2]</i> hiring 2 ops coordinators <em>✓</em></div>
-          <div className="pl-foot"><span className="pl-chip indigo">draft written</span><span>every claim sourced</span></div>
-        </div>
-        <div className="pl pl3">
-          <div className="pl-subj">Your new Dayton hub</div>
-          <div className="pl-body">Hi Maria — saw that Meridian opened a second distribution hub…</div>
-          <span className="pl-stamp">approved</span>
-        </div>
-        <div className="pl pl4">
-          <div className="pl-sent"><em>✓</em> Sent</div>
-          <div className="pl-foot"><span className="pl-chip teal">via your mailbox</span><span>follow-ups armed · exits on reply</span></div>
-        </div>
+    <motion.div className="src-doc" {...(reduce ? {} : {
+      initial: { opacity: 0, y: 22 }, animate: { opacity: 1, y: 0 },
+      transition: { duration: 0.6, ease: EASE },
+    })}
+      role="img"
+      aria-label="A cold email in which every factual claim carries a numbered footnote, with a sources block beneath showing the quote each one came from, and an approved stamp.">
+      <div className="src-bar" aria-hidden="true">
+        <span className="src-to">To</span> maria@meridianlogistics.com
+        <span className="src-tag">draft</span>
       </div>
-      <div className="pipe-track" aria-hidden="true">
-        <i className="pipe-line" /><i className="pipe-fill" />
-        <span className="pnode n1" /><span className="pnode n2" /><span className="pnode n3" /><span className="pnode n4" />
+
+      <div className="src-body" aria-hidden="true">
+        <motion.div className="src-subj" {...rise(0.15)}>Your new Dayton hub</motion.div>
+        <motion.p {...rise(0.25)}>
+          Hi Maria — saw Meridian{' '}
+          <span className={`src-claim ${on === 1 ? 'on' : ''}`}
+            onMouseEnter={() => setHeld(1)} onMouseLeave={() => setHeld(null)}>
+            opened a second distribution hub in Dayton<sup>1</sup>
+          </span>{' '}and that you&apos;re{' '}
+          <span className={`src-claim ${on === 2 ? 'on' : ''}`}
+            onMouseEnter={() => setHeld(2)} onMouseLeave={() => setHeld(null)}>
+            hiring two operations coordinators<sup>2</sup>
+          </span>. Usually that means the paperwork volume jumped before the headcount did.
+        </motion.p>
       </div>
-      <div className="pipe-labels" aria-hidden="true">
-        <div><b>Lead pulled</b><span>Apollo · CSV · LinkedIn</span></div>
-        <div><b>AI researches &amp; drafts</b><span>claims quote-verified</span></div>
-        <div><b>You approve</b><span>nothing sends without you</span></div>
-        <div><b>Sent</b><span>follow-ups until reply</span></div>
-      </div>
-    </div>
+
+      <motion.div className="src-foot" {...rise(0.45)} aria-hidden="true">
+        <div className="src-foot-k">Sources</div>
+        {CLAIMS.map((c, i) => (
+          <motion.div key={c.n} className={`src-ref ${on === c.n ? 'on' : ''}`}
+            onMouseEnter={() => setHeld(c.n)} onMouseLeave={() => setHeld(null)}
+            {...rise(0.55 + i * 0.12)}>
+            <span className="src-num">{c.n}</span>
+            <div>
+              <div className="src-where">{c.src}<span className="src-when">{c.when}</span></div>
+              <div className="src-quote">{c.quote}</div>
+            </div>
+            <span className="src-tick">✓</span>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      <motion.div className="src-stamp" aria-hidden="true"
+        {...(reduce ? {} : {
+          initial: { opacity: 0, scale: 0.94 }, animate: { opacity: 1, scale: 1 },
+          transition: { delay: 0.95, duration: 0.45, ease: EASE },
+        })}>
+        <span className="src-approved">Approved by you</span>
+        <span className="src-sent">sent from your mailbox · follows up until they reply</span>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -85,24 +144,26 @@ export default function Landing({ onLaunch }) {
       <header className="lp-hero">
         <div className="lp-hero-panel">
           <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-text">
-            <div className="lp-eyebrow-hero">Every claim traced to a real source</div>
-            <h1>Cold outreach that&apos;s researched, <span className="hl">not&nbsp;guessed</span>.</h1>
-            <p>Every lead researched against real sources. Every claim quote-verified. Every send approved by you — then followed up automatically until they reply.</p>
+            <div className="lp-eyebrow-hero">No invented claims · nothing sends without you</div>
+            <h1>Every sentence in this email<br /><span className="hl">has a source.</span></h1>
+            <p>We research each lead, cite what we find, and put the evidence beside the draft.
+              You approve it. Then it sends from your own mailbox and follows up until they reply.</p>
           </motion.div>
 
-          <PipelineHero />
+          <SourcedEmail reduce={reduce} />
 
           <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.45, duration: 0.5, ease: EASE } })} className="lp-cta lp-cta-hero">
             <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
             <a className="btn lg" href="#how">See how it works →</a>
           </motion.div>
 
-          <motion.div {...fade} className="lp-metrics">
-            <div><b>12+</b><span>verified facts per lead</span></div>
-            <div><b>3</b><span>touches per lead, auto-sent</span></div>
-            <div><b>100%</b><span>human-approved sends</span></div>
-            <div><b>0</b><span>made-up claims</span></div>
-          </motion.div>
+          {/* The four-number strip that was here said what the email above now
+              shows. One quiet line instead, carrying the thing the artefact can't:
+              it runs on your own mailboxes, not a shared sending pool. */}
+          <motion.p {...fade} className="lp-hero-note">
+            Sends from your own mailboxes · Apollo, CSV or LinkedIn as the source ·
+            <b> no claim reaches a draft without a source behind it</b>
+          </motion.p>
         </div>
       </header>
 
