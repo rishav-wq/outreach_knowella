@@ -142,28 +142,33 @@ export default function Landing({ onLaunch }) {
       {/* hero: one contained panel in Knowella's login gradient — copy left,
           the live product window right, metrics as a frosted strip along the bottom */}
       <header className="lp-hero">
+        {/* Two columns: the argument on the left, the artefact proving it on the
+            right. Centred and stacked read as a template and left the page with no
+            focal point; side by side, the claim and its evidence are in the same
+            glance — which is the product's whole idea. */}
         <div className="lp-hero-panel">
-          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-text">
+          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })} className="lp-hero-left">
             <div className="lp-eyebrow-hero">No invented claims · nothing sends without you</div>
-            <h1>Every sentence in this email<br /><span className="hl">has a source.</span></h1>
+            <h1>Every sentence in this email <span className="hl">has a source.</span></h1>
             <p>We research each lead, cite what we find, and put the evidence beside the draft.
               You approve it. Then it sends from your own mailbox and follows up until they reply.</p>
+
+            <div className="lp-cta lp-cta-hero">
+              <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
+              <a className="btn lg" href="#how">See how it works →</a>
+            </div>
+
+            {/* The four-number strip that was here said what the email now shows.
+                One quiet line instead, carrying what the artefact can't. */}
+            <p className="lp-hero-note">
+              Sends from your own mailboxes · Apollo, CSV or LinkedIn as the source ·
+              <b> no claim reaches a draft without a source behind it</b>
+            </p>
           </motion.div>
 
-          <SourcedEmail reduce={reduce} />
-
-          <motion.div {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.45, duration: 0.5, ease: EASE } })} className="lp-cta lp-cta-hero">
-            <button className="btn primary lg" onClick={onLaunch}>Open dashboard</button>
-            <a className="btn lg" href="#how">See how it works →</a>
-          </motion.div>
-
-          {/* The four-number strip that was here said what the email above now
-              shows. One quiet line instead, carrying the thing the artefact can't:
-              it runs on your own mailboxes, not a shared sending pool. */}
-          <motion.p {...fade} className="lp-hero-note">
-            Sends from your own mailboxes · Apollo, CSV or LinkedIn as the source ·
-            <b> no claim reaches a draft without a source behind it</b>
-          </motion.p>
+          <div className="lp-hero-right">
+            <SourcedEmail reduce={reduce} />
+          </div>
         </div>
       </header>
 

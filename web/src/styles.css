@@ -1685,60 +1685,46 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 }
 
 /* ============================================================
-   Hero, second pass — EVIDENCE UNDER A LIGHT.
-   The first version was one centred column of pale-on-pale: nowhere for the eye
-   to go. Dark field, one lit document. That isn't dark-mode-for-its-own-sake — it
-   is the visual language of examination, which is exactly what the product does to
-   a cold email, and it makes the artefact the only bright object on the screen.
-   The ruled grid behind it is ledger paper, the vernacular of an audit.
+   Hero, final shape — ARGUMENT LEFT, EVIDENCE RIGHT.
+   Centred and stacked read as a template and gave the eye nowhere to settle; the
+   dark experiment fixed contrast but lost the brand. This keeps Knowella's own
+   login gradient and gets its focal point from asymmetry instead: the claim on
+   the left, the document proving it on the right, both in one glance — which is
+   literally what the product does.
    ============================================================ */
-.lp-nav { background: rgba(16, 19, 26, 0.82); border-bottom-color: rgba(255, 255, 255, 0.09); }
-.lp-nav .lp-logo { color: #fff; }
-.lp-nav .lp-logo .muted { color: rgba(255, 255, 255, 0.55); }
-.lp-links a { color: rgba(255, 255, 255, 0.66); }
-.lp-links a:hover { color: #fff; }
-
 .lp-hero-panel {
-  background: #10131a;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 76px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  justify-items: stretch; align-items: center; gap: 48px;
+  padding: 64px max(52px, calc((100vw - 1240px) / 2)) 68px;
 }
-/* ledger ruling + a pool of light behind the document */
-.lp-hero-panel::before {
-  /* the original was a white glow sized 62% x 110% and pinned top-right; reset the
-     box explicitly or those survive the override and the ruling covers a corner */
-  content: ''; position: absolute; inset: 0; width: auto; height: auto;
-  opacity: 1; pointer-events: none;
-  background:
-    radial-gradient(120% 80% at 50% 28%, rgba(110, 99, 255, 0.20) 0%, rgba(16, 19, 26, 0) 62%),
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 100% 34px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 34px 100%;
+.lp-hero-left {
+  position: relative; z-index: 1; text-align: left;
+  display: flex; flex-direction: column; align-items: flex-start; max-width: 34em;
 }
+.lp-hero-right { position: relative; z-index: 1; min-width: 0; }
 
-.lp-eyebrow-hero { color: #2fd9b8; letter-spacing: 0.18em; }
-.lp-hero h1 {
-  font-size: clamp(40px, 5.4vw, 72px); font-weight: 800; letter-spacing: -0.045em;
-  line-height: 1.02; color: #fff;
+.lp-hero .lp-hero-left h1 {
+  font-size: clamp(36px, 4.2vw, 56px); font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1.04; margin: 0;
 }
-.lp-hero h1 .hl { background: linear-gradient(100deg, #8f86ff 8%, #2fd9b8 92%); -webkit-background-clip: text; background-clip: text; }
-.lp-hero p { color: rgba(255, 255, 255, 0.62); font-size: 17px; max-width: 30em; }
-.lp-hero-note { color: rgba(255, 255, 255, 0.42); }
-.lp-hero-note b { color: rgba(255, 255, 255, 0.78); }
+.lp-hero .lp-hero-left p { font-size: 16px; margin: 18px 0 0; max-width: 30em; }
+.lp-eyebrow-hero { margin-bottom: 16px; }
+.lp-hero-left .lp-cta-hero { justify-content: flex-start; margin-top: 26px; padding-bottom: 0; }
+.lp-hero-left .lp-hero-note { text-align: left; margin: 20px 0 0; max-width: 33em; }
 
-/* the document is the only lit thing on the page */
-.src-doc {
-  width: min(720px, 100%); margin-top: 46px;
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 40px 90px -30px rgba(0, 0, 0, 0.75);
-}
-.lp-cta-hero { margin-top: 30px; }
-.lp-cta-hero .btn:not(.primary) {
-  background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.18); color: #fff;
-}
-.lp-cta-hero .btn:not(.primary):hover { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.3); }
+/* The document carries its own type scale; the hero's paragraph rule must not
+   reach inside it. Both selectors are (0,1,1), so without this the later one
+   silently repainted the email body — which is exactly what happened. */
+.lp-hero .src-doc { margin: 0; width: 100%; }
+.lp-hero .src-doc p { color: var(--text-2); font-size: 14.5px; line-height: 1.75; max-width: none; }
 
-@media (max-width: 640px) {
-  .lp-hero h1 { font-size: clamp(32px, 9vw, 44px); }
-  .src-doc { margin-top: 30px; }
-  .lp-hero-panel { padding-bottom: 48px; }
+@media (max-width: 980px) {
+  .lp-hero-panel {
+    grid-template-columns: minmax(0, 1fr); gap: 34px; padding: 48px 24px 52px;
+    justify-items: center;
+  }
+  .lp-hero-left { align-items: center; text-align: center; max-width: 40em; }
+  .lp-hero-left .lp-cta-hero { justify-content: center; }
+  .lp-hero-left .lp-hero-note { text-align: center; }
+  .lp-hero-right { width: min(660px, 100%); }
 }
