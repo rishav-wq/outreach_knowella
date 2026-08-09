@@ -1683,3 +1683,62 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .src-ref { grid-template-columns: 18px 1fr 16px; gap: 8px; }
   .src-doc { margin-top: 28px; }
 }
+
+/* ============================================================
+   Hero, second pass — EVIDENCE UNDER A LIGHT.
+   The first version was one centred column of pale-on-pale: nowhere for the eye
+   to go. Dark field, one lit document. That isn't dark-mode-for-its-own-sake — it
+   is the visual language of examination, which is exactly what the product does to
+   a cold email, and it makes the artefact the only bright object on the screen.
+   The ruled grid behind it is ledger paper, the vernacular of an audit.
+   ============================================================ */
+.lp-nav { background: rgba(16, 19, 26, 0.82); border-bottom-color: rgba(255, 255, 255, 0.09); }
+.lp-nav .lp-logo { color: #fff; }
+.lp-nav .lp-logo .muted { color: rgba(255, 255, 255, 0.55); }
+.lp-links a { color: rgba(255, 255, 255, 0.66); }
+.lp-links a:hover { color: #fff; }
+
+.lp-hero-panel {
+  background: #10131a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 76px;
+}
+/* ledger ruling + a pool of light behind the document */
+.lp-hero-panel::before {
+  /* the original was a white glow sized 62% x 110% and pinned top-right; reset the
+     box explicitly or those survive the override and the ruling covers a corner */
+  content: ''; position: absolute; inset: 0; width: auto; height: auto;
+  opacity: 1; pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 28%, rgba(110, 99, 255, 0.20) 0%, rgba(16, 19, 26, 0) 62%),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 100% 34px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 34px 100%;
+}
+
+.lp-eyebrow-hero { color: #2fd9b8; letter-spacing: 0.18em; }
+.lp-hero h1 {
+  font-size: clamp(40px, 5.4vw, 72px); font-weight: 800; letter-spacing: -0.045em;
+  line-height: 1.02; color: #fff;
+}
+.lp-hero h1 .hl { background: linear-gradient(100deg, #8f86ff 8%, #2fd9b8 92%); -webkit-background-clip: text; background-clip: text; }
+.lp-hero p { color: rgba(255, 255, 255, 0.62); font-size: 17px; max-width: 30em; }
+.lp-hero-note { color: rgba(255, 255, 255, 0.42); }
+.lp-hero-note b { color: rgba(255, 255, 255, 0.78); }
+
+/* the document is the only lit thing on the page */
+.src-doc {
+  width: min(720px, 100%); margin-top: 46px;
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 40px 90px -30px rgba(0, 0, 0, 0.75);
+}
+.lp-cta-hero { margin-top: 30px; }
+.lp-cta-hero .btn:not(.primary) {
+  background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.18); color: #fff;
+}
+.lp-cta-hero .btn:not(.primary):hover { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.3); }
+
+@media (max-width: 640px) {
+  .lp-hero h1 { font-size: clamp(32px, 9vw, 44px); }
+  .src-doc { margin-top: 30px; }
+  .lp-hero-panel { padding-bottom: 48px; }
+}
