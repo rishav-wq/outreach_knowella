@@ -60,8 +60,13 @@ export default function Marketing() {
 
   const startNew = () => { setDraft(EMPTY); setDraftId(null); setMsg(null); setTestTo(''); setView('edit') }
   const startEdit = (b) => {
-    setDraft({ name: b.name, subject: b.subject, body: b.body,
-               audience: { topics: [], statuses: [], exclude_sent: true, ...b.audience } })
+    // publication_id was missing here, so reopening a draft silently turned it into a
+    // one-off: no issue number, no per-publication From, and drafting disabled because
+    // nothing said what the issue may claim. Spread EMPTY so a new audience field added
+    // later can't go missing the same way.
+    setDraft({ ...EMPTY, name: b.name, subject: b.subject, body: b.body,
+               publication_id: b.publication_id || '',
+               audience: { ...EMPTY.audience, ...b.audience } })
     setDraftId(b.id); setMsg(null); setView('edit')
   }
   const toggleTopic = (t) => setDraft((d) => ({ ...d, audience: { ...d.audience,
@@ -173,11 +178,18 @@ export default function Marketing() {
       <b>Marketing can't send yet</b> — {unwired}. Add it to the server's <code>.env</code> and
       restart. Drafts still save; nothing leaves, including tests.
     </div>
-  ) : conn?.connected && conn.unsub_synced === false ? (
+  ) : conn?.connected && conn.events === 'no_webhook' ? (
     <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
-      <b>Unsubscribes won't reach this app</b> — Postmark has no SubscriptionChange
-      webhook on the <code>{conn.stream}</code> stream. It will still stop the newsletter,
-      but someone who opts out keeps getting cold sales mail until you add the webhook.
+      <b>Postmark's events won't reach this app</b> — no webhook on the{' '}
+      <code>{conn.stream}</code> stream. Opens, clicks and bounces go unrecorded, and
+      someone who unsubscribes keeps getting cold sales mail.
+    </div>
+  ) : conn?.connected && conn.events === 'token_mismatch' ? (
+    <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
+      <b>Postmark's events are being rejected</b> — the webhook is registered, but the{' '}
+      <code>token</code> in its URL doesn't match <code>POSTMARK_WEBHOOK_TOKEN</code> here,
+      so every event is answered 401 and dropped. Stats stay at zero and unsubscribes
+      never reach the do-not-contact list. Make the two match.
     </div>
   ) : null
 

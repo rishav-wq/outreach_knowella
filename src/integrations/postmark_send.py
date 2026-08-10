@@ -19,6 +19,7 @@ dumb, excellent pipe, same philosophy as the rest of the app.
 from __future__ import annotations
 
 import os
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -65,16 +66,22 @@ def _hdr() -> dict:
     }
 
 
-def unsubscribes_reach_us(stream: str = "broadcast") -> bool | None:
-    """Is a SubscriptionChange webhook registered for the broadcast stream?
+def events_reach_us(stream: str = "broadcast") -> str | None:
+    """Will Postmark's events actually land in this app? 'ok', or why not.
 
     The newsletter's unsubscribe link is Postmark's, so Postmark suppresses the
     address on its own stream immediately. Our database only finds out through
     this webhook — and without it someone who unsubscribes from the newsletter
     keeps receiving cold sales mail, which is the failure that gets a domain
-    blocklisted. Worth checking rather than assuming.
+    blocklisted.
 
-    None means we couldn't tell (no token, API down) — never treat that as ok.
+    Checking only that a webhook EXISTS is not enough, and that mistake was live:
+    a webhook was registered with every trigger enabled while its URL carried a
+    token our endpoint rejected, so months of deliveries, opens, bounces and one
+    real unsubscribe were answered 401 and dropped. A green light on 'registered'
+    is worse than no light at all, so the token is compared too.
+
+    None means we couldn't tell (no key, API down) — never treat that as ok.
     """
     if not has_key():
         return None
@@ -83,10 +90,20 @@ def unsubscribes_reach_us(stream: str = "broadcast") -> bool | None:
                       headers=_hdr(), timeout=8.0)
         if r.status_code >= 400:
             return None
-        return any((w.get("Triggers") or {}).get("SubscriptionChange", {}).get("Enabled")
-                   for w in r.json().get("Webhooks") or [])
+        hooks = [w for w in r.json().get("Webhooks") or []
+                 if (w.get("Triggers") or {}).get("SubscriptionChange", {}).get("Enabled")]
     except Exception:
         return None
+    if not hooks:
+        return "no_webhook"
+    want = os.environ.get("POSTMARK_WEBHOOK_TOKEN", "")
+    if not want:
+        return "ok"          # endpoint accepts anything; loud about it in its own log
+    for w in hooks:
+        sent = parse_qs(urlparse(w.get("Url") or "").query).get("token", [""])[0]
+        if sent == want:
+            return "ok"
+    return "token_mismatch"
 
 
 def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:
