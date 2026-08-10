@@ -90,10 +90,31 @@ _LINK_NOISE = re.compile(
     r"manage.{0,12}notification|opt.?out)", re.I)
 
 
-def platform_of(sender: str) -> str:
+# Signals arrive by forwarded mail, and Outlook's "forward" action replaces the
+# envelope sender with the forwarding mailbox — which files an F5Bot digest under
+# 'other' and stops it being split, turning eight Reddit finds into one signal
+# titled "Fwd: F5Bot Alert". Silent, and exactly the failure the digest split
+# exists to prevent. The original sender survives in the forwarded body, so we look
+# there before giving up. Only unambiguous needles: a body mentioning 'google.com'
+# is not a Google Alert, whereas one mentioning 'f5bot.com' is an F5Bot digest.
+_FWD_HINTS = (
+    ("f5bot", "f5bot.com"),
+    ("google_alert", "googlealerts-noreply@google.com"),
+    ("linkedin", "notifications-noreply@linkedin.com"),
+    ("g2", "@g2.com"),
+    ("capterra", "@capterra.com"),
+    ("trustpilot", "@trustpilot.com"),
+)
+
+
+def platform_of(sender: str, subject: str = "", body: str = "") -> str:
     s = (sender or "").lower()
     for name, needles in _SENDERS:
         if any(n in s for n in needles):
+            return name
+    hay = f"{subject} {body}".lower()[:4000]
+    for name, needle in _FWD_HINTS:
+        if needle in hay:
             return name
     return "other"
 
@@ -173,7 +194,7 @@ def parse_email(sender: str, subject: str, text: str, html_body: str = "") -> di
     for a human to act on and enough for us to write a parser later."""
     subject = (subject or "").strip()
     body = _strip_html(text or "") or _strip_html(html_body or "")
-    platform = platform_of(sender)
+    platform = platform_of(sender, subject, body)
     person, kind, title = "", "mention", subject
 
     if platform == "linkedin":
@@ -209,7 +230,7 @@ def parse_inbound(sender: str, subject: str, text: str, html_body: str = "") -> 
     Returning a list lets a digest become eight signals instead of one, and a digest
     we fail to split still degrades to the single-signal path rather than vanishing.
     """
-    platform = platform_of(sender)
+    platform = platform_of(sender, subject, f"{text or ''} {html_body or ''}")
     if platform in _DIGEST:
         items = _digest_items(platform, subject, text, html_body)
         if items:
