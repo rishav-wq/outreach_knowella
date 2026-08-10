@@ -1515,6 +1515,14 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 }
 .sig-dormant .dot { margin-top: 6px; flex-shrink: 0; }
 .sig-dormant b { color: var(--text-2); }
+/* The waiting registers, collected below the ones with something in them. A rule
+   above them says "these exist and are quiet" without another heading doing it. */
+.sig-quiet {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line);
+}
+.sig-quiet .sig-dormant { padding: 9px 12px; }
+.sig-dormant-n { color: var(--text) !important; }
 
 /* Citations as a dashboard. Fit leads and penalty is a column, because reading the
    releases showed the biggest fine is usually the worst lead — a willful citation

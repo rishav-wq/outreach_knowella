@@ -175,33 +175,24 @@ function Queue({ people, cited, talk, busy, inboundReady, onClearTalk, onReload,
       </div>
       {adding && <AddByHand onDone={() => { setAdding(false); onReload() }} onCancel={() => setAdding(false)} />}
 
-      <section className="sig-sect">
-        <h4 className={`sig-h ${people.length ? '' : 'sig-h-quiet'}`}>
-          Someone asked <span className="sig-h-n">{people.length}</span>
-        </h4>
-        <p className="sig-h-sub">A named person, in public, waiting for an answer.</p>
-        {people.length > 0 ? (
+      {/* Registers holding something lead; dormant ones compress to a line and follow.
+          A register that renders nothing reads as one that doesn't exist, so they stay
+          on screen — but spending a heading, a paragraph and a panel each on "nothing
+          yet" gave two empty registers more of the page than the one with citations in
+          it, and put both of them above it. */}
+      {people.length > 0 && (
+        <section className="sig-sect">
+          <h4 className="sig-h">Someone asked <span className="sig-h-n">{people.length}</span></h4>
+          <p className="sig-h-sub">A named person, in public, waiting for an answer.</p>
           <div className="sig-cards">
             {people.map((s) => <PersonCard key={s.id} s={s} onReload={onReload} onNote={onNote} />)}
           </div>
-        ) : (
-          <Dormant ready={inboundReady}
-            arrives="LinkedIn comments and mentions, G2 and Capterra buyer questions, Trustpilot reviews"
-            manual />
-        )}
-      </section>
+        </section>
+      )}
 
       {cited.length > 0 && (
         <section className="sig-sect">
           <CitationTable rows={cited} onReload={onReload} onNote={onNote} />
-        </section>
-      )}
-
-      {talk.length === 0 && (
-        <section className="sig-sect">
-          <h4 className="sig-h sig-h-quiet">Being talked about <span className="sig-h-n">0</span></h4>
-          <p className="sig-h-sub">Pages mentioning our category. Awareness, and post material.</p>
-          <Dormant ready={inboundReady} arrives="Google Alerts (set to email delivery) and F5Bot digests" />
         </section>
       )}
 
@@ -224,23 +215,40 @@ function Queue({ people, cited, talk, busy, inboundReady, onClearTalk, onReload,
           )}
         </section>
       )}
+
+      {(people.length === 0 || talk.length === 0) && (
+        <div className="sig-quiet">
+          {people.length === 0 && (
+            <Dormant ready={inboundReady} name="Someone asked"
+              arrives="LinkedIn comments and mentions, G2 and Capterra buyer questions, Trustpilot reviews"
+              manual />
+          )}
+          {talk.length === 0 && (
+            <Dormant ready={inboundReady} name="Being talked about"
+              arrives="Google Alerts (set to email delivery) and F5Bot digests" />
+          )}
+        </div>
+      )}
     </>
   )
 }
 
 // An empty register that renders nothing looks like a register that doesn't exist.
 // Four OSHA citations on screen read as "OSHA is all this does" unless the other two
-// say out loud that they're waiting on a mailbox nobody has created yet.
-function Dormant({ ready, arrives, manual }) {
+// say out loud that they're waiting on a mailbox nobody has created yet. So it stays
+// visible — as one line carrying its name, its state and what would arrive, rather
+// than the heading + paragraph + panel that outweighed the register with content.
+function Dormant({ ready, name, arrives, manual }) {
   return (
     <div className="sig-dormant">
       <span className={`dot ${ready ? 'd-ok' : 'd-held'}`} />
       <div>
+        <b className="sig-dormant-n">{name}</b>
         {ready
-          ? <><b>Nothing yet.</b> {arrives} land here.</>
-          : <><b>Waiting on the inbound address.</b> {arrives} land here once notification mail is
+          ? <> — nothing yet. {arrives} land here.</>
+          : <> — waiting on the inbound address. {arrives} land here once notification mail is
               forwarded to it.</>}
-        {manual && <> Anything you see in a group with no webhook goes in with <b>Add by hand</b>.</>}
+        {manual && <> Anything in a group with no webhook goes in with <b>Add by hand</b>.</>}
       </div>
     </div>
   )
