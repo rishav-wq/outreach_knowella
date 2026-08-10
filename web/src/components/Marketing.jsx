@@ -22,6 +22,7 @@ export default function Marketing() {
   const [pubs, setPubs] = useState([])
   const [question, setQuestion] = useState('')
   const [gen, setGen] = useState(null)     // {used, omitted} from the last draft
+  const [conn, setConn] = useState(null)            // {connected, from, stream}
   const [preview, setPreview] = useState(null)      // {count, sample}
   const [testTo, setTestTo] = useState('')
   const [busy, setBusy] = useState('')              // '', 'test', 'send', 'save'
@@ -35,6 +36,7 @@ export default function Marketing() {
     api.getMarketingMeta().then((d) => setTopics(d.topics || [])).catch(() => {})
     api.listAudiences().then(setAudiences).catch(() => {})
     api.listPublications().then(setPubs).catch(() => {})
+    api.getMarketingStatus().then(setConn).catch(() => {})
     return () => { clearInterval(poll.current); clearTimeout(debounce.current) }
   }, [])
 
@@ -159,11 +161,23 @@ export default function Marketing() {
     return <div><Skeleton h={90} r={10} /><Skeleton h={90} r={10} style={{ marginTop: 14 }} /></div>
   }
 
+  // Postmark is the only way anything leaves this page. Discovering it's unwired
+  // after writing a full issue wastes the work — say it before the compose box.
+  const unwired = conn && !conn.connected ? 'the Postmark server token is missing'
+    : conn && !conn.from ? 'MARKETING_FROM is not set, so there is no address to send from' : ''
+  const wiring = unwired ? (
+    <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
+      <b>Marketing can't send yet</b> — {unwired}. Add it to the server's <code>.env</code> and
+      restart. Drafts still save; nothing leaves, including tests.
+    </div>
+  ) : null
+
   // ---------- composer ----------
   if (view === 'edit') {
     return (
       <div className="mkt">
         <button className="ghostlink" onClick={() => setView('list')}>← All blasts</button>
+        {wiring}
         <div className="mkt-grid">
           <div className="mkt-main">
             <div className="section-label">Compose</div>
@@ -354,6 +368,7 @@ export default function Marketing() {
   // ---------- list ----------
   return (
     <div className="mkt">
+      {wiring}
       <div className="mkt-head">
         <div>
           <div className="section-label" style={{ marginBottom: 4 }}>Marketing · blasts &amp; newsletters</div>
