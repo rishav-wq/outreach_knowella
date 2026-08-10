@@ -1778,3 +1778,20 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   color: var(--text-2); background: var(--bg); border: 1px solid var(--line);
   border-radius: 7px; padding: 9px 11px; margin: 7px 0 0;
 }
+/* Write with AI. The Ella gradient is reserved for AI moments in this system, so
+   this is one of the few places it belongs. */
+.gen-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.gen-row .field-input { flex: 1; }
+.gen-btn { background: var(--grad-ella); border-color: transparent; color: #fff; font-weight: 600; flex-shrink: 0; }
+.gen-btn:hover:not(:disabled) { filter: brightness(1.06); color: #fff; }
+.gen-btn:disabled { background: var(--bg); color: var(--faint); border-color: var(--line); }
+/* What it leaned on and what it dropped. The omissions are the honest part — they
+   are where the model wanted a number it did not have and said so instead. */
+.gen-note {
+  font-size: 11.5px; line-height: 1.6; color: var(--muted); background: var(--signal-tint);
+  border: 1px solid var(--signal-line); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.gen-note b { color: var(--text-2); }
+.gen-omit { margin-top: 4px; color: var(--caution); }
+.gen-omit b { color: var(--caution); }

@@ -20,6 +20,8 @@ export default function Marketing() {
   const [topics, setTopics] = useState([])
   const [audiences, setAudiences] = useState([])
   const [pubs, setPubs] = useState([])
+  const [question, setQuestion] = useState('')
+  const [gen, setGen] = useState(null)     // {used, omitted} from the last draft
   const [preview, setPreview] = useState(null)      // {count, sample}
   const [testTo, setTestTo] = useState('')
   const [busy, setBusy] = useState('')              // '', 'test', 'send', 'save'
@@ -72,6 +74,22 @@ export default function Marketing() {
     const r = await api.createBlast(draft)
     setDraftId(r.id)
     return r.id
+  }
+
+  // Drafting is bounded by the publication's knowledge block, so a publication is
+  // required — without one there is nothing the model may state as fact.
+  const doGenerate = async () => {
+    setBusy('gen'); setMsg(null)
+    try {
+      const r = await api.generateIssue({
+        publication_id: draft.publication_id,
+        question: question.trim(),
+        audience: draft.audience,
+      })
+      setDraft((d) => ({ ...d, subject: r.subject, body: r.body }))
+      setGen({ used: r.used || [], omitted: r.omitted || [] })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
   }
 
   const doTest = async () => {
@@ -128,6 +146,31 @@ export default function Marketing() {
         <div className="mkt-grid">
           <div className="mkt-main">
             <div className="section-label">Compose</div>
+
+            {/* Drafting needs a publication, because the publication is what says
+                which claims are true. The question is the strongest input there is —
+                an issue that answers something a buyer actually asked beats one that
+                announces something nobody wondered about. */}
+            <div className="gen-row">
+              <input className="field-input" value={question} placeholder="What question should this issue answer? (optional)"
+                onChange={(e) => setQuestion(e.target.value)} />
+              <button className="btn gen-btn" disabled={!draft.publication_id || busy !== ''}
+                onClick={doGenerate}
+                title={draft.publication_id ? 'Bounded by the knowledge block of this publication'
+                  : 'Pick a publication first — it decides what may be claimed'}>
+                {busy === 'gen' ? <><span className="spinner spinner-dark" /> Writing…</> : '✦ Write with AI'}
+              </button>
+            </div>
+            {gen && (
+              <div className="gen-note">
+                <div><b>Leaned on:</b> {gen.used.length ? gen.used.join(' · ') : '—'}</div>
+                {gen.omitted.length > 0 && (
+                  <div className="gen-omit"><b>Left out for lack of a source:</b> {gen.omitted.join(' · ')}</div>
+                )}
+                <div className="muted">Read it before you send it — it drafts, you decide.</div>
+              </div>
+            )}
+
             <input className="field-input" placeholder="Internal name — e.g. Ops Brief #1" value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             <input className="field-input" placeholder="Subject — merge fields work: {first_name}, {company}" value={draft.subject}

@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
+from .engine import newsletter
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, osha, postmark_send
 from .models import Fact, Lead, Research
 from .store import open_store
@@ -1718,6 +1719,60 @@ def update_publication(pid: str, p: PublicationIn):
 def delete_publication(pid: str):
     open_store().delete_publication(pid)
     return {"ok": True}
+
+
+class GenerateIssue(BaseModel):
+    publication_id: str
+    question: str = ""       # a Backlog item, or anything you want it to answer
+    signal_id: str = ""      # optional dated hook — an OSHA citation, a rule change
+    audience: AudienceFilter = AudienceFilter()
+
+
+@app.post("/api/blasts/generate")
+def generate_issue(r: GenerateIssue):
+    """Draft an issue, bounded by the publication's knowledge block.
+
+    Returns the draft plus what it leaned on and what it deliberately left out —
+    the omissions matter as much as the text, because they're where the model
+    wanted a number it didn't have. A generator that quietly invented one would
+    refute the product's whole argument on the company's own mailing list.
+    """
+    store = open_store()
+    pub = store.get_publication(r.publication_id)
+    if not pub:
+        raise HTTPException(400, "pick a publication first — it decides what may be claimed")
+    signal = None
+    if r.signal_id:
+        signal = next((s for s in store.list_signals("") if s["_id"] == r.signal_id), None)
+    # Describe the audience concretely so it writes to these people, not to "leaders".
+    hint = ""
+    try:
+        people = store.audience_leads(r.audience.model_dump())[:6]
+        titles = sorted({(p["lead"].title or "").strip() for p in people if (p["lead"].title or "").strip()})
+        firms = sorted({(p["lead"].company or "").strip() for p in people if (p["lead"].company or "").strip()})
+        if titles or firms:
+            hint = f"roles like {', '.join(titles[:4])}; companies like {', '.join(firms[:3])}"
+    except Exception:
+        hint = ""
+    try:
+        return newsletter.write_issue(pub, r.question, signal, hint,
+                                      (_marketing_models() or {}).get("newsletter"))
+    except Exception as e:
+        raise HTTPException(502, f"couldn't draft it: {type(e).__name__}: {e}"[:300])
+
+
+def _marketing_models() -> dict:
+    """Model choice for marketing generation, mirroring how campaigns configure theirs.
+
+    Only non-empty overrides are included: ModelSpec.from_config reads the key with
+    a default, so a present-but-empty 'provider' wins over the default and blows up
+    with "Unknown provider ''" rather than falling back."""
+    cfg = {}
+    if os.environ.get("LLM_PROVIDER"):
+        cfg["provider"] = os.environ["LLM_PROVIDER"]
+    if os.environ.get("NEWSLETTER_MODEL"):
+        cfg["model"] = os.environ["NEWSLETTER_MODEL"]
+    return {"newsletter": cfg}
 
 
 @app.get("/api/blasts")
