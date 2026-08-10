@@ -97,7 +97,10 @@ export default function Marketing() {
       const p = pubs.find((x) => x.id === draft.publication_id)
       const auto = p ? `${p.name} #${(p.issues || 0) + 1}` : r.subject
       setDraft((d) => ({ ...d, subject: r.subject, body: r.body, name: d.name.trim() || auto }))
-      setGen({ used: r.used || [], omitted: r.omitted || [] })
+      // If it had to pick the question itself, show which — an issue answering an
+      // unseen question is unreviewable, and a bad pick is the first thing to fix.
+      if (r.question) setQuestion(r.question)
+      setGen({ used: r.used || [], omitted: r.omitted || [], picked: !!r.question_was_picked })
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
   }
@@ -222,6 +225,12 @@ export default function Marketing() {
             )}
             {gen && (
               <div className="gen-note">
+                {gen.picked && (
+                  <div style={{ marginBottom: 4 }}>
+                    <b>Chose the question above</b> — you left it blank. Edit it and write again
+                    if it picked the wrong one.
+                  </div>
+                )}
                 <div><b>Leaned on:</b> {gen.used.length ? gen.used.join(' · ') : '—'}</div>
                 {gen.omitted.length > 0 && (
                   <div className="gen-omit"><b>Left out for lack of a source:</b> {gen.omitted.join(' · ')}</div>

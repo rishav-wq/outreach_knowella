@@ -1757,9 +1757,24 @@ def generate_issue(r: GenerateIssue):
             hint = f"roles like {', '.join(titles[:4])}; companies like {', '.join(firms[:3])}"
     except Exception:
         hint = ""
+    spec = (_marketing_models() or {}).get("newsletter")
+    # No question means the only material is the knowledge block, and the knowledge
+    # block is a product description — so the issue becomes one too. Twice now. Pick
+    # a practitioner question instead of writing without one; a guessed question is
+    # a far weaker brief than a real buyer's, but it is not a brochure.
+    question = (r.question or "").strip()
+    picked = ""
+    if not question:
+        try:
+            picked = (newsletter.suggest_questions(pub, spec) or [""])[0]
+            question = picked
+        except Exception:
+            pass
     try:
-        return newsletter.write_issue(pub, r.question, signal, hint,
-                                      (_marketing_models() or {}).get("newsletter"))
+        out = newsletter.write_issue(pub, question, signal, hint, spec)
+        out["question"] = question
+        out["question_was_picked"] = bool(picked)
+        return out
     except Exception as e:
         raise HTTPException(502, f"couldn't draft it: {type(e).__name__}: {e}"[:300])
 
