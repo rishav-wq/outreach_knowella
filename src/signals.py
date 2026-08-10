@@ -146,6 +146,24 @@ def _is_question(*parts: str) -> bool:
     return "?" in blob or bool(_QUESTION_WORDS.search(blob))
 
 
+# A link in a digest that points back at the service which SENT the digest is
+# chrome, not a find: "Manage keywords", "Edit this alert". The label reads like a
+# headline and the URL looks nothing like noise, so both existing filters pass it
+# and F5Bot's footer becomes a third signal on every alert. Google's case was
+# already special-cased here; this generalises it.
+# Google stays narrow on purpose — an alert can legitimately surface a Google
+# Groups thread, and dropping every google.com result would lose real finds.
+_OWN_LINKS = {
+    "f5bot": ("f5bot.com",),
+    "google_alert": ("google.com/alerts", "google.com/preferences", "support.google.com"),
+}
+
+
+def _is_own_link(platform: str, url: str) -> bool:
+    u = (url or "").lower()
+    return any(d in u for d in _OWN_LINKS.get(platform, ()))
+
+
 def _digest_items(platform: str, subject: str, text: str, html_body: str) -> list[dict]:
     """Split a digest into its individual finds.
 
@@ -161,8 +179,8 @@ def _digest_items(platform: str, subject: str, text: str, html_body: str) -> lis
         title = _strip_html(label)
         if not title or len(title) < 12 or _LINK_NOISE.search(url) or not url.startswith("http"):
             continue
-        if "google.com/alerts" in url or url in seen:
-            continue                     # the "edit this alert" footer link
+        if _is_own_link(platform, url) or url in seen:
+            continue
         seen.add(url)
         items.append({"title": title, "url": url})
     if not items:                        # text-only digest: a URL per line, title above it
@@ -172,7 +190,7 @@ def _digest_items(platform: str, subject: str, text: str, html_body: str) -> lis
             if not m:
                 continue
             url = _unwrap(m.group(0).rstrip(".,)"))
-            if _LINK_NOISE.search(url) or url in seen:
+            if _LINK_NOISE.search(url) or _is_own_link(platform, url) or url in seen:
                 continue
             seen.add(url)
             title = ln.replace(m.group(0), "").strip(" -–—:") or (lines[i - 1] if i else "")
