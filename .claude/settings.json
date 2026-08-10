@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -R \"c:/Users/ASUS/OneDrive/Desktop/customerweb/src/app/core/component/\" | head -80)",
+      "Read(//c/Users/ASUS/OneDrive/Desktop/customerweb/src/app/core/component/**)",
+      "Read(//c/Users/ASUS/OneDrive/Desktop/customerweb/src/**)"
+    ]
+  }
+}

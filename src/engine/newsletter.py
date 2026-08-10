@@ -49,6 +49,41 @@ SYSTEM = (
 )
 
 
+QUESTION_SYSTEM = (
+    "You propose questions a real practitioner would actually ask — the kind typed "
+    "into a forum at 6pm after something went wrong, not headings from a brochure.\n"
+    "Rules:\n"
+    "- Each must be answerable using the KNOWLEDGE given, at least partly.\n"
+    "- Written in the practitioner's words, about their problem, never naming the "
+    "product. 'Why do our sites fail audits when the training actually happened?' "
+    "not 'How can software improve training compliance?'\n"
+    "- Specific enough that a generic answer would be obviously useless.\n"
+    '- Return ONLY JSON: {"questions": [str, str, str, str]}'
+)
+
+
+def suggest_questions(pub: dict, spec_cfg: dict | None = None) -> list[str]:
+    """Four questions this publication could answer.
+
+    A stopgap, and worth being honest about: the real questions come from buyers,
+    via the Backlog. These are guesses made from the product knowledge, which is the
+    same trap as writing content about what you sell rather than what people ask.
+    Useful while the Backlog is empty; not a replacement for it.
+    """
+    user = f"""PUBLICATION: {pub.get('name')} — {pub.get('description') or ''}
+AUDIENCE: {pub.get('description') or 'EHS and safety leaders at industrial employers'}
+
+KNOWLEDGE:
+{pub.get('knowledge') or '(none)'}"""
+    spec = llm.ModelSpec.from_config(spec_cfg or {})
+    text, _ = llm.complete(
+        [{"role": "system", "content": QUESTION_SYSTEM}, {"role": "user", "content": user}],
+        spec, temperature=0.9,
+    )
+    qs = llm.parse_json(text).get("questions") or []
+    return [q.strip() for q in qs if isinstance(q, str) and q.strip()][:4]
+
+
 def write_issue(pub: dict, question: str = "", signal: dict | None = None,
                 audience_hint: str = "", spec_cfg: dict | None = None) -> dict:
     """One issue → {subject, body, used, omitted}. Raises on an unusable response."""

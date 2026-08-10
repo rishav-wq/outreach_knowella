@@ -1795,3 +1795,21 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .gen-note b { color: var(--text-2); }
 .gen-omit { margin-top: 4px; color: var(--caution); }
 .gen-omit b { color: var(--caution); }
+
+/* Question suggestions — offered, never imposed: each is a claim you'd have to
+   stand behind, so they stay quiet until asked for. */
+.idea-row { margin: -4px 0 10px; }
+.ideas { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.idea {
+  text-align: left; font: inherit; font-size: 12.5px; line-height: 1.45;
+  color: var(--text-2); background: var(--signal-tint); border: 1px solid var(--signal-line);
+  border-radius: var(--radius-sm); padding: 9px 11px; cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.idea:hover { border-color: var(--signal); color: var(--text-1); }
+
+.send-blocked {
+  font-size: 12.5px; color: #a34a05; background: var(--caution-tint);
+  border: 1px solid #ecd9b4; border-radius: var(--radius-sm);
+  padding: 8px 11px; margin-top: 14px;
+}

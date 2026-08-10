@@ -66,6 +66,10 @@ export default function Marketing() {
     topics: d.audience.topics.includes(t) ? d.audience.topics.filter((x) => x !== t) : [...d.audience.topics, t] } }))
 
   const complete = draft.name.trim() && draft.subject.trim() && draft.body.trim()
+  // A greyed-out button with no reason is a dead end. Name the missing field so the
+  // fix is one click away instead of a guess.
+  const blocker = draft.name.trim() ? (draft.subject.trim() ? (draft.body.trim() ? '' : 'a body')
+    : 'a subject line') : 'an internal name'
 
   // save (create or update) and return the id — test/send both go through here so
   // what you test is always exactly what's stored
@@ -86,8 +90,25 @@ export default function Marketing() {
         question: question.trim(),
         audience: draft.audience,
       })
-      setDraft((d) => ({ ...d, subject: r.subject, body: r.body }))
+      // Name it too. Generating subject and body but leaving the internal name blank
+      // left the form looking finished while the send buttons stayed disabled.
+      const p = pubs.find((x) => x.id === draft.publication_id)
+      const auto = p ? `${p.name} #${(p.issues || 0) + 1}` : r.subject
+      setDraft((d) => ({ ...d, subject: r.subject, body: r.body, name: d.name.trim() || auto }))
       setGen({ used: r.used || [], omitted: r.omitted || [] })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
+  }
+
+  // Questions the publication could answer. Explicitly a stopgap: these are inferred
+  // from the product knowledge, and content written from what you sell is weaker than
+  // content written from what buyers asked. The label says so.
+  const [ideas, setIdeas] = useState(null)
+  const doSuggest = async () => {
+    setBusy('ideas'); setMsg(null)
+    try {
+      const r = await api.suggestQuestions(draft.publication_id)
+      setIdeas(r.questions || [])
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
   }
@@ -161,6 +182,24 @@ export default function Marketing() {
                 {busy === 'gen' ? <><span className="spinner spinner-dark" /> Writing…</> : '✦ Write with AI'}
               </button>
             </div>
+            {draft.publication_id && (
+              <div className="idea-row">
+                <button className="ghostlink" disabled={busy !== ''} onClick={doSuggest}>
+                  {busy === 'ideas' ? 'Thinking…' : ideas ? '↻ Other questions' : 'Not sure what to ask?'}
+                </button>
+                {ideas && (
+                  <div className="ideas">
+                    {ideas.map((q, i) => (
+                      <button key={i} className="idea" onClick={() => { setQuestion(q); setIdeas(null) }}>{q}</button>
+                    ))}
+                    <div className="muted" style={{ fontSize: 11.5 }}>
+                      Guessed from the knowledge block. A question a buyer actually asked beats
+                      all four of these — those come from the Backlog.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {gen && (
               <div className="gen-note">
                 <div><b>Leaned on:</b> {gen.used.length ? gen.used.join(' · ') : '—'}</div>
@@ -182,6 +221,9 @@ export default function Marketing() {
               Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code> <code>{'{title}'}</code> — filled per person, same engine as verbatim sales mail.
             </div>
 
+            {blocker && (
+              <div className="send-blocked">Nothing sends yet — this issue still needs {blocker}.</div>
+            )}
             <div className="mkt-actions">
               <div className="ready-form" style={{ margin: 0 }}>
                 <input className="field-input"

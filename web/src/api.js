@@ -84,6 +84,8 @@ export const updatePublication = (id, p) => apiSend(`/api/publications/${encodeU
 export const deletePublication = (id) => apiSend(`/api/publications/${encodeURIComponent(id)}`, 'DELETE', {})
 // draft an issue, bounded by the publication's knowledge block
 export const generateIssue = (b) => apiSend('/api/blasts/generate', 'POST', b)
+export const suggestQuestions = (publication_id) =>
+  apiSend('/api/blasts/questions', 'POST', { publication_id })
 export const listBlasts = () => apiGet('/api/blasts')
 export const getBlast = (id) => apiGet(`/api/blasts/${encodeURIComponent(id)}`)
 export const createBlast = (b) => apiSend('/api/blasts', 'POST', b)

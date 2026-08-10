@@ -1761,6 +1761,21 @@ def generate_issue(r: GenerateIssue):
         raise HTTPException(502, f"couldn't draft it: {type(e).__name__}: {e}"[:300])
 
 
+@app.post("/api/blasts/questions")
+def suggest_questions(r: GenerateIssue):
+    """Four questions this publication could answer — a stopgap while the Backlog
+    is empty. Guesses from product knowledge are not the same as questions buyers
+    actually asked, and the UI says so."""
+    pub = open_store().get_publication(r.publication_id)
+    if not pub:
+        raise HTTPException(400, "pick a publication first")
+    try:
+        return {"questions": newsletter.suggest_questions(
+            pub, (_marketing_models() or {}).get("newsletter"))}
+    except Exception as e:
+        raise HTTPException(502, f"couldn't suggest: {type(e).__name__}: {e}"[:200])
+
+
 def _marketing_models() -> dict:
     """Model choice for marketing generation, mirroring how campaigns configure theirs.
 
