@@ -2276,7 +2276,9 @@ def routing_board(request: Request):
             continue           # only citations are un-promoted leads today
         sid = sig.get("source_id", "")
         text = " ".join([sig.get("company", ""), sig.get("text", ""), sig.get("title", "")])
-        sug = routing.suggest(text, cfgs)
+        # The trigger says which offer can answer this event; the text says which
+        # vertical. Routing on the text alone put a fatality against a paperwork pitch.
+        sug = routing.suggest(text, cfgs, trigger=(sig.get("platform") or "osha"))
         k = (sid, sug["campaign"])
         f = flows.setdefault(k, {"source_id": sid,
                                  "source": (srcs.get(sid) or {}).get("name", "Unattributed"),
