@@ -63,7 +63,11 @@ export const deleteSignal = (id) => apiSend(`/api/signals/${encodeURIComponent(i
 export const pollSignals = () => apiSend('/api/signals/poll', 'POST', {})
 export const clearSignals = (channel = '') => apiSend('/api/signals/clear', 'POST', { channel })
 // OSHA citations: look the employer up (free), then reveal contacts into a campaign (credits)
-export const resolveCitation = (id) => apiSend(`/api/signals/${encodeURIComponent(id)}/resolve`, 'POST', {})
+// The campaign decides which titles to look for — resolving without it ranks people
+// against a different campaign's ICP.
+export const resolveCitation = (id, campaign = '') =>
+  apiSend(`/api/signals/${encodeURIComponent(id)}/resolve`
+    + (campaign ? `?campaign=${encodeURIComponent(campaign)}` : ''), 'POST', {})
 export const promoteCitation = (id, org_id, campaign, person_ids = []) =>
   apiSend(`/api/signals/${encodeURIComponent(id)}/promote`, 'POST', { org_id, campaign, person_ids })
 // backlog: the questions buyers asked — what to write next

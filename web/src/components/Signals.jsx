@@ -420,12 +420,18 @@ function CitationActions({ s, onReload, onNote }) {
   const [campaign, setCampaign] = useState('')
   const [done, setDone] = useState(null)
 
-  const resolve = async () => {
+  // Resolve against the campaign this citation routes to, so the people offered are
+  // that campaign's buyers. Looking up is free, so switching campaign re-runs it
+  // rather than leaving a list ranked for the campaign you just moved away from.
+  const resolve = async (forCampaign) => {
     setBusy('look')
     try {
-      const [r, cs] = await Promise.all([api.resolveCitation(s.id), api.getCampaigns()])
-      setCands(r.candidates || []); setCampaigns(cs)
-      setCampaign(s.campaign_fit && cs.includes(s.campaign_fit) ? s.campaign_fit : cs[0] || '')
+      const cs = campaigns.length ? campaigns : await api.getCampaigns()
+      const want = forCampaign
+        ?? (s.campaign_fit && cs.includes(s.campaign_fit) ? s.campaign_fit : cs[0] || '')
+      const r = await api.resolveCitation(s.id, want)
+      setCands(r.candidates || []); setCampaigns(cs); setCampaign(want)
+      setPicked({})           // a tick made against the old ranking means nothing now
     } catch (e) { onNote(String(e.message || e).slice(0, 180)) }
     finally { setBusy('') }
   }
@@ -474,7 +480,8 @@ function CitationActions({ s, onReload, onNote }) {
       <div className="sig-cite-pick-h">
         Who should hear about it? <span className="muted">One person, usually — three colleagues
         getting the same email reads as a blast. 1 Apollo credit each.</span>
-        <select className="field-input" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+        <select className="field-input" value={campaign} disabled={busy === 'look'}
+                onChange={(e) => resolve(e.target.value)}>
           {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>

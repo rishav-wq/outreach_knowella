@@ -447,33 +447,83 @@ _SENIORITY = [
 _NARROWING = re.compile(r"\b(fleet|region\w*|district|service|driver|transport)\b", re.I)
 
 
-def score_title(title: str) -> tuple[int, str]:
-    """How likely is this person the one who has to answer for the citation?"""
+# Seniority words carry their own score, so they must not also count as evidence
+# that a title matches an ICP entry — otherwise every "X Manager" matches every
+# other "Y Manager".
+_ROLE_STOP = {"of", "and", "the", "for", "vp", "vice", "president", "director",
+              "manager", "head", "senior", "chief", "lead", "officer", "specialist"}
+
+
+def _sig_words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]+", (s or "").lower())
+            if len(w) > 2 and w not in _ROLE_STOP}
+
+
+def score_title(title: str, want: list[str] | None = None) -> tuple[int, str]:
+    """How likely is this person the right recipient?
+
+    'Right' is defined by the CAMPAIGN, not by the signal. An OSHA citation routed
+    to knowdoc-freight was still ranking EHS managers, because the scoring only knew
+    how to look for safety people — so the top pick was somebody whose campaign then
+    mails them about BOLs and rate confirmations. Whatever campaign a signal lands
+    in, the people offered have to be that campaign's buyers.
+
+    `want` is the campaign's ICP titles. Without them the old safety heuristic
+    stands, which is the right fallback for a citation with no campaign chosen yet.
+    """
     t = title or ""
-    fn = max(((w, why) for rx, w, why in _FUNCTION if rx.search(t)), default=(0, ""))
     sn = max(((w, why) for rx, w, why in _SENIORITY if rx.search(t)), default=(0, ""))
     narrow = 1 if _NARROWING.search(t) else 0
+
+    if want:
+        have = _sig_words(t)
+        best, hit = 0, ""
+        for entry in want:
+            need = _sig_words(entry)
+            if not need:
+                continue
+            if need <= have:
+                if 5 > best:
+                    best, hit = 5, entry
+            elif need & have and 3 > best:
+                best, hit = 3, entry
+        why = (f"matches “{hit}” in this campaign's ICP" if best == 5
+               else f"partly matches “{hit}”" if best == 3
+               else "not in this campaign's ICP")
+        if sn[1] and best:
+            why += f", {sn[1]}"
+        if narrow:
+            why += " — but a narrowed remit"
+        return best + (sn[0] if best else 0) - (narrow if best else 0), why
+
+    fn = max(((w, why) for rx, w, why in _FUNCTION if rx.search(t)), default=(0, ""))
     why = ", ".join(x for x in (fn[1], sn[1]) if x) or "no safety signal in the title"
     if narrow:
         why += " — but a narrowed remit"
     return fn[0] + sn[0] - narrow, why
 
 
-def preview_contacts_at_org(org_id: str, limit: int = 5) -> list[dict]:
-    """Who's in safety at this org — masked previews only. FREE: no reveal, no
-    credits. Lets the UI show what it found before anyone commits to spending."""
+def preview_contacts_at_org(org_id: str, limit: int = 5,
+                            titles: list[str] | None = None) -> list[dict]:
+    """Who at this org fits the campaign — masked previews only. FREE: no reveal, no
+    credits. Lets the UI show what it found before anyone commits to spending.
+
+    `titles` is the campaign's ICP. It used to search SAFETY_TITLES unconditionally,
+    which meant a citation routed to a paperwork campaign offered up EHS managers —
+    the ICP of a different campaign entirely.
+    """
     key = os.environ.get("APOLLO_API_KEY")
     if not key:
         raise RuntimeError("APOLLO_API_KEY not set")
     hdr = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": key}
     base = {"organization_ids": [org_id]}
-    pv = _search_previews({**base, "person_titles": SAFETY_TITLES}, limit, hdr)
+    pv = _search_previews({**base, "person_titles": titles or SAFETY_TITLES}, limit, hdr)
     if not pv:
         pv = _search_previews({**base, "person_seniorities": ["owner", "founder", "c_suite",
                                                               "vp", "director"]}, limit, hdr)
     out = []
     for p in pv:
-        sc, why = score_title(p["title"])
+        sc, why = score_title(p["title"], titles)
         out.append({"id": p["id"], "first_name": p["first_name"], "title": p["title"],
                     "score": sc, "why": why})
     out.sort(key=lambda x: -x["score"])

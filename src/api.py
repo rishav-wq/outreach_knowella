@@ -2309,10 +2309,28 @@ def routing_board(request: Request):
 # in two on purpose — looking a company up is free, revealing contacts costs credits,
 # and nobody should email the wrong company about a worker fatality because the app
 # silently took Apollo's top hit.
+def _icp_titles(campaign: str) -> list[str]:
+    """The titles a campaign is actually for. Empty when no campaign is chosen yet,
+    which leaves the safety fallback in place."""
+    if not campaign:
+        return []
+    try:
+        cfg = open_store().get_campaign(campaign) or {}
+        t = ((cfg.get("icp") or {}).get("titles")) or []
+        return [x for x in t if isinstance(x, str) and x.strip()]
+    except Exception:
+        return []
+
+
 @app.post("/api/signals/{sid}/resolve")
-def resolve_citation(sid: str):
+def resolve_citation(sid: str, campaign: str = ""):
     """Company name → Apollo organisation candidates, each with a free preview of who
-    works there in safety. Costs nothing; reveals nothing."""
+    works there who fits THIS campaign. Costs nothing; reveals nothing.
+
+    The campaign is what decides which titles to look for. Without it the preview
+    searched safety titles regardless, so a citation routed to knowdoc-freight
+    offered EHS managers — people whose campaign then writes to them about BOLs.
+    """
     store = open_store()
     sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
     if not sig:
@@ -2333,7 +2351,7 @@ def resolve_citation(sid: str):
         people = []
         if org["id"] in lookup:
             try:
-                people = apollo.preview_contacts_at_org(org["id"])
+                people = apollo.preview_contacts_at_org(org["id"], titles=_icp_titles(campaign))
             except Exception:
                 people = []
         out.append({**org, "contacts": people, "checked": org["id"] in lookup})
@@ -2362,6 +2380,7 @@ def promote_citation(sid: str, r: PromoteCitation):
     if not sig:
         raise HTTPException(404, "signal not found")
     leads, credits = apollo.contacts_at_org(r.org_id, limit=max(1, min(r.limit, 10)),
+                                            titles=_icp_titles(r.campaign) or None,
                                             person_ids=r.person_ids or None)
     leads = [ld for ld in leads if ld.email]        # no email, no campaign
     if not leads:
