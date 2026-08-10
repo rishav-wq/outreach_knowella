@@ -65,6 +65,30 @@ def _hdr() -> dict:
     }
 
 
+def unsubscribes_reach_us(stream: str = "broadcast") -> bool | None:
+    """Is a SubscriptionChange webhook registered for the broadcast stream?
+
+    The newsletter's unsubscribe link is Postmark's, so Postmark suppresses the
+    address on its own stream immediately. Our database only finds out through
+    this webhook — and without it someone who unsubscribes from the newsletter
+    keeps receiving cold sales mail, which is the failure that gets a domain
+    blocklisted. Worth checking rather than assuming.
+
+    None means we couldn't tell (no token, API down) — never treat that as ok.
+    """
+    if not has_key():
+        return None
+    try:
+        r = httpx.get(f"{BASE}/webhooks", params={"MessageStream": stream},
+                      headers=_hdr(), timeout=8.0)
+        if r.status_code >= 400:
+            return None
+        return any((w.get("Triggers") or {}).get("SubscriptionChange", {}).get("Enabled")
+                   for w in r.json().get("Webhooks") or [])
+    except Exception:
+        return None
+
+
 def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:
     """Send up to 500 fully-rendered messages: [{to, subject, text_body, html_body?}].
 

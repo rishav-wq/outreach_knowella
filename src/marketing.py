@@ -17,12 +17,20 @@ from datetime import datetime, timezone
 
 from .engine.personalize import fill_placeholders
 from .integrations import postmark_send
-from .unsubscribe import link as unsub_link
 
 log = logging.getLogger("uvicorn.error")
 
+# Postmark appends its OWN unsubscribe link to every broadcast message unless the
+# body contains this placeholder — which is why the first test arrived with two.
+# Handing it the placeholder means one link, and it is the better one to keep:
+# Postmark implements RFC 8058 one-click for broadcast streams (what Gmail and
+# Yahoo now require of bulk senders) and suppresses the address at the stream.
+# It reaches our own do-not-contact list through the SubscriptionChange webhook,
+# which suppresses globally and cancels pending sequence mail — so an unsubscribe
+# still stops sales, not just this newsletter.
+PM_UNSUB = "{{{ pm:unsubscribe }}}"
 FOOTER_TEXT = ("\n\n—\nYou're receiving this because you've been in touch with Knowella.\n"
-               "Unsubscribe: {url}")
+               "Unsubscribe: " + PM_UNSUB)
 CHUNK = 100   # render+send in small chunks so progress moves and one failure loses little
 
 
@@ -30,24 +38,24 @@ def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
     unsubscribe footer + header attached, text + minimal HTML (for open/click
     tracking) generated from the same body."""
-    url = unsub_link(email)
     subject = fill_placeholders(blast["subject"], lead, {})
     body = fill_placeholders(blast["body"], lead, {})
-    text = body + FOOTER_TEXT.format(url=url)
+    text = body + FOOTER_TEXT
     paras = "".join(f"<p>{html_mod.escape(p).replace(chr(10), '<br>')}</p>"
                     for p in body.split("\n\n") if p.strip())
     html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:14px;'
             f'line-height:1.6;color:#242a32;max-width:600px">{paras}'
             f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:24px">You\'re receiving this because you\'ve been '
-            f'in touch with Knowella. <a href="{url}" style="color:#6e63ff">Unsubscribe</a></p></div>')
+            f'in touch with Knowella. <a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p></div>')
     return {
         "to": email,
         "subject": subject,
         "text_body": text,
         "html_body": html,
-        "headers": {"List-Unsubscribe": f"<{url}>",
-                    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
+        # No List-Unsubscribe header here: Postmark writes its own for broadcast
+        # streams, and ours pointed somewhere different, which would have given
+        # mailbox providers two conflicting one-click targets for one message.
         "metadata": {"blast_id": blast["_id"], "email": email},
     }
 

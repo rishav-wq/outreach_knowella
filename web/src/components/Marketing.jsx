@@ -170,6 +170,12 @@ export default function Marketing() {
       <b>Marketing can't send yet</b> — {unwired}. Add it to the server's <code>.env</code> and
       restart. Drafts still save; nothing leaves, including tests.
     </div>
+  ) : conn?.connected && conn.unsub_synced === false ? (
+    <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
+      <b>Unsubscribes won't reach this app</b> — Postmark has no SubscriptionChange
+      webhook on the <code>{conn.stream}</code> stream. It will still stop the newsletter,
+      but someone who opts out keeps getting cold sales mail until you add the webhook.
+    </div>
   ) : null
 
   // ---------- composer ----------

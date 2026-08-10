@@ -1549,8 +1549,11 @@ def _capture_auth(request: Request) -> None:
 # --- marketing engine (Postmark, broadcast stream) -----------------------------
 @app.get("/api/marketing/status")
 def marketing_status():
+    stream = os.environ.get("POSTMARK_STREAM", "broadcast")
     return {"connected": postmark_send.has_key(), "from": postmark_send.from_address(),
-            "stream": os.environ.get("POSTMARK_STREAM", "broadcast")}
+            "stream": stream,
+            # Unsubscribes happen at Postmark; this is whether they get back to us.
+            "unsub_synced": postmark_send.unsubscribes_reach_us(stream)}
 
 
 class MarketingTest(BaseModel):
