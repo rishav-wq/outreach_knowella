@@ -38,6 +38,7 @@ function WiredProof({ reduce }) {
   const claims = useRef({})
   const cards = useRef({})
   const [paths, setPaths] = useState([])
+  const [hot, setHot] = useState(null)     // the pair under the cursor, if any
 
   useLayoutEffect(() => {
     const draw = () => {
@@ -68,7 +69,8 @@ function WiredProof({ reduce }) {
     <div className="wired" ref={wrap}>
       <svg className="wired-links" aria-hidden="true">
         {paths.map((p, i) => (
-          <motion.path key={p.n} d={p.d} className={`wired-link t-${p.tone}`}
+          <motion.path key={p.n} d={p.d}
+            className={`wired-link t-${p.tone} ${hot && hot !== p.n ? 'is-dim' : ''} ${hot === p.n ? 'is-hot' : ''}`}
             initial={reduce ? false : { pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={{ delay: reduce ? 0 : 0.9 + i * 0.35, duration: 0.7, ease: EASE }} />
@@ -82,10 +84,14 @@ function WiredProof({ reduce }) {
         <div className="wired-subj">Your new Dayton hub</div>
         <p className="wired-body">
           Hi Maria — saw Meridian{' '}
-          <span className="mark m-violet" ref={(el) => { claims.current[1] = el }}>
+          <span className={`mark m-violet ${hot === 2 ? 'is-dim' : ''}`}
+            ref={(el) => { claims.current[1] = el }}
+            onMouseEnter={() => setHot(1)} onMouseLeave={() => setHot(null)}>
             opened a second distribution hub in Dayton
           </span>{' '}and that you&apos;re{' '}
-          <span className="mark m-teal" ref={(el) => { claims.current[2] = el }}>
+          <span className={`mark m-teal ${hot === 1 ? 'is-dim' : ''}`}
+            ref={(el) => { claims.current[2] = el }}
+            onMouseEnter={() => setHot(2)} onMouseLeave={() => setHot(null)}>
             hiring two operations coordinators
           </span>. Usually that means the paperwork volume jumped before the headcount did.
         </p>
@@ -98,8 +104,10 @@ function WiredProof({ reduce }) {
 
       <div className="wired-sources">
         {PAIRS.map((p, i) => (
-          <motion.div key={p.n} className={`wired-src t-${p.tone}`}
+          <motion.div key={p.n}
+            className={`wired-src t-${p.tone} ${hot === p.n ? 'is-hot' : ''} ${hot && hot !== p.n ? 'is-dim' : ''}`}
             ref={(el) => { cards.current[p.n] = el }}
+            onMouseEnter={() => setHot(p.n)} onMouseLeave={() => setHot(null)}
             initial={reduce ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
             transition={{ delay: reduce ? 0 : 1.05 + i * 0.35, duration: 0.5, ease: EASE }}>
             <div className="wired-src-k">
