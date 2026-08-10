@@ -76,6 +76,12 @@ export const getMarketingStatus = () => apiGet('/api/marketing/status')
 export const sendMarketingTest = (to) => apiSend('/api/marketing/test', 'POST', { to })
 export const getMarketingMeta = () => apiGet('/api/marketing/meta')
 export const previewAudience = (filter) => apiSend('/api/marketing/preview', 'POST', filter)
+// publications: what a blast is an issue OF — product, voice and the knowledge
+// block that bounds what may be claimed as fact
+export const listPublications = () => apiGet('/api/publications')
+export const createPublication = (p) => apiSend('/api/publications', 'POST', p)
+export const updatePublication = (id, p) => apiSend(`/api/publications/${encodeURIComponent(id)}`, 'PUT', p)
+export const deletePublication = (id) => apiSend(`/api/publications/${encodeURIComponent(id)}`, 'DELETE', {})
 export const listBlasts = () => apiGet('/api/blasts')
 export const getBlast = (id) => apiGet(`/api/blasts/${encodeURIComponent(id)}`)
 export const createBlast = (b) => apiSend('/api/blasts', 'POST', b)

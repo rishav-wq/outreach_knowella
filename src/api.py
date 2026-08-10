@@ -1585,6 +1585,7 @@ class BlastBody(BaseModel):
     subject: str
     body: str
     audience: AudienceFilter = AudienceFilter()
+    publication_id: str = ""   # which publication this is an issue OF
 
 
 def _blast_out(b: dict) -> dict:
@@ -1592,6 +1593,8 @@ def _blast_out(b: dict) -> dict:
             "body": b.get("body", ""), "audience": b.get("audience") or {},
             "status": b.get("status", "draft"), "stats": b.get("stats") or {},
             "progress": b.get("progress") or {}, "error": b.get("error", ""),
+            "publication_id": b.get("publication_id", ""), "issue_no": b.get("issue_no", 0),
+            "remaining": b.get("remaining", 0), "audience_size": b.get("audience_size", 0),
             "created_at": b.get("created_at", ""), "sent_at": b.get("sent_at", "")}
 
 
@@ -1611,6 +1614,112 @@ def marketing_preview(f: AudienceFilter):
                         "email": p["email"]} for p in people[:8]]}
 
 
+# --- publications: what a blast is an issue OF --------------------------------
+# Seeded from docs/knowella-products.md so the knowledge blocks start true rather
+# than as an empty textarea somebody fills in with marketing adjectives. The
+# guardrails in them are the point: they are what stops a generated draft claiming
+# KnowDoc does FMCSA compliance, or citing the illustrative numbers on the website.
+_SEED_PUBLICATIONS = [
+    {
+        "name": "The Safety Brief",
+        "product": "Knowella platform",
+        "description": "For EHS and safety leaders in manufacturing, construction and warehousing.",
+        "voice": "Plain, practical, written by someone who has run a safety programme. "
+                 "No hype, no adjectives doing the work of evidence.",
+        "knowledge": (
+            "Knowella is a no-code platform for building safety inspections, checklists and "
+            "incident reporting. Frontline workers report from a phone or a QR-code kiosk. "
+            "It provides scheduling, real-time dashboards and audit logs. AI add-ons include "
+            "KnowErgo (video ergonomic scoring), Camera Alerts (CCTV hazard monitoring) and "
+            "the Ella assistant.\n"
+            "DO NOT claim: customer names, percentages, ROI figures or time savings — none "
+            "are verified. KnowTrain, KnowRFP and KnowLogistics are not shipped; never pitch them."
+        ),
+    },
+    {
+        "name": "Freight Paperwork",
+        "product": "KnowDoc AI",
+        "description": "For back-office and compliance leads at carriers, brokers and 3PLs.",
+        "voice": "Concrete and operational. Talks about packets, exceptions and audit trails, "
+                 "not 'digital transformation'.",
+        "knowledge": (
+            "KnowDoc reads inbound paperwork into structured, audit-ready records. It splits "
+            "and validates carrier packets (BOLs, PODs, freight bills, rate confirmations), "
+            "flags exceptions, and tracks certifications and training records with expiry "
+            "alerts and a full audit trail.\n"
+            "DO NOT claim: any native DOT, FMCSA, CDL or hours-of-service compliance feature — "
+            "it has none. Position it as digitising and tracking EXISTING safety and compliance "
+            "documents. Do not cite the website's 92% or 99.8% figures, or any customer name."
+        ),
+    },
+    {
+        "name": "Ergonomics Notes",
+        "product": "Knowella Ergonomics",
+        "description": "For ergonomists and EHS teams in manual-handling operations.",
+        "voice": "Technical and specific. Names the standards; assumes the reader knows them.",
+        "knowledge": (
+            "Knowella's ergonomics tool scores worker injury risk from a phone video using "
+            "REBA, RULA, the NIOSH lifting equation, Snook tables, HSE MAC and WISHA. It can "
+            "assess multiple workers in one clip and returns an annotated video with per-joint "
+            "angle timelines. It is API-driven and plugs into an existing EHS workflow.\n"
+            "DO NOT claim: accuracy percentages, customer names or outcome statistics."
+        ),
+    },
+]
+
+
+def _seed_publications_once(store) -> None:
+    if store.list_publications():
+        return
+    for p in _SEED_PUBLICATIONS:
+        store.create_publication(p)
+
+
+class PublicationIn(BaseModel):
+    name: str
+    product: str = ""
+    description: str = ""
+    knowledge: str = ""
+    voice: str = ""
+    audience: dict = {}
+    from_address: str = ""
+    reply_to: str = ""
+
+
+def _pub_out(p: dict) -> dict:
+    return {"id": p["_id"], "name": p.get("name", ""), "product": p.get("product", ""),
+            "description": p.get("description", ""), "knowledge": p.get("knowledge", ""),
+            "voice": p.get("voice", ""), "audience": p.get("audience") or {},
+            "from_address": p.get("from_address", ""), "reply_to": p.get("reply_to", ""),
+            "issues": p.get("issues", 0)}
+
+
+@app.get("/api/publications")
+def list_publications():
+    store = open_store()
+    _seed_publications_once(store)
+    return [_pub_out(p) for p in store.list_publications()]
+
+
+@app.post("/api/publications")
+def create_publication(p: PublicationIn):
+    if not p.name.strip():
+        raise HTTPException(400, "a publication needs a name")
+    return {"id": open_store().create_publication(p.model_dump())}
+
+
+@app.put("/api/publications/{pid}")
+def update_publication(pid: str, p: PublicationIn):
+    open_store().update_publication(pid, p.model_dump())
+    return {"ok": True}
+
+
+@app.delete("/api/publications/{pid}")
+def delete_publication(pid: str):
+    open_store().delete_publication(pid)
+    return {"ok": True}
+
+
 @app.get("/api/blasts")
 def list_blasts():
     return [_blast_out(b) for b in open_store().list_blasts()]
@@ -1621,7 +1730,8 @@ def create_blast(b: BlastBody):
     if not b.name.strip() or not b.subject.strip() or not b.body.strip():
         raise HTTPException(400, "name, subject and body are all required")
     bid = open_store().create_blast({"name": b.name.strip(), "subject": b.subject.strip(),
-                                     "body": b.body, "audience": b.audience.model_dump()})
+                                     "body": b.body, "audience": b.audience.model_dump(),
+                                     "publication_id": b.publication_id})
     return {"id": bid}
 
 
@@ -1642,7 +1752,8 @@ def update_blast(bid: str, body: BlastBody):
     if b.get("status") != "draft":
         raise HTTPException(400, "only drafts can be edited")
     store.update_blast(bid, {"name": body.name.strip(), "subject": body.subject.strip(),
-                             "body": body.body, "audience": body.audience.model_dump()})
+                             "body": body.body, "audience": body.audience.model_dump(),
+                             "publication_id": body.publication_id})
     return {"ok": True}
 
 

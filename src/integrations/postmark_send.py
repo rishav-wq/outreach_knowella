@@ -85,7 +85,7 @@ def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:
         payload = []
         for m in chunk:
             entry = {
-                "From": sender,
+                "From": m.get("from") or sender,
                 "To": m["to"],
                 "Subject": m["subject"],
                 "TextBody": m.get("text_body") or "",

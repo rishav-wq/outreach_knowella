@@ -67,6 +67,13 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
     if not blast:
         return
     try:
+        pub = store.get_publication(blast.get("publication_id", "")) or {}
+        # An issue number is claimed once, on the first batch — warming a list in
+        # five-person batches must not produce issues #4, #5 and #6 of the same email.
+        if pub and not blast.get("issue_no"):
+            issue = store.next_issue_no(pub["_id"])
+            store.update_blast(bid, {"issue_no": issue})
+            blast["issue_no"] = issue
         everyone = store.audience_leads(blast.get("audience") or {})
         already = store.blast_sent_emails(bid)
         pending = [p for p in everyone if p["email"] not in already]
@@ -80,7 +87,17 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
         done = 0
         for i in range(0, total, CHUNK):
             chunk = people[i:i + CHUNK]
-            msgs = [render_message(blast, p["lead"], p["email"]) for p in chunk]
+            msgs = []
+            for p in chunk:
+                m = render_message(blast, p["lead"], p["email"])
+                # A publication can send under its own name and take its own replies —
+                # "The Safety Brief" and "Freight Paperwork" should not look like the
+                # same mailing list to someone subscribed to one of them.
+                if pub.get("from_address"):
+                    m["from"] = pub["from_address"]
+                if pub.get("reply_to"):
+                    m["reply_to"] = pub["reply_to"]
+                msgs.append(m)
             results = postmark_send.send_batch(msgs)
             for p, res in zip(chunk, results):
                 ok = not res.get("ErrorCode")

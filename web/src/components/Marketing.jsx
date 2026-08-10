@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
+const EMPTY = { name: '', subject: '', body: '', publication_id: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -19,6 +19,7 @@ export default function Marketing() {
   const [draftId, setDraftId] = useState(null)      // editing an existing draft
   const [topics, setTopics] = useState([])
   const [audiences, setAudiences] = useState([])
+  const [pubs, setPubs] = useState([])
   const [preview, setPreview] = useState(null)      // {count, sample}
   const [testTo, setTestTo] = useState('')
   const [busy, setBusy] = useState('')              // '', 'test', 'send', 'save'
@@ -31,6 +32,7 @@ export default function Marketing() {
     load()
     api.getMarketingMeta().then((d) => setTopics(d.topics || [])).catch(() => {})
     api.listAudiences().then(setAudiences).catch(() => {})
+    api.listPublications().then(setPubs).catch(() => {})
     return () => { clearInterval(poll.current); clearTimeout(debounce.current) }
   }, [])
 
@@ -168,7 +170,42 @@ export default function Marketing() {
           </div>
 
           <aside className="mkt-side">
-            <div className="section-label">Audience — live from the Library</div>
+            {/* The publication decides what this issue may claim and who it goes to.
+                It sits above the audience because picking it usually answers both. */}
+            <div className="section-label">Publication</div>
+            <select className="src-select" style={{ width: '100%', marginBottom: 6 }}
+              value={draft.publication_id || ''}
+              onChange={(e) => {
+                const pub = pubs.find((x) => x.id === e.target.value)
+                setDraft((d) => ({
+                  ...d,
+                  publication_id: e.target.value,
+                  audience: pub && Object.keys(pub.audience || {}).length
+                    ? { ...d.audience, ...pub.audience } : d.audience,
+                }))
+              }}>
+              <option value="">One-off — no publication</option>
+              {pubs.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}{p.issues ? ` · ${p.issues} issues` : ''}</option>
+              ))}
+            </select>
+            {(() => {
+              const pub = pubs.find((x) => x.id === draft.publication_id)
+              if (!pub) return null
+              return (
+                <div className="pub-note">
+                  <b>{pub.product}</b> · next issue #{(pub.issues || 0) + 1}
+                  {pub.knowledge && (
+                    <details className="pub-know">
+                      <summary>What this issue may state as fact</summary>
+                      <pre>{pub.knowledge}</pre>
+                    </details>
+                  )}
+                </div>
+              )
+            })()}
+
+            <div className="section-label" style={{ marginTop: 16 }}>Audience — live from the Library</div>
             {audiences.length > 0 && (
               <select className="src-select" style={{ width: '100%', marginBottom: 12 }} value=""
                 title="Load a saved audience's filter into this blast"

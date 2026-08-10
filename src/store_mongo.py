@@ -529,6 +529,47 @@ class MongoStore:
             {"_id": f"{bid}::{email}", "blast": bid, "email": email, "lead_key": key,
              "message_id": message_id, "accepted": ok, "events": []}, upsert=True)
 
+    # --- publications: the marketing analogue of a campaign ---------------------
+    # Sales has a campaign holding the ICP, offer, voice and the knowledge block that
+    # bounds what may be stated as fact. Marketing had nothing above a blast, so every
+    # send was a standalone with no product, no voice and nothing for a writer — human
+    # or model — to be grounded by. A publication is that container: recipients
+    # subscribe to it, issues belong to it, and its knowledge block is the only thing
+    # a generated draft may treat as true.
+    def create_publication(self, doc: dict) -> str:
+        pid = uuid.uuid4().hex[:10]
+        self.db.publications.insert_one({
+            "_id": pid, "name": doc.get("name", ""), "product": doc.get("product", ""),
+            "description": doc.get("description", ""), "knowledge": doc.get("knowledge", ""),
+            "voice": doc.get("voice", ""), "audience": doc.get("audience") or {},
+            "from_address": doc.get("from_address", ""), "reply_to": doc.get("reply_to", ""),
+            "issues": 0, "created_at": datetime.now(timezone.utc).isoformat()})
+        return pid
+
+    def list_publications(self) -> list[dict]:
+        return list(self.db.publications.find({}).sort("created_at", 1))
+
+    def get_publication(self, pid: str) -> dict | None:
+        return self.db.publications.find_one({"_id": pid}) if pid else None
+
+    def update_publication(self, pid: str, patch: dict) -> None:
+        allowed = {"name", "product", "description", "knowledge", "voice",
+                   "audience", "from_address", "reply_to"}
+        clean = {k: v for k, v in patch.items() if k in allowed}
+        if clean:
+            self.db.publications.update_one({"_id": pid}, {"$set": clean})
+
+    def delete_publication(self, pid: str) -> None:
+        """Issues already sent keep their publication_id — deleting the publication
+        must not rewrite history, only stop new issues being filed under it."""
+        self.db.publications.delete_one({"_id": pid})
+
+    def next_issue_no(self, pid: str) -> int:
+        """Claim the next issue number. Atomic, so two sends can't both be #4."""
+        d = self.db.publications.find_one_and_update(
+            {"_id": pid}, {"$inc": {"issues": 1}}, return_document=True)
+        return int((d or {}).get("issues") or 1)
+
     # --- subscribers: consent as a stored fact, not an assumption ---------------
     # A lead's address means we found them. A subscriber's means they asked. Those
     # are different things and a newsletter may only go to the second, so it lives

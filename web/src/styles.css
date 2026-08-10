@@ -1767,3 +1767,14 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
    at all, so it reads as a gate rather than a checkbox in a row of checkboxes. */
 .mkt-optin { border: 1px solid var(--verify); background: var(--verify-tint); border-radius: var(--radius-sm); padding: 11px 13px; }
 .mkt-optin b { color: #0b6b58; }
+/* The publication's knowledge block, readable from the composer. Whoever writes the
+   issue should be able to see what they may claim without opening another screen —
+   and it is the same text a generated draft would be bounded by. */
+.pub-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; line-height: 1.55; }
+.pub-note b { color: var(--text-2); }
+.pub-know summary { cursor: pointer; color: var(--signal); margin-top: 5px; font-size: 11.5px; }
+.pub-know pre {
+  white-space: pre-wrap; font-family: var(--font-record); font-size: 11.5px; line-height: 1.6;
+  color: var(--text-2); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; padding: 9px 11px; margin: 7px 0 0;
+}
