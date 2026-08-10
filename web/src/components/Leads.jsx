@@ -150,6 +150,33 @@ export default function Leads({ campaign, onNavigate }) {
   const filtered = leads
     .filter((l) => `${l.name} ${l.company} ${l.email}`.toLowerCase().includes(q.toLowerCase()) && inDateRange(l))
     .sort((a, b) => (b.pulled_at ? Date.parse(b.pulled_at) : 0) - (a.pulled_at ? Date.parse(a.pulled_at) : 0))   // newest pulls at top; undated (older) sink to the bottom
+  // Export what's on screen. Every row is already here, so this needs no endpoint —
+  // and building it from `filtered` means a search or date filter narrows the file
+  // the same way it narrows the table. Nobody has to remember which one the export
+  // ignored.
+  const exportRows = sel.size > 0 ? filtered.filter((l) => sel.has(l.key)) : filtered
+  const downloadCsv = () => {
+    const cols = [
+      ['Name', (l) => l.name], ['Title', (l) => l.title], ['Company', (l) => l.company],
+      ['Email', (l) => l.email], ['LinkedIn', (l) => l.linkedin_url],
+      ['Status', (l) => l.status], ['Campaign', () => campaign],
+      ['Pulled', (l) => (l.pulled_at ? new Date(l.pulled_at).toISOString().slice(0, 10) : '')],
+    ]
+    // Quote everything: a company called "Baker, Inc." or a title with a newline in it
+    // would otherwise shift every later column on that row.
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const csv = [cols.map((c) => esc(c[0])).join(','),
+                 ...exportRows.map((l) => cols.map((c) => esc(c[1](l))).join(','))].join('\r\n')
+    // Excel reads a UTF-8 file as the system codepage unless it finds a BOM, which is
+    // what turns an accented name into mojibake in the one tool most people open it in.
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${campaign}-leads-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const allSelected = filtered.length > 0 && filtered.every((l) => sel.has(l.key))
   const toggleAll = () => setSel((prev) => {
     const next = new Set(prev)
@@ -170,6 +197,11 @@ export default function Leads({ campaign, onNavigate }) {
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
         </select>
+        <button className="btn" disabled={exportRows.length === 0} onClick={downloadCsv}
+                title="Name, title, company, email, LinkedIn profile, status and pull date">
+          <Icon name="download" size={14} />
+          {sel.size > 0 ? `Export ${sel.size} selected` : `Export ${exportRows.length.toLocaleString()}`}
+        </button>
         {sel.size > 0 ? (
           <div className="bulk-bar">
             <span className="bulk-count">{sel.size} selected</span>
