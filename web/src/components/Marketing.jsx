@@ -249,6 +249,10 @@ export default function Marketing() {
             <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
               Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code> <code>{'{title}'}</code> — filled per person, same engine as verbatim sales mail.
             </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+              Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and bare
+              links. Nothing else — no images or buttons, because looking like bulk mail is what costs opens.
+            </div>
 
             {blocker && (
               <div className="send-blocked">Nothing sends yet — this issue still needs {blocker}.</div>

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html as html_mod
 import logging
+import re
 from datetime import datetime, timezone
 
 from .engine.personalize import fill_placeholders
@@ -33,6 +34,60 @@ FOOTER_TEXT = ("\n\n—\nYou're receiving this because you've been in touch with
                "Unsubscribe: " + PM_UNSUB)
 CHUNK = 100   # render+send in small chunks so progress moves and one failure loses little
 
+# One body, two renderings. The composer stays plain text — the format that wins for
+# B2B and the one a person can actually read back before approving it — so the small
+# amount of structure a newsletter genuinely needs is written as markdown and degrades
+# to something readable in the text part. Deliberately three things and no more:
+#
+#   links    the whole product argues every claim has a source. A cited OSHA release
+#            that isn't clickable in the HTML part is the one omission we can't make.
+#   bullets  an EHS checklist is a list. Prose-ifying it helps nobody.
+#   bold     one term per issue, for the thing being named.
+#
+# No headings, images, buttons, columns or colours. Those are what make a newsletter
+# look like bulk mail, and looking like bulk mail is what costs opens.
+_MD_LINK = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<]+)")
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
+_BULLET = re.compile(r"^\s*[-*]\s+")
+
+
+def _inline(t: str) -> str:
+    """Escaped text → links and bold. Escaping first means a body can contain < or &
+    without breaking the message, and URLs keep working because &amp; is what an href
+    is supposed to carry anyway."""
+    def link(m):
+        if m.group(2):
+            return f'<a href="{m.group(2)}" style="color:#6e63ff">{m.group(1)}</a>'
+        url = m.group(3).rstrip(".,;:!?)")   # sentence punctuation is not part of the URL
+        tail = m.group(3)[len(url):]
+        return f'<a href="{url}" style="color:#6e63ff">{url}</a>{tail}'
+    out = _MD_LINK.sub(link, html_mod.escape(t))
+    return _MD_BOLD.sub(r"<strong>\1</strong>", out)
+
+
+def to_html(body: str) -> str:
+    """Body → paragraphs and lists. A block whose every line is a bullet becomes a
+    list; everything else is a paragraph with single newlines kept as breaks."""
+    out = []
+    for block in body.split("\n\n"):
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        if not lines:
+            continue
+        if all(_BULLET.match(ln) for ln in lines):
+            items = "".join(f'<li style="margin-bottom:4px">{_inline(_BULLET.sub("", ln))}</li>'
+                            for ln in lines)
+            out.append(f'<ul style="margin:0 0 16px;padding-left:20px">{items}</ul>')
+        else:
+            out.append(f'<p>{"<br>".join(_inline(ln) for ln in lines)}</p>')
+    return "".join(out)
+
+
+def to_text(body: str) -> str:
+    """Body → plain text. Bold markers go (they read as noise unformatted) and a
+    markdown link becomes 'text (url)' so the address is still there to copy."""
+    t = _MD_LINK.sub(lambda m: f"{m.group(1)} ({m.group(2)})" if m.group(2) else m.group(3), body)
+    return _MD_BOLD.sub(r"\1", t)
+
 
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
@@ -40,11 +95,9 @@ def render_message(blast: dict, lead, email: str) -> dict:
     tracking) generated from the same body."""
     subject = fill_placeholders(blast["subject"], lead, {})
     body = fill_placeholders(blast["body"], lead, {})
-    text = body + FOOTER_TEXT
-    paras = "".join(f"<p>{html_mod.escape(p).replace(chr(10), '<br>')}</p>"
-                    for p in body.split("\n\n") if p.strip())
+    text = to_text(body) + FOOTER_TEXT
     html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:14px;'
-            f'line-height:1.6;color:#242a32;max-width:600px">{paras}'
+            f'line-height:1.6;color:#242a32;max-width:600px">{to_html(body)}'
             f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:24px">You\'re receiving this because you\'ve been '
             f'in touch with Knowella. <a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p></div>')

@@ -51,6 +51,13 @@ SYSTEM = (
     "no invented urgency.\n"
     "- Merge fields available: {first_name}, {company}, {title}. Use {first_name} "
     "at most once and only if it reads naturally.\n"
+    "- Formatting is markdown, and only three marks exist: **bold** (once per issue "
+    "at most, for the term being named), '- ' bullets (one short list per issue at "
+    "most, and only where the content is genuinely a list), and [text](url) links.\n"
+    "- NEVER invent a URL. Link only to an address that appears verbatim in the "
+    "SIGNAL or KNOWLEDGE above. A fabricated source is worse than no source, and on "
+    "this list it would be self-refuting. If you have no URL, name the source in "
+    "words and leave it unlinked.\n"
     "- The unsubscribe footer is added automatically; do not write one.\n\n"
     'Return ONLY JSON: {"subject": str, "body": str, "used": [str], "omitted": [str]}\n'
     '"used" lists the KNOWLEDGE or SIGNAL points you actually leaned on.\n'
