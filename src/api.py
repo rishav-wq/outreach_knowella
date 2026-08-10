@@ -1865,10 +1865,26 @@ def test_blast(bid: str, r: BlastTest):
     people = store.audience_leads(b.get("audience") or {})
     sample = people[0]["lead"] if people else Lead(first_name="Maria", last_name="Chen",
                                                   title="VP Operations", company="Meridian Logistics")
+    # The envelope goes to you; the CONTENT is rendered as a real person from the
+    # audience, because a merge field filled with your own name would prove nothing
+    # about the 211 it will really go to. That mismatch reads as a bug unless the
+    # email says so itself — "To: you / Dear someone else" is not self-explanatory.
+    name = f"{sample.first_name or ''} {sample.last_name or ''}".strip()
+    whose = name or (people[0]["email"] if people else "a sample lead")
+    note = (f"TEST — written out as {whose}"
+            + (f", one of {len(people)} people in this audience" if people else
+               " (your audience is empty, so this is invented sample data)")
+            + ". A real send fills in each person's own details.")
     msgs = []
     for to in tos:
         m = marketing.render_message(b, sample, to)
         m["subject"] = f"[TEST] {m['subject']}"
+        m["text_body"] = f"{note}\n\n---\n\n{m['text_body']}"
+        m["html_body"] = (
+            '<div style="font-family:Poppins,Arial,sans-serif;font-size:12px;'
+            'color:#a34a05;background:#ffeadb;border:1px solid #ecd9b4;border-radius:8px;'
+            f'padding:10px 12px;max-width:600px;margin-bottom:16px">{html.escape(note)}</div>'
+            + m["html_body"])
         msgs.append(m)
     try:
         res = postmark_send.send_batch(msgs)
