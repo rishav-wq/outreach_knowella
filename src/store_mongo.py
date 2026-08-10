@@ -508,6 +508,13 @@ class MongoStore:
             {"_id": f"{bid}::{email}", "blast": bid, "email": email, "lead_key": key,
              "message_id": message_id, "accepted": ok, "events": []}, upsert=True)
 
+    def blast_sent_emails(self, bid: str) -> set:
+        """Who this blast has already gone to. Sending in batches is only safe if a
+        second run can tell which addresses are already done — otherwise 'send the
+        rest' silently mails the first batch a second time."""
+        return {d["email"] for d in
+                self.db.blast_recipients.find({"blast": bid}, {"email": 1})}
+
     def mark_blast_event(self, bid: str, email: str, event: str) -> bool:
         """Record a webhook event once per recipient; True only the FIRST time (so
         stats count unique people, not repeat opens)."""

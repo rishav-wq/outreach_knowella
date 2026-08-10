@@ -1757,3 +1757,9 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .wired-link { animation: none; }
 }
+/* Batch send. The default action is the small one — warming a list is the safe
+   habit, and "send to all" should take a deliberate second click. */
+.blast-send { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.blast-batch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.blast-batch .field-input { width: 72px; text-align: center; }
+.blast-all { color: var(--muted); }

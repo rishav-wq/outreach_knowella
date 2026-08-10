@@ -83,13 +83,19 @@ export default function Marketing() {
     finally { setBusy('') }
   }
 
-  const doSend = async () => {
-    const n = preview?.count ?? '?'
-    if (!window.confirm(`Send this blast to ${n} people via Postmark? This is the real bulk send — every message carries a one-click unsubscribe.`)) return
+  // Batch size for the send. Warming a list beats discovering a bad from-address,
+  // a broken merge field or a complaint rate on all 211 at once — Postmark suspends
+  // broadcast senders over complaints, and that takes the sales domain with it.
+  const [batch, setBatch] = useState(5)
+  const doSend = async (limit) => {
+    const total = preview?.count ?? 0
+    const n = limit ? Math.min(limit, total) : total
+    const rest = limit ? ` The remaining ${Math.max(0, total - n)} stay unsent until you send again.` : ''
+    if (!window.confirm(`Send this blast to ${n} ${n === 1 ? 'person' : 'people'} via Postmark?${rest} Every message carries a one-click unsubscribe.`)) return
     setBusy('send'); setMsg(null)
     try {
       const id = await save()
-      const r = await api.sendBlast(id)
+      const r = await api.sendBlast(id, limit)
       if (!r.started) { setMsg({ ok: false, text: `Didn't start: ${r.reason || 'unknown'}` }); return }
       setView('list'); load()
     } catch (e) { setMsg({ ok: false, text: `Send failed: ${String(e.message).slice(0, 220)}` }) }
@@ -132,10 +138,22 @@ export default function Marketing() {
                   {busy === 'test' ? <><span className="spinner spinner-dark" /> Sending…</> : 'Send test to me'}
                 </button>
               </div>
-              <button className="btn approve" disabled={!complete || busy !== '' || !preview?.count} onClick={doSend}
-                title={!preview?.count ? 'The audience is empty' : ''}>
-                {busy === 'send' ? <><span className="spinner" /> Starting…</> : `Send to ${preview?.count ?? '…'} people`}
-              </button>
+              <div className="blast-send">
+                <div className="blast-batch">
+                  <span>Warm up with</span>
+                  <input className="field-input" type="number" min="1" max={preview?.count || 1}
+                    value={batch} onChange={(e) => setBatch(Math.max(1, Number(e.target.value) || 1))} />
+                  <button className="btn approve" disabled={!complete || busy !== '' || !preview?.count}
+                    onClick={() => doSend(batch)}>
+                    {busy === 'send' ? <><span className="spinner" /> Starting…</> : `Send to ${Math.min(batch, preview?.count || 0)} first`}
+                  </button>
+                </div>
+                <button className="btn blast-all" disabled={!complete || busy !== '' || !preview?.count}
+                  onClick={() => doSend(0)}
+                  title={!preview?.count ? 'The audience is empty' : 'Sends to everyone who has not had it yet'}>
+                  or send to all {preview?.count ?? '…'}
+                </button>
+              </div>
             </div>
             {msg && <div className={`banner ${msg.ok ? '' : 'error'}`} style={{ marginTop: 12 }}>{msg.text}</div>}
           </div>

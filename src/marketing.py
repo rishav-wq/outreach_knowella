@@ -52,17 +52,30 @@ def render_message(blast: dict, lead, email: str) -> dict:
     }
 
 
-def run_blast(store, bid: str) -> None:
+def run_blast(store, bid: str, limit: int = 0) -> None:
     """Background worker: resolve the audience live, render per person, send in
     chunks, track per-recipient message ids for the webhook joins. Crash-safe:
-    progress and status live on the blast doc; a failure pauses rather than lies."""
+    progress and status live on the blast doc; a failure pauses rather than lies.
+
+    `limit` sends only that many of the people not yet mailed, so a list can be
+    warmed in batches — five, read the bounces and complaints, then the rest. That
+    is standard practice on a cold-ish list and the only way to find a deliverability
+    problem while it still costs five addresses instead of two hundred. Recipients
+    already sent are skipped, so 'send the rest' continues rather than duplicating.
+    """
     blast = store.get_blast(bid)
     if not blast:
         return
     try:
-        people = store.audience_leads(blast.get("audience") or {})
+        everyone = store.audience_leads(blast.get("audience") or {})
+        already = store.blast_sent_emails(bid)
+        pending = [p for p in everyone if p["email"] not in already]
+        people = pending[:limit] if limit and limit > 0 else pending
         total = len(people)
-        store.update_blast(bid, {"status": "sending", "stats.recipients": total,
+        remaining_after = len(pending) - total
+        store.update_blast(bid, {"status": "sending",
+                                 "stats.recipients": len(already) + total,
+                                 "audience_size": len(everyone),
                                  "progress": {"done": 0, "total": total}})
         done = 0
         for i in range(0, total, CHUNK):
@@ -78,8 +91,12 @@ def run_blast(store, bid: str) -> None:
                     log.warning("[blast %s] %s rejected: %s", bid, p["email"], res.get("Message"))
             done += len(chunk)
             store.update_blast(bid, {"progress": {"done": done, "total": total}})
-        store.update_blast(bid, {"status": "sent",
-                                 "sent_at": datetime.now(timezone.utc).isoformat()})
+        # 'partial' is a real state, not a failure: the batch went, more are waiting.
+        # Calling it 'sent' would hide that two hundred people never got it.
+        store.update_blast(bid, {
+            "status": "partial" if remaining_after > 0 else "sent",
+            "remaining": remaining_after,
+            "sent_at": datetime.now(timezone.utc).isoformat()})
     except Exception as e:
         log.warning("[blast %s] paused: %s", bid, e)
         store.update_blast(bid, {"status": "paused", "error": f"{type(e).__name__}: {e}"[:400]})

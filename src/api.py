@@ -1583,8 +1583,19 @@ def test_blast(bid: str, r: BlastTest):
             "audience_count": len(people)}
 
 
+class SendBlast(BaseModel):
+    limit: int = 0        # 0 = everyone still pending; N = warm the list with N first
+
+
 @app.post("/api/blasts/{bid}/send")
-def send_blast(bid: str):
+def send_blast(bid: str, r: SendBlast | None = None):
+    """Send to the audience, or to the next `limit` people who haven't had it yet.
+
+    Batching is not a nicety on a list this cold: a bad from-address, a broken
+    merge field or a spam-trap hit costs five addresses instead of two hundred,
+    and Postmark suspends broadcast senders over complaint rates. Send five, read
+    the bounces, then send the rest.
+    """
     store = open_store()
     b = store.get_blast(bid)
     if not b:
@@ -1593,9 +1604,12 @@ def send_blast(bid: str):
         return {"started": False, "reason": "already sending"}
     if not postmark_send.has_key():
         raise HTTPException(400, "Postmark isn't configured — set POSTMARK_SERVER_TOKEN and MARKETING_FROM")
-    th = threading.Thread(target=marketing.run_blast, args=(store, bid), daemon=True)
+    if not postmark_send.from_address():
+        raise HTTPException(400, "MARKETING_FROM isn't set — every send would be rejected by Postmark")
+    limit = max(0, (r.limit if r else 0))
+    th = threading.Thread(target=marketing.run_blast, args=(store, bid, limit), daemon=True)
     th.start()
-    return {"started": True}
+    return {"started": True, "limit": limit}
 
 
 @app.post("/api/postmark/events")
