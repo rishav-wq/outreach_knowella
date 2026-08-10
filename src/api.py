@@ -1877,6 +1877,13 @@ def test_blast(bid: str, r: BlastTest):
         raise HTTPException(400, "enter at least one valid email address")
     if len(tos) > 10:
         raise HTTPException(400, "that's a test, not a send — 10 addresses max")
+    # A test is still a real email. Nothing here checked the do-not-contact list, so
+    # typing an opted-out prospect's address to "see how it looks" would have mailed
+    # them — past the one guarantee this app makes about people who said stop.
+    blocked = [a for a in tos if store.is_suppressed(a)]
+    if blocked:
+        raise HTTPException(400, "on the do-not-contact list, so not even a test: "
+                                 + ", ".join(blocked[:5]))
     people = store.audience_leads(b.get("audience") or {})
     sample = people[0]["lead"] if people else Lead(first_name="Maria", last_name="Chen",
                                                   title="VP Operations", company="Meridian Logistics")
