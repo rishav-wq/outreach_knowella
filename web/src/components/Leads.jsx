@@ -207,7 +207,16 @@ export default function Leads({ campaign, onNavigate }) {
                 <td className="chk-col"><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggleSel(l.key)} /></td>
                 <td className="muted" title={l.pulled_at ? new Date(l.pulled_at).toLocaleString() : 'pulled before dates were tracked'}>{fmtDate(l.pulled_at)}</td>
                 <td><div className="avatar sm" style={avatarTint(l.name)}>{initials(l.name)}</div></td>
-                <td>{l.name}</td>
+                {/* The profile sits on the name rather than in a column of its own:
+                    checking a row means checking a person, and an 'in' column of
+                    identical icons would cost width for no added information. */}
+                <td>
+                  {l.name}
+                  {l.linkedin_url && (
+                    <a className="li-link" href={l.linkedin_url} target="_blank" rel="noreferrer noopener"
+                       title={`Open ${l.name} on LinkedIn`} onClick={(e) => e.stopPropagation()}>in</a>
+                  )}
+                </td>
                 <td className="muted">{l.title || '—'}</td>
                 <td>{l.company}</td>
                 <td className="muted">{l.email || '—'}</td>

@@ -202,7 +202,8 @@ class MongoStore:
         # Inbox's lead directory, both of which list hundreds of rows
         proj = {"status": 1, "error": 1, "pulled_at": 1, "lead.first_name": 1,
                 "lead.last_name": 1, "lead.title": 1, "lead.company": 1,
-                "lead.email": 1, "lead.source": 1, "lead.raw.id": 1}
+                "lead.email": 1, "lead.source": 1, "lead.raw.id": 1,
+                "lead.linkedin_url": 1}
         out = []
         for d in self.db.leads.find({"campaign": campaign}, proj):
             L = d.get("lead") or {}
@@ -215,7 +216,12 @@ class MongoStore:
                         # when the lead was first pulled in (None for leads pulled before this was tracked)
                         "pulled_at": d["pulled_at"].isoformat() if d.get("pulled_at") else None,
                         # Apollo person id — lets the UI offer "find more like this" (lookalike seed)
-                        "apollo_id": (L.get("raw") or {}).get("id") or ""})
+                        "apollo_id": (L.get("raw") or {}).get("id") or "",
+                        # Apollo has returned this on every person since the first pull;
+                        # it was simply never projected. It is the fastest way to sanity-
+                        # check a row before mailing it — a title from an enrichment feed
+                        # is a claim, the profile is the thing you can look at.
+                        "linkedin_url": L.get("linkedin_url") or ""})
         return out
 
     def save_lead_error(self, key: str, reason: str) -> None:
