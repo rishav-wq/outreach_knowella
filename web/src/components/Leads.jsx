@@ -231,7 +231,7 @@ export default function Leads({ campaign, onNavigate }) {
       <div className="table-wrap">
         <table className="table">
           <thead>
-            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th>Pulled</th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Status</th></tr>
+            <tr><th className="chk-col"><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all" /></th><th>Pulled</th><th></th><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>LinkedIn</th><th>Status</th></tr>
           </thead>
           <motion.tbody variants={stagger} initial="hidden" animate="show">
             {filtered.map((l) => (
@@ -239,19 +239,25 @@ export default function Leads({ campaign, onNavigate }) {
                 <td className="chk-col"><input type="checkbox" checked={sel.has(l.key)} onChange={() => toggleSel(l.key)} /></td>
                 <td className="muted" title={l.pulled_at ? new Date(l.pulled_at).toLocaleString() : 'pulled before dates were tracked'}>{fmtDate(l.pulled_at)}</td>
                 <td><div className="avatar sm" style={avatarTint(l.name)}>{initials(l.name)}</div></td>
-                {/* The profile sits on the name rather than in a column of its own:
-                    checking a row means checking a person, and an 'in' column of
-                    identical icons would cost width for no added information. */}
-                <td>
-                  {l.name}
-                  {l.linkedin_url && (
-                    <a className="li-link" href={l.linkedin_url} target="_blank" rel="noreferrer noopener"
-                       title={`Open ${l.name} on LinkedIn`} onClick={(e) => e.stopPropagation()}>in</a>
-                  )}
-                </td>
+                <td>{l.name}</td>
                 <td className="muted">{l.title || '—'}</td>
                 <td>{l.company}</td>
                 <td className="muted">{l.email || '—'}</td>
+                {/* Its own column, in LinkedIn's blue: as a grey chip beside the name
+                    it read as punctuation and went unseen. A column also makes the
+                    gaps countable — a row with no profile is a row worth a second
+                    look before it gets mailed. */}
+                <td>
+                  {l.linkedin_url ? (
+                    <a className="li-cell" href={l.linkedin_url} target="_blank" rel="noreferrer noopener"
+                       title={`Open ${l.name} on LinkedIn`} onClick={(e) => e.stopPropagation()}>
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                        <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45z" />
+                      </svg>
+                      Profile
+                    </a>
+                  ) : <span className="muted">—</span>}
+                </td>
                 <td><span className={`badge s-${l.status}`} title={l.status === 'error' ? (l.error || 'errored — reason not recorded (pre-fix run); retry from Overview') : undefined}>{l.status}</span></td>
               </motion.tr>
             ))}

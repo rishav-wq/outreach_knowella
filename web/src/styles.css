@@ -1798,15 +1798,17 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 
 /* Question suggestions — offered, never imposed: each is a claim you'd have to
    stand behind, so they stay quiet until asked for. */
-/* Quiet until wanted: a row of these must not out-shout the names beside them. */
-.li-link {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 17px; height: 17px; margin-left: 7px; vertical-align: 1px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: -.2px; line-height: 1;
-  color: var(--faint); background: var(--bg-soft, #f7f9fb); border: 1px solid var(--line);
-  border-radius: 3px; text-decoration: none; transition: all .12s;
+/* LinkedIn's own blue, which is the point: it has to read as a link to somewhere
+   else, not as another status pill in a table already full of them. */
+.li-cell {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 500; line-height: 1;
+  color: #0a66c2; text-decoration: none; white-space: nowrap;
+  padding: 4px 8px 4px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  transition: background .12s, border-color .12s;
 }
-.li-link:hover { color: #fff; background: #0a66c2; border-color: #0a66c2; }
+.li-cell:hover { background: #eef4fb; border-color: #bcd6ee; }
+.li-cell:focus-visible { outline: none; box-shadow: var(--ring); }
 
 .idea-row { margin: -4px 0 10px; }
 .ideas { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
