@@ -41,8 +41,11 @@ SYSTEM = (
     "at most once and only if it reads naturally.\n"
     "- The unsubscribe footer is added automatically; do not write one.\n\n"
     'Return ONLY JSON: {"subject": str, "body": str, "used": [str], "omitted": [str]}\n'
-    '"used" lists the KNOWLEDGE/SIGNAL points you actually leaned on. "omitted" lists '
-    "anything you deliberately left out because you had no source for it."
+    '"used" lists the KNOWLEDGE or SIGNAL points you actually leaned on.\n'
+    '"omitted" lists ONLY points you WANTED to make but could not, because you had no '
+    "source for them. Do NOT list the DO NOT rules — obeying those is expected, not an "
+    "omission. Do NOT list knowledge points that were simply irrelevant to this issue. "
+    "If nothing was genuinely held back, return an empty list."
 )
 
 
