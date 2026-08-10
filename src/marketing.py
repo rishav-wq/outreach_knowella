@@ -65,20 +65,40 @@ def _inline(t: str) -> str:
     return _MD_BOLD.sub(r"<strong>\1</strong>", out)
 
 
+_P = 'style="margin:0 0 18px"'
+
+
 def to_html(body: str) -> str:
-    """Body → paragraphs and lists. A block whose every line is a bullet becomes a
-    list; everything else is a paragraph with single newlines kept as breaks."""
-    out = []
+    """Body → paragraphs and lists.
+
+    Runs of bullet lines become a list wherever they appear, including directly
+    under the sentence introducing them. Requiring a whole block to be bullets was
+    wrong in the most common case there is — 'here is the check:' followed by the
+    check — and turned every list into a paragraph of literal hyphens, which is
+    what made a short issue read as a wall.
+    """
+    out, run = [], []
+
+    def flush_list():
+        if run:
+            items = "".join(f'<li style="margin-bottom:6px">{_inline(x)}</li>' for x in run)
+            out.append(f'<ul style="margin:0 0 18px;padding-left:22px">{items}</ul>')
+            run.clear()
+
     for block in body.split("\n\n"):
-        lines = [ln for ln in block.split("\n") if ln.strip()]
-        if not lines:
-            continue
-        if all(_BULLET.match(ln) for ln in lines):
-            items = "".join(f'<li style="margin-bottom:4px">{_inline(_BULLET.sub("", ln))}</li>'
-                            for ln in lines)
-            out.append(f'<ul style="margin:0 0 16px;padding-left:20px">{items}</ul>')
-        else:
-            out.append(f'<p>{"<br>".join(_inline(ln) for ln in lines)}</p>')
+        para = []
+        for ln in (l for l in block.split("\n") if l.strip()):
+            if _BULLET.match(ln):
+                if para:
+                    out.append(f'<p {_P}>{"<br>".join(para)}</p>')
+                    para = []
+                run.append(_inline(_BULLET.sub("", ln)))
+            else:
+                flush_list()
+                para.append(_inline(ln))
+        if para:
+            out.append(f'<p {_P}>{"<br>".join(para)}</p>')
+        flush_list()
     return "".join(out)
 
 
@@ -96,10 +116,14 @@ def render_message(blast: dict, lead, email: str) -> dict:
     subject = fill_placeholders(blast["subject"], lead, {})
     body = fill_placeholders(blast["body"], lead, {})
     text = to_text(body) + FOOTER_TEXT
-    html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:14px;'
-            f'line-height:1.6;color:#242a32;max-width:600px">{to_html(body)}'
+    # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
+    # research keeps landing on for sustained reading. 14px over 600px ran nearer 85,
+    # which is where the eye starts losing its place on the return sweep — a slower
+    # read that gets blamed on length.
+    html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
+            f'line-height:1.7;color:#242a32;max-width:560px">{to_html(body)}'
             f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
-            f'padding-top:12px;margin-top:24px">You\'re receiving this because you\'ve been '
+            f'padding-top:12px;margin-top:8px">You\'re receiving this because you\'ve been '
             f'in touch with Knowella. <a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p></div>')
     return {
         "to": email,
