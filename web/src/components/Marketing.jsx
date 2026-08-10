@@ -319,6 +319,10 @@ export default function Marketing() {
                 <option key={p.id} value={p.id}>{p.name}{p.issues ? ` · ${p.issues} issues` : ''}</option>
               ))}
             </select>
+            {/* Reaching the editor from where you notice the block is wrong beats
+                remembering which page it lives on. */}
+            <a className="ghostlink" style={{ display: 'inline-block', marginBottom: 8 }}
+               href="#/app/publications">Add or edit publications</a>
             {(() => {
               const pub = pubs.find((x) => x.id === draft.publication_id)
               if (!pub) return null

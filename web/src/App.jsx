@@ -11,6 +11,7 @@ import Marketing from './components/Marketing'
 import Sources from './components/Sources'
 import Signals from './components/Signals'
 import Audiences from './components/Audiences'
+import Publications from './components/Publications'
 import Inbox from './components/Inbox'
 import Settings from './components/Settings'
 import NewCampaign from './components/NewCampaign'
@@ -29,6 +30,7 @@ const SALES_NAV = [
 ]
 const MKT_NAV = [
   { id: 'Blasts', slug: 'blasts', icon: 'upload' },
+  { id: 'Publications', slug: 'publications', icon: 'list' },
   { id: 'Audiences', slug: 'audiences', icon: 'users' },
 ]
 const SHARED_NAV = [
@@ -110,6 +112,7 @@ export default function App({ onHome }) {
     if (tab === 'Inbox') return <Inbox campaign={campaign} />
     if (tab === 'Library') return <LeadsLibrary onPromoted={() => api.getStatus(campaign).then(setStatus).catch(() => {})} />
     if (tab === 'Blasts') return <Marketing />
+    if (tab === 'Publications') return <Publications />
     if (tab === 'Audiences') return <Audiences />
     if (tab === 'Sources') return <Sources />
     if (tab === 'Signals') return <Signals />

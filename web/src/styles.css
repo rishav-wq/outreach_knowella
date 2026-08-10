@@ -1810,6 +1810,34 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .li-cell:hover { background: #eef4fb; border-color: #bcd6ee; }
 .li-cell:focus-visible { outline: none; box-shadow: var(--ring); }
 
+/* Publications — the knowledge block is the page's real content, so it gets the
+   room. Everything else is one line and gets out of the way. */
+.pub-form { max-width: 720px; margin-top: 12px; }
+.pub-lbl {
+  display: block; margin-bottom: 16px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+}
+.pub-lbl .field-input { display: block; width: 100%; margin-top: 6px; font-weight: 400; }
+.pub-help { display: block; margin-top: 5px; font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.pub-knowledge { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; resize: vertical; }
+.pub-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pub-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+.pub-card {
+  display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 16px; margin-bottom: 12px;
+  background: var(--panel);
+}
+.pub-card-top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 5px; }
+.pub-badge {
+  font-size: 11px; font-weight: 600; color: var(--signal);
+  background: var(--signal-tint); border: 1px solid var(--signal-line);
+  border-radius: 999px; padding: 2px 8px;
+}
+.pub-from { margin-top: 7px; font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
+.pub-warn { margin-top: 8px; font-size: 12px; color: #a34a05; }
+.pub-card-actions { display: flex; gap: 8px; }
+
 .idea-row { margin: -4px 0 10px; }
 .ideas { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .idea {
