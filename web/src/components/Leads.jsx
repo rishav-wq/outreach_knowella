@@ -15,6 +15,7 @@ export default function Leads({ campaign, onNavigate }) {
   const [leads, setLeads] = useState(null)
   const [q, setQ] = useState('')
   const [dateFilter, setDateFilter] = useState('all')   // all | today | 7d | 30d — by pull date
+  const [mode, setMode] = useState('all')               // export shape: all | linkedin
   const [limit, setLimit] = useState(25)
   const [msg, setMsg] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState('')   // '' | 'apollo' | 'csv'
@@ -154,9 +155,14 @@ export default function Leads({ campaign, onNavigate }) {
   // and building it from `filtered` means a search or date filter narrows the file
   // the same way it narrows the table. Nobody has to remember which one the export
   // ignored.
-  const exportRows = sel.size > 0 ? filtered.filter((l) => sel.has(l.key)) : filtered
+  const chosen = sel.size > 0 ? filtered.filter((l) => sel.has(l.key)) : filtered
+  // 'linkedin' drops rows with no profile rather than writing blank lines: a file of
+  // URLs is going to be worked through one by one, and an empty row there is a person
+  // you can't identify and can't open.
+  const exportRows = mode === 'linkedin' ? chosen.filter((l) => l.linkedin_url) : chosen
+  const skipped = chosen.length - exportRows.length
   const downloadCsv = () => {
-    const cols = [
+    const cols = mode === 'linkedin' ? [['LinkedIn', (l) => l.linkedin_url]] : [
       ['Name', (l) => l.name], ['Title', (l) => l.title], ['Company', (l) => l.company],
       ['Email', (l) => l.email], ['LinkedIn', (l) => l.linkedin_url],
       ['Status', (l) => l.status], ['Campaign', () => campaign],
@@ -172,7 +178,7 @@ export default function Leads({ campaign, onNavigate }) {
     const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `${campaign}-leads-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `${campaign}-${mode === 'linkedin' ? 'linkedin' : 'leads'}-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -197,11 +203,22 @@ export default function Leads({ campaign, onNavigate }) {
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
         </select>
+        <select className="src-select" value={mode} onChange={(e) => setMode(e.target.value)}
+                title="What goes in the file">
+          <option value="all">All fields</option>
+          <option value="linkedin">LinkedIn only</option>
+        </select>
         <button className="btn" disabled={exportRows.length === 0} onClick={downloadCsv}
-                title="Name, title, company, email, LinkedIn profile, status and pull date">
+                title={mode === 'linkedin' ? 'One column of profile URLs'
+                  : 'Name, title, company, email, LinkedIn profile, status and pull date'}>
           <Icon name="download" size={14} />
-          {sel.size > 0 ? `Export ${sel.size} selected` : `Export ${exportRows.length.toLocaleString()}`}
+          Export {exportRows.length.toLocaleString()}{sel.size > 0 ? ' selected' : ''}
         </button>
+        {skipped > 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>
+            {skipped.toLocaleString()} {skipped === 1 ? 'has' : 'have'} no profile — left out
+          </span>
+        )}
         {sel.size > 0 ? (
           <div className="bulk-bar">
             <span className="bulk-count">{sel.size} selected</span>
