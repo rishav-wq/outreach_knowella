@@ -205,6 +205,107 @@ p{color:#9aa5ac}.mark.bad{background:#222b27}}
         .replace("__HEADING__", heading).replace("__MSG__", msg))
 
 
+def _subscribe_page(ok: bool) -> str:
+    """Confirmation landing. Same chrome as the unsubscribe page on purpose: a page
+    that doesn't look like it came from us reads as phishing, which is the last
+    impression to give someone at the moment they opt in."""
+    heading = "You’re subscribed" if ok else "Link not valid"
+    msg = ("Thanks — you’ll hear from us when we have something worth sending. "
+           "Every email has a one-click unsubscribe."
+           if ok else
+           "This confirmation link couldn’t be verified — it may be old or altered. "
+           "Subscribe again and we’ll send a fresh one.")
+    return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe · Knowella</title>
+<style>
+:root{color-scheme:light dark}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+background:#f6fafa;color:#242a32;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
+.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;
+padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
+.brand{display:flex;justify-content:center;align-items:center;gap:9px;margin-bottom:22px}
+.brand b{font-size:16px;font-weight:600;letter-spacing:-.01em}
+.brand i{font-style:normal;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#96a1af;font-weight:600}
+.mark{width:54px;height:54px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;background:#e6f8f4;color:#04b492}
+.mark.bad{background:#f0f1ec;color:#96a1af}
+h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
+p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
+.foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
+@media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
+.card{background:#161d1a;border-color:#28322d}
+p{color:#9aa5ac}.mark.bad{background:#222b27}}
+</style></head><body><div class="card">
+<div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
+<div class="mark __BAD__">__ICON__</div>
+<h1>__HEADING__</h1><p>__MSG__</p>
+<div class="foot">Knowella AI Inc.</div>
+</div></body></html>""".replace("__PINWHEEL__", _PINWHEEL)
+        .replace("__BAD__", "" if ok else "bad").replace("__ICON__", _CHECK if ok else _CROSS)
+        .replace("__HEADING__", heading).replace("__MSG__", msg))
+
+
+
+
+# --- subscribers: the only audience a newsletter may go to --------------------
+# A lead's address means we found them. A subscriber's means they asked. Double
+# opt-in makes the difference provable: nobody is 'confirmed' until they clicked a
+# link in an email delivered to that address, which is what a mailbox provider (and
+# Postmark's compliance team) will want to see if a complaint is ever raised.
+class SubscribeIn(BaseModel):
+    email: str
+    name: str = ""
+    source: str = "web"
+
+
+@app.post("/api/subscribe")
+def subscribe(r: SubscribeIn):
+    """Public. Records a PENDING subscription and emails a confirmation link.
+
+    Deliberately says the same thing whether or not the address is new, already
+    pending or already confirmed — a subscribe form that reveals which addresses
+    are on the list is an enumeration oracle.
+    """
+    email = (r.email or "").strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "that doesn't look like an email address")
+    store = open_store()
+    if store.is_suppressed(email):
+        # They previously opted out. Honour that silently rather than re-adding.
+        return {"ok": True}
+    doc = store.add_subscriber(email, r.name, r.source)
+    if doc.get("status") != "confirmed" and postmark_send.has_key() and postmark_send.from_address():
+        link = f"{unsubscribe._base_url()}/api/subscribe/confirm?t={unsubscribe.token(email)}"
+        try:
+            postmark_send.send_batch([{
+                "to": email,
+                "subject": "Confirm your subscription",
+                "text_body": ("Tap the link below and we'll start sending you what we're learning "
+                              f"about EHS and fleet compliance.\n\n{link}\n\n"
+                              "If you didn't ask for this, ignore this email — nothing will be sent."),
+            }], stream=os.environ.get("POSTMARK_STREAM", "broadcast"))
+        except Exception as e:
+            print(f"[subscribe] confirmation send failed for {email}: {e}")
+    return {"ok": True}
+
+
+@app.get("/api/subscribe/confirm")
+def subscribe_confirm(t: str = ""):
+    """The double-opt-in landing. Same signed-token scheme as unsubscribe."""
+    email = unsubscribe.email_from_token(t)
+    ok = bool(email) and open_store().confirm_subscriber(email)
+    return HTMLResponse(_subscribe_page(ok))
+
+
+@app.get("/api/subscribers")
+def list_subscribers(status: str = ""):
+    store = open_store()
+    return {"counts": store.subscriber_counts(),
+            "subscribers": [{"email": d["_id"], "name": d.get("name", ""),
+                             "status": d.get("status", ""), "source": d.get("source", ""),
+                             "created_at": d.get("created_at", "")}
+                            for d in store.list_subscribers(status)[:500]]}
+
+
 @app.get("/api/unsubscribe")
 def unsubscribe_link(t: str = ""):
     """Public one-click unsubscribe (linked from every email footer). Verifies the
@@ -212,7 +313,9 @@ def unsubscribe_link(t: str = ""):
     confirmation page. No auth (see auth._OPEN_API_PATHS)."""
     email = unsubscribe.email_from_token(t)
     if email:
-        open_store().suppress(email, reason="unsubscribed via email link")
+        store = open_store()
+        store.suppress(email, reason="unsubscribed via email link")
+        store.drop_subscriber(email)   # suppression alone would leave them in the audience
     return HTMLResponse(_unsubscribe_page(bool(email)))
 
 
@@ -1194,6 +1297,7 @@ class AudienceFilter(BaseModel):
     statuses: list[str] = []
     exclude_sent: bool = False
     engagement: str = ""   # '' | 'opened' | 'clicked' — warm-slice narrowing
+    subscribers_only: bool = False   # people who ASKED — ignores every filter above
 
 
 class PromoteReq(BaseModel):
@@ -1553,7 +1657,7 @@ def delete_blast(bid: str):
 
 
 class BlastTest(BaseModel):
-    to: str
+    to: str      # one address, or several separated by commas / spaces / newlines
 
 
 @app.post("/api/blasts/{bid}/test")
@@ -1564,22 +1668,33 @@ def test_blast(bid: str, r: BlastTest):
     b = store.get_blast(bid)
     if not b:
         raise HTTPException(404, "blast not found")
-    to = (r.to or "").strip()
-    if "@" not in to:
-        raise HTTPException(400, "enter a valid email address")
+    # Several addresses, comma or newline separated. A dress rehearsal on your own
+    # inboxes is a different thing from mailing the first five people on the list:
+    # it proves the from-address, the merge fields, the unsubscribe footer and how it
+    # renders in Gmail and Outlook, without spending a single real recipient.
+    raw = re.split(r"[,;\s]+", (r.to or "").strip())
+    tos = [a.strip() for a in raw if "@" in a]
+    if not tos:
+        raise HTTPException(400, "enter at least one valid email address")
+    if len(tos) > 10:
+        raise HTTPException(400, "that's a test, not a send — 10 addresses max")
     people = store.audience_leads(b.get("audience") or {})
     sample = people[0]["lead"] if people else Lead(first_name="Maria", last_name="Chen",
                                                   title="VP Operations", company="Meridian Logistics")
-    msg = marketing.render_message(b, sample, to)
-    msg["subject"] = f"[TEST] {msg['subject']}"
+    msgs = []
+    for to in tos:
+        m = marketing.render_message(b, sample, to)
+        m["subject"] = f"[TEST] {m['subject']}"
+        msgs.append(m)
     try:
-        res = postmark_send.send_batch([msg])
+        res = postmark_send.send_batch(msgs)
     except RuntimeError as e:
         raise HTTPException(502, str(e))
-    first = res[0] if res else {}
-    if first.get("ErrorCode"):
-        raise HTTPException(502, f"Postmark rejected it: {first.get('Message')}")
-    return {"ok": True, "rendered_for": people[0]["email"] if people else "(sample lead)",
+    bad = [f"{tos[i]}: {x.get('Message')}" for i, x in enumerate(res) if x.get("ErrorCode")]
+    if bad and len(bad) == len(tos):
+        raise HTTPException(502, f"Postmark rejected all of them — {bad[0]}")
+    return {"ok": True, "sent": len(tos) - len(bad), "failed": bad,
+            "rendered_for": people[0]["email"] if people else "(sample lead)",
             "audience_count": len(people)}
 
 

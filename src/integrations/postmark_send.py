@@ -48,6 +48,15 @@ def from_address() -> str:
     return os.environ.get("MARKETING_FROM", "")
 
 
+def reply_to() -> str:
+    """Where replies land. Without this every reply goes to the From address, which
+    means sending as news@ requires news@ to be a real, watched mailbox. Setting it
+    lets the newsletter come from a brand address while a human gets the answers —
+    and replies to a newsletter are warm inbound, the last thing to drop on the floor.
+    """
+    return os.environ.get("MARKETING_REPLY_TO", "")
+
+
 def _hdr() -> dict:
     return {
         "Accept": "application/json",
@@ -83,6 +92,9 @@ def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:
                 "MessageStream": stream,
                 "TrackOpens": True,
             }
+            rt = m.get("reply_to") or reply_to()
+            if rt:
+                entry["ReplyTo"] = rt
             if m.get("html_body"):
                 entry["HtmlBody"] = m["html_body"]
                 entry["TrackLinks"] = "HtmlOnly"

@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '' } }
+const EMPTY = { name: '', subject: '', body: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -77,7 +77,14 @@ export default function Marketing() {
     try {
       const id = await save()
       const r = await api.testBlast(id, testTo.trim())
-      setMsg({ ok: true, text: `Test sent to ${testTo.trim()} (rendered for ${r.rendered_for}). This blast would reach ${r.audience_count} people.` })
+      const failed = (r.failed || []).length
+      setMsg({
+        ok: failed === 0,
+        text: `Test sent to ${r.sent} ${r.sent === 1 ? 'address' : 'addresses'}`
+          + ` (rendered with ${r.rendered_for}'s details).`
+          + (failed ? ` ${failed} rejected: ${r.failed.join('; ').slice(0, 160)}` : '')
+          + ` A real send would reach ${r.audience_count} people.`,
+      })
       load()
     } catch (e) { setMsg({ ok: false, text: `Test failed: ${String(e.message).slice(0, 220)}` }) }
     finally { setBusy('') }
@@ -132,10 +139,12 @@ export default function Marketing() {
 
             <div className="mkt-actions">
               <div className="ready-form" style={{ margin: 0 }}>
-                <input className="field-input" placeholder="you@knowella.com" value={testTo}
-                  onChange={(e) => setTestTo(e.target.value)} style={{ width: 220 }} />
+                <input className="field-input"
+                  placeholder="you@gmail.com, colleague@knowella.com — up to 10"
+                  value={testTo} onChange={(e) => setTestTo(e.target.value)} style={{ width: 330 }} />
                 <button className="btn" disabled={!complete || !testTo.includes('@') || busy !== ''} onClick={doTest}>
-                  {busy === 'test' ? <><span className="spinner spinner-dark" /> Sending…</> : 'Send test to me'}
+                  {busy === 'test' ? <><span className="spinner spinner-dark" /> Sending…</>
+                    : `Send test to ${testTo.split(/[,;\s]+/).filter((a) => a.includes('@')).length || 1}`}
                 </button>
               </div>
               <div className="blast-send">
@@ -171,8 +180,20 @@ export default function Marketing() {
                 {audiences.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.count})</option>)}
               </select>
             )}
-            <label className="use-ai-toggle" style={{ marginBottom: 12 }}>
-              <input type="checkbox" checked={!!draft.audience.exclude_sent}
+            {/* Consent first. Everything below narrows the Library — people we FOUND.
+                This one switches to the people who ASKED, which is the only audience
+                a newsletter may go to, so it sits above the rest and overrides them. */}
+            <label className="use-ai-toggle mkt-optin" style={{ marginBottom: 12 }}>
+              <input type="checkbox" checked={!!draft.audience.subscribers_only}
+                onChange={(e) => setDraft({ ...draft, audience: { ...draft.audience, subscribers_only: e.target.checked } })} />
+              <span><b>Only confirmed subscribers</b>
+                <span className="muted"> — people who opted in and clicked the confirmation link.
+                  The only audience safe for a newsletter; ignores the filters below.</span></span>
+            </label>
+
+            <label className="use-ai-toggle" style={{ marginBottom: 12, opacity: draft.audience.subscribers_only ? 0.45 : 1 }}>
+              <input type="checkbox" disabled={!!draft.audience.subscribers_only}
+                checked={!!draft.audience.exclude_sent}
                 onChange={(e) => setDraft({ ...draft, audience: { ...draft.audience, exclude_sent: e.target.checked } })} />
               <span><b>Skip anyone sales already emailed</b>
                 <span className="muted"> — keeps cold-sequence targets out of bulk mail</span></span>

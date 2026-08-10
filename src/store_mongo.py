@@ -426,6 +426,21 @@ class MongoStore:
         campaign (the 'never pitched' audience); engagement narrows to people who
         opened/clicked a previous blast — the warm slice.
         Returns [{email, key, lead}] — lead is the full Lead for merge rendering."""
+        # subscribers_only is a different question from every other filter: not
+        # "who in the Library matches" but "who actually asked for this". It is the
+        # only audience a newsletter may legally and safely go to, so it short-
+        # circuits the Library entirely rather than narrowing it.
+        if flt.get("subscribers_only"):
+            out: dict[str, dict] = {}
+            for d in self.list_subscribers("confirmed"):
+                email = d["_id"]
+                if self.is_suppressed(email):
+                    continue
+                lead = self.lead_by_email(email) or Lead(
+                    first_name=(d.get("name") or "").split(" ")[0], email=email)
+                out[email] = {"email": email, "key": f"sub::{email}", "lead": lead}
+            return list(out.values())
+
         topics = set(flt.get("topics") or [])
         statuses = set(flt.get("statuses") or [])
         want_eng = flt.get("engagement") or ""
@@ -449,6 +464,12 @@ class MongoStore:
                 continue
             out[email] = {"email": email, "key": d["_id"], "lead": lead}
         return list(out.values())
+
+    def lead_by_email(self, email: str) -> Lead | None:
+        """A subscriber who is also in the Library gets their real merge fields —
+        first name, company, title — instead of an empty shell."""
+        d = self.db.leads.find_one({"lead.email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
+        return Lead.model_validate(d["lead"]) if d else None
 
     def library_topics(self) -> list[str]:
         return sorted(t for t in self.db.leads.distinct("topics") if t)
@@ -507,6 +528,51 @@ class MongoStore:
             {"_id": f"{bid}::{email}"},
             {"_id": f"{bid}::{email}", "blast": bid, "email": email, "lead_key": key,
              "message_id": message_id, "accepted": ok, "events": []}, upsert=True)
+
+    # --- subscribers: consent as a stored fact, not an assumption ---------------
+    # A lead's address means we found them. A subscriber's means they asked. Those
+    # are different things and a newsletter may only go to the second, so it lives
+    # in its own collection rather than as a flag on a lead that was never asked.
+    def add_subscriber(self, email: str, name: str = "", source: str = "") -> dict:
+        """Record a pending subscription. Idempotent: re-subscribing someone already
+        confirmed leaves them confirmed rather than knocking them back to pending."""
+        e = (email or "").strip().lower()
+        now = datetime.now(timezone.utc).isoformat()
+        existing = self.db.subscribers.find_one({"_id": e})
+        if existing and existing.get("status") == "confirmed":
+            return existing
+        doc = {"_id": e, "name": name.strip(), "source": source or "web",
+               "status": "pending", "created_at": (existing or {}).get("created_at", now),
+               "asked_at": now}
+        self.db.subscribers.replace_one({"_id": e}, doc, upsert=True)
+        return doc
+
+    def confirm_subscriber(self, email: str) -> bool:
+        """Double opt-in landing. True only if there was something to confirm."""
+        e = (email or "").strip().lower()
+        r = self.db.subscribers.update_one(
+            {"_id": e}, {"$set": {"status": "confirmed",
+                                  "confirmed_at": datetime.now(timezone.utc).isoformat()}})
+        return r.matched_count > 0
+
+    def drop_subscriber(self, email: str) -> None:
+        """Unsubscribing has to end the subscription too, not just add a suppression
+        row — otherwise the audience keeps counting someone who opted out."""
+        self.db.subscribers.update_one(
+            {"_id": (email or "").strip().lower()},
+            {"$set": {"status": "unsubscribed",
+                      "unsubscribed_at": datetime.now(timezone.utc).isoformat()}})
+
+    def list_subscribers(self, status: str = "") -> list[dict]:
+        q = {"status": status} if status else {}
+        return list(self.db.subscribers.find(q).sort("created_at", -1))
+
+    def subscriber_counts(self) -> dict:
+        out = {"pending": 0, "confirmed": 0, "unsubscribed": 0}
+        for d in self.db.subscribers.aggregate([{"$group": {"_id": "$status", "n": {"$sum": 1}}}]):
+            if d["_id"] in out:
+                out[d["_id"]] = d["n"]
+        return out
 
     def blast_sent_emails(self, bid: str) -> set:
         """Who this blast has already gone to. Sending in batches is only safe if a

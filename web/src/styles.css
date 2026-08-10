@@ -1763,3 +1763,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .blast-batch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .blast-batch .field-input { width: 72px; text-align: center; }
 .blast-all { color: var(--muted); }
+/* Consent is not one filter among many — it decides whether the send is legitimate
+   at all, so it reads as a gate rather than a checkbox in a row of checkboxes. */
+.mkt-optin { border: 1px solid var(--verify); background: var(--verify-tint); border-radius: var(--radius-sm); padding: 11px 13px; }
+.mkt-optin b { color: #0b6b58; }

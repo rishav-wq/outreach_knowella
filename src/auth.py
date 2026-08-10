@@ -23,8 +23,10 @@ _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 # it authenticates itself with the POSTMARK_WEBHOOK_TOKEN shared secret in its URL.
 # /api/signals/inbound is the same arrangement for inbound notification mail
 # (SIGNALS_WEBHOOK_TOKEN); Postmark posts it with no session either.
+# /api/subscribe and its confirm landing are public by definition — a subscribe
+# form behind a login is not a subscribe form.
 _OPEN_API_PATHS = {"/api/health", "/api/unsubscribe", "/api/postmark/events",
-                   "/api/signals/inbound"}
+                   "/api/signals/inbound", "/api/subscribe", "/api/subscribe/confirm"}
 
 # The browser extension can't carry a Clerk session, so these routes authenticate
 # with a per-user capture token instead (X-Capture-Token header). Requests carrying
