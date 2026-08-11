@@ -1591,6 +1591,7 @@ class BlastBody(BaseModel):
     body: str
     audience: AudienceFilter = AudienceFilter()
     publication_id: str = ""   # which publication this is an issue OF
+    format: str = "markdown"   # 'markdown' | 'html' — how the body is rendered
 
 
 def _blast_out(b: dict) -> dict:
@@ -1599,6 +1600,7 @@ def _blast_out(b: dict) -> dict:
             "status": b.get("status", "draft"), "stats": b.get("stats") or {},
             "progress": b.get("progress") or {}, "error": b.get("error", ""),
             "publication_id": b.get("publication_id", ""), "issue_no": b.get("issue_no", 0),
+            "format": b.get("format") or "markdown",
             "remaining": b.get("remaining", 0), "audience_size": b.get("audience_size", 0),
             "created_at": b.get("created_at", ""), "sent_at": b.get("sent_at", "")}
 
@@ -1609,6 +1611,38 @@ def marketing_meta():
     and which campaigns have reachable people in it."""
     st = open_store()
     return {"topics": st.library_topics(), "campaigns": st.library_campaigns()}
+
+
+class RenderReq(BaseModel):
+    subject: str = ""
+    body: str = ""
+    format: str = "markdown"
+    audience: AudienceFilter = AudienceFilter()
+
+
+@app.post("/api/blasts/render")
+def render_preview(r: RenderReq):
+    """Exactly what a recipient receives, without spending one.
+
+    Runs the SAME marketing.render_message the send does — a preview that
+    re-implements the renderer is a preview of something nobody will get, and the
+    first thing it would hide is the difference between the two formats.
+
+    Rendered as the first person in the audience, like the test send, so merge
+    fields show real values instead of {first_name}.
+    """
+    store = open_store()
+    try:
+        people = store.audience_leads(r.audience.model_dump())[:1]
+    except Exception:
+        people = []
+    lead = people[0]["lead"] if people else Lead(
+        first_name="Maria", last_name="Chen", title="VP Operations", company="Meridian Logistics")
+    m = marketing.render_message(
+        {"_id": "preview", "subject": r.subject, "body": r.body, "format": r.format},
+        lead, people[0]["email"] if people else "preview@example.com")
+    return {"subject": m["subject"], "html": m["html_body"], "text": m["text_body"],
+            "rendered_for": (people[0]["email"] if people else "a sample lead")}
 
 
 @app.post("/api/marketing/preview")
@@ -1822,7 +1856,7 @@ def create_blast(b: BlastBody):
         raise HTTPException(400, "name, subject and body are all required")
     bid = open_store().create_blast({"name": b.name.strip(), "subject": b.subject.strip(),
                                      "body": b.body, "audience": b.audience.model_dump(),
-                                     "publication_id": b.publication_id})
+                                     "publication_id": b.publication_id, "format": b.format})
     return {"id": bid}
 
 
@@ -1844,7 +1878,7 @@ def update_blast(bid: str, body: BlastBody):
         raise HTTPException(400, "only drafts can be edited")
     store.update_blast(bid, {"name": body.name.strip(), "subject": body.subject.strip(),
                              "body": body.body, "audience": body.audience.model_dump(),
-                             "publication_id": body.publication_id})
+                             "publication_id": body.publication_id, "format": body.format})
     return {"ok": True}
 
 

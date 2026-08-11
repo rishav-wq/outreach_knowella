@@ -79,6 +79,9 @@ export const deleteBacklog = (id) => apiSend(`/api/backlog/${encodeURIComponent(
 export const getMarketingStatus = () => apiGet('/api/marketing/status')
 export const sendMarketingTest = (to) => apiSend('/api/marketing/test', 'POST', { to })
 export const getMarketingMeta = () => apiGet('/api/marketing/meta')
+// Rendered by the server with the same code the send uses — a preview built in the
+// browser would be a preview of something nobody receives.
+export const renderBlast = (b) => apiSend('/api/blasts/render', 'POST', b)
 export const previewAudience = (filter) => apiSend('/api/marketing/preview', 'POST', filter)
 // publications: what a blast is an issue OF — product, voice and the knowledge
 // block that bounds what may be claimed as fact

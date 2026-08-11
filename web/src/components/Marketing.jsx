@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', publication_id: '', audience: { campaigns: [], topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
+const EMPTY = { name: '', subject: '', body: '', publication_id: '', format: 'markdown', audience: { campaigns: [], topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -68,7 +68,7 @@ export default function Marketing() {
     // nothing said what the issue may claim. Spread EMPTY so a new audience field added
     // later can't go missing the same way.
     setDraft({ ...EMPTY, name: b.name, subject: b.subject, body: b.body,
-               publication_id: b.publication_id || '',
+               publication_id: b.publication_id || '', format: b.format || 'markdown',
                audience: { ...EMPTY.audience, ...b.audience } })
     setDraftId(b.id); setMsg(null); setView('edit')
   }
@@ -112,6 +112,18 @@ export default function Marketing() {
       // unseen question is unreviewable, and a bad pick is the first thing to fix.
       if (r.question) setQuestion(r.question)
       setGen({ used: r.used || [], omitted: r.omitted || [], picked: !!r.question_was_picked })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
+  }
+
+  // Preview: the rendered message, straight from the server's renderer.
+  const [shown, setShown] = useState(null)      // {subject, html, text, rendered_for}
+  const [asText, setAsText] = useState(false)
+  const doPreview = async () => {
+    setBusy('preview'); setMsg(null)
+    try {
+      setShown(await api.renderBlast({ subject: draft.subject, body: draft.body,
+                                       format: draft.format, audience: draft.audience }))
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
   }
@@ -267,10 +279,45 @@ export default function Marketing() {
             <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
               Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code> <code>{'{title}'}</code> — filled per person, same engine as verbatim sales mail.
             </div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-              Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and bare
-              links. Nothing else — no images or buttons, because looking like bulk mail is what costs opens.
+            <div className="fmt-row">
+              <div className="muted" style={{ fontSize: 11.5 }}>
+                {draft.format === 'html'
+                  ? <>Body is used as raw <b>HTML</b>. Inline every style — mail clients strip{' '}
+                      <code>&lt;style&gt;</code> blocks — and remember images and buttons are what make
+                      a newsletter look like bulk mail.</>
+                  : <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and
+                      bare links. Nothing else — no images or buttons, because looking like bulk mail is
+                      what costs opens.</>}
+              </div>
+              <select className="src-select fmt-pick" value={draft.format}
+                onChange={(e) => { setDraft({ ...draft, format: e.target.value }); setShown(null) }}
+                title="How the body is turned into the email">
+                <option value="markdown">Markdown</option>
+                <option value="html">Raw HTML</option>
+              </select>
+              <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doPreview}>
+                {busy === 'preview' ? 'Rendering…' : 'Preview'}
+              </button>
             </div>
+            {shown && (
+              <div className="mail-prev">
+                <div className="mail-prev-bar">
+                  <b>{shown.subject || '(no subject)'}</b>
+                  <span className="muted">as {shown.rendered_for}</span>
+                  <button className={`linklike ${asText ? 'on' : ''}`} onClick={() => setAsText(!asText)}>
+                    {asText ? 'Show HTML' : 'Show plain text'}
+                  </button>
+                  <button className="linklike" onClick={() => setShown(null)}>close</button>
+                </div>
+                {asText
+                  ? <pre className="mail-prev-text">{shown.text}</pre>
+                  /* An iframe, not a div: the body carries its own styles and raw HTML
+                     dropped into the page would inherit — and fight — the app's CSS,
+                     showing you something no mail client will ever render. */
+                  : <iframe className="mail-prev-frame" title="Rendered email" sandbox=""
+                      srcDoc={`<body style="margin:0;padding:18px;background:#fff">${shown.html}</body>`} />}
+              </div>
+            )}
 
             {blocker && (
               <div className="send-blocked">Nothing sends yet — this issue still needs {blocker}.</div>

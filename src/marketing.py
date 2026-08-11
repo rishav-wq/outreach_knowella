@@ -109,19 +109,45 @@ def to_text(body: str) -> str:
     return _MD_BOLD.sub(r"\1", t)
 
 
+_TAGS = re.compile(r"(?is)<(script|style)[^>]*>.*?</\1>")
+_BREAKS = re.compile(r"(?i)</(p|div|tr|h[1-6]|li)>|<br\s*/?>")
+
+
+def html_to_text(h: str) -> str:
+    """A readable plain-text part for a body written as HTML.
+
+    Every message still ships both parts: a text/plain alternative is one of the
+    oldest things spam filters look for, and some recipients genuinely read it. The
+    author writing HTML is not a reason to send an empty or tag-stuffed text body.
+    """
+    s = _TAGS.sub(" ", h or "")
+    s = _BREAKS.sub("\n", s)
+    s = re.sub(r"<[^>]+>", "", s)
+    s = html_mod.unescape(s)
+    s = re.sub(r"[ \t]+", " ", s)
+    return re.sub(r"\n{3,}", "\n\n", s).strip()
+
+
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
-    unsubscribe footer + header attached, text + minimal HTML (for open/click
-    tracking) generated from the same body."""
+    unsubscribe footer + header attached, text + HTML generated from the same body.
+
+    `format` is 'markdown' (default) or 'html'. In html the body is used verbatim,
+    for the times a hand-built or designer-supplied block is genuinely needed. What
+    it does NOT bypass is the footer: the unsubscribe placeholder is appended in
+    both modes, because Postmark appends its own to any broadcast message lacking
+    it and the result would be two links again.
+    """
     subject = fill_placeholders(blast["subject"], lead, {})
     body = fill_placeholders(blast["body"], lead, {})
-    text = to_text(body) + FOOTER_TEXT
+    raw = (blast.get("format") or "markdown") == "html"
+    text = (html_to_text(body) if raw else to_text(body)) + FOOTER_TEXT
     # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
     # research keeps landing on for sustained reading. 14px over 600px ran nearer 85,
     # which is where the eye starts losing its place on the return sweep — a slower
     # read that gets blamed on length.
     html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
-            f'line-height:1.7;color:#242a32;max-width:560px">{to_html(body)}'
+            f'line-height:1.7;color:#242a32;max-width:560px">{body if raw else to_html(body)}'
             f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:8px">You\'re receiving this because you\'ve been '
             f'in touch with Knowella. <a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p></div>')
