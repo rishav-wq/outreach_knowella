@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Icon from './Icon'
 import Logo from './Logo'
@@ -15,117 +15,80 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// Hero signature: WIRED PROOF.
+// Hero signature: THE EVIDENCE LEDGER.
 //
-// The draft on the left, its evidence on the right, and a dashed line actually
-// drawn between each claim and the source it came from. The colour carries the
-// pairing — violet claim to violet source, teal claim to teal source — so the
-// link is legible before a word is read. That is the product in one picture:
-// nothing in the sentence exists without something on the right holding it up.
+// Not a picture of the product — the product's argument, performed. Five claims a
+// model wanted to make about one company; two of them had a source. The other three
+// are struck out on load and never reach the draft.
 //
-// Connectors are measured from the live DOM rather than hardcoded, because the
-// claim spans wrap differently at every width and a guessed curve would point at
-// nothing the moment the text reflowed.
-const PAIRS = [
-  { n: 1, tone: 'violet', kind: 'Press', where: 'meridianlogistics.com/news',
-    quote: '“…our second Dayton hub is now operational.”', when: '11 days ago' },
-  { n: 2, tone: 'teal', kind: 'Hiring', where: 'Apollo · 2 open roles',
-    quote: '“Operations Coordinator” ×2, posted this month', when: '4 days ago' },
+// A mockup of the app was the wrong device here twice over: everybody recognises
+// invented dashboard data, so it persuades nobody, and a floating card with a soft
+// shadow is what every AI-SDR tool's homepage looks like — the same tools this
+// product exists to argue against. A findings table is also the register these
+// buyers already work in: OSHA 300 logs, audit trails, inspection reports.
+//
+// Teal appears once, on the tick. That is the only thing in the design system it is
+// allowed to mean. The rejects are grey and struck rather than red: they are not
+// errors, they are claims that failed to earn a place.
+const LEDGER = [
+  { claim: 'opened a second distribution hub in Dayton', src: 'meridianlogistics.com/news', seen: '11d', ok: true },
+  { claim: 'hiring two operations coordinators', src: 'Apollo · 2 open roles', seen: '4d', ok: true },
+  { claim: 'paperwork volume jumped before headcount', src: '—', seen: '—', ok: false },
+  { claim: 'a leading logistics innovator', src: '—', seen: '—', ok: false },
+  { claim: 'saves 40% of admin time', src: '—', seen: '—', ok: false },
 ]
+const KEPT = LEDGER.filter((r) => r.ok).length
 
-function WiredProof({ reduce }) {
-  const wrap = useRef(null)
-  const claims = useRef({})
-  const cards = useRef({})
-  const [paths, setPaths] = useState([])
-  const [hot, setHot] = useState(null)     // the pair under the cursor, if any
+function Ledger({ reduce }) {
+  // Rows land in sequence, then the unsourced ones strike through together. One
+  // orchestrated moment rather than five scattered ones — the cut is the point, so
+  // it happens at once and is over.
+  const [cut, setCut] = useState(!!reduce)
+  useEffect(() => {
+    if (reduce) return
+    const t = setTimeout(() => setCut(true), 1150)
+    return () => clearTimeout(t)
+  }, [reduce])
 
-  useLayoutEffect(() => {
-    const draw = () => {
-      const box = wrap.current?.getBoundingClientRect()
-      if (!box) return
-      const next = []
-      for (const p of PAIRS) {
-        const a = claims.current[p.n]?.getBoundingClientRect()
-        const b = cards.current[p.n]?.getBoundingClientRect()
-        if (!a || !b || b.left < a.right) continue      // stacked: no line to draw
-        const x1 = a.right - box.left
-        const y1 = a.top + a.height / 2 - box.top
-        const x2 = b.left - box.left
-        const y2 = b.top + Math.min(34, b.height / 2) - box.top
-        const dx = Math.max(40, (x2 - x1) * 0.55)
-        next.push({ ...p, d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}` })
-      }
-      setPaths(next)
-    }
-    draw()
-    const ro = new ResizeObserver(draw)
-    if (wrap.current) ro.observe(wrap.current)
-    window.addEventListener('resize', draw)
-    return () => { ro.disconnect(); window.removeEventListener('resize', draw) }
-  }, [])
+  const row = (i) => (reduce ? {} : {
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    transition: { delay: 0.35 + i * 0.07, duration: 0.34, ease: EASE },
+  })
 
   return (
-    <div className="wired" ref={wrap}>
-      <svg className="wired-links" aria-hidden="true">
-        {paths.map((p, i) => (
-          <motion.path key={p.n} d={p.d}
-            className={`wired-link t-${p.tone} ${hot && hot !== p.n ? 'is-dim' : ''} ${hot === p.n ? 'is-hot' : ''}`}
-            initial={reduce ? false : { pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ delay: reduce ? 0 : 0.9 + i * 0.35, duration: 0.7, ease: EASE }} />
-        ))}
-      </svg>
-
-      <motion.div className="wired-draft"
-        initial={reduce ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease: EASE }}>
-        <div className="wired-k">Draft · Meridian Logistics</div>
-        <div className="wired-subj">Your new Dayton hub</div>
-        <p className="wired-body">
-          Hi Maria — saw Meridian{' '}
-          <span className={`mark m-violet ${hot === 2 ? 'is-dim' : ''}`}
-            ref={(el) => { claims.current[1] = el }}
-            onMouseEnter={() => setHot(1)} onMouseLeave={() => setHot(null)}>
-            opened a second distribution hub in Dayton
-          </span>{' '}and that you&apos;re{' '}
-          <span className={`mark m-teal ${hot === 1 ? 'is-dim' : ''}`}
-            ref={(el) => { claims.current[2] = el }}
-            onMouseEnter={() => setHot(2)} onMouseLeave={() => setHot(null)}>
-            hiring two operations coordinators
-          </span>. Usually that means the paperwork volume jumped before the headcount did.
-        </p>
-        <div className="wired-actions">
-          <button className="btn wired-approve" type="button">Approve &amp; queue</button>
-          <button className="btn" type="button">Edit</button>
-          <span className="wired-note">sends from you · follows up until they reply</span>
-        </div>
-      </motion.div>
-
-      <div className="wired-sources">
-        {PAIRS.map((p, i) => (
-          <motion.div key={p.n}
-            className={`wired-src t-${p.tone} ${hot === p.n ? 'is-hot' : ''} ${hot && hot !== p.n ? 'is-dim' : ''}`}
-            ref={(el) => { cards.current[p.n] = el }}
-            onMouseEnter={() => setHot(p.n)} onMouseLeave={() => setHot(null)}
-            initial={reduce ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: reduce ? 0 : 1.05 + i * 0.35, duration: 0.5, ease: EASE }}>
-            <div className="wired-src-k">
-              Source {p.n} · {p.kind}<span className="wired-when">{p.when}</span>
-            </div>
-            <div className="wired-where">{p.where}</div>
-            <div className="wired-quote">{p.quote}</div>
-          </motion.div>
-        ))}
-        <motion.div className="wired-neg"
-          initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
-          transition={{ delay: reduce ? 0 : 1.9, duration: 0.5 }}>
-          Anything we can’t source never reaches the draft.
-        </motion.div>
+    <div className="lp-ledger" role="table" aria-label="Claims and their sources">
+      <div className="lp-ledger-head" role="row">
+        <span role="columnheader">Claim</span>
+        <span role="columnheader">Source</span>
+        <span role="columnheader">Seen</span>
+        <span role="columnheader" aria-label="Verified" />
       </div>
+
+      {LEDGER.map((r, i) => (
+        <motion.div key={r.claim} role="row"
+          className={`lp-ledger-row ${r.ok ? 'is-kept' : 'is-cut'} ${cut && !r.ok ? 'struck' : ''}`}
+          {...row(i)}>
+          <span className="lp-lg-claim" role="cell">
+            {r.claim}
+            {/* Drawn, not text-decoration: a line that sweeps left to right reads as
+                something being done to the claim rather than as how it was typed. */}
+            {!r.ok && <i className="lp-lg-strike" aria-hidden="true" />}
+          </span>
+          <span className="lp-lg-src" role="cell">{r.src}</span>
+          <span className="lp-lg-seen" role="cell">{r.seen}</span>
+          <span className="lp-lg-mark" role="cell">{r.ok ? '✓' : '✗'}</span>
+        </motion.div>
+      ))}
+
+      <motion.div className="lp-ledger-foot"
+        {...(reduce ? {} : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { delay: 1.5, duration: 0.4 } })}>
+        <b>{KEPT} of {LEDGER.length} survived.</b> The other {LEDGER.length - KEPT} never reach the draft.
+      </motion.div>
     </div>
   )
 }
+
 
 export default function Landing({ onLaunch }) {
   const reduce = useReducedMotion()
@@ -161,9 +124,13 @@ export default function Landing({ onLaunch }) {
             {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })}>
             <div className="lp-eyebrow-hero">Research → Draft → Your approval</div>
             <h1>The proof travels with the sentence.</h1>
+            <p className="lp-hero-sub">
+              So a sentence without proof doesn't travel at all. Here is one lead's
+              research, and what was left of it.
+            </p>
           </motion.div>
 
-          <WiredProof reduce={reduce} />
+          <Ledger reduce={reduce} />
 
           <motion.div className="lp-cta lp-cta-hero"
             {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 1.6, duration: 0.5, ease: EASE } })}>

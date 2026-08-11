@@ -438,9 +438,10 @@ class MongoStore:
         # circuits the Library entirely rather than narrowing it.
         if flt.get("subscribers_only"):
             out: dict[str, dict] = {}
+            sup = self.suppressed_set()
             for d in self.list_subscribers("confirmed"):
                 email = d["_id"]
-                if self.is_suppressed(email):
+                if self._is_sup(email, sup):
                     continue
                 lead = self.lead_by_email(email) or Lead(
                     first_name=(d.get("name") or "").split(" ")[0], email=email)
@@ -448,12 +449,26 @@ class MongoStore:
             return list(out.values())
 
         topics = set(flt.get("topics") or [])
+        # Campaign is the coarsest cut there is, and it was the one filter missing:
+        # a Freight Paperwork issue resolved to the whole 4,735-person Library,
+        # venture and private-equity contacts included. Any-match, like topics —
+        # a lead sits in one campaign per document, and the Library is the union.
+        campaigns = set(flt.get("campaigns") or [])
         statuses = set(flt.get("statuses") or [])
         want_eng = flt.get("engagement") or ""
         engaged = self.engagement_by_email() if want_eng else {}
-        rows = list(self.db.leads.find({}))
-        sent_emails = {(Lead.model_validate(d["lead"]).email or "").lower()
-                       for d in rows if d.get("status") == "sent"} if flt.get("exclude_sent") else set()
+        sup = self.suppressed_set()
+        rows = list(self.db.leads.find({"campaign": {"$in": list(campaigns)}} if campaigns else {}))
+        # Deliberately queried across EVERY campaign, not just the selected ones.
+        # "Skip anyone sales already emailed" means anyone, anywhere — narrowing it
+        # to the chosen campaigns would let a freight blast land on someone a
+        # different campaign cold-emailed yesterday. Projected rather than validated:
+        # this only needs the address, and it runs over the whole collection.
+        sent_emails = set()
+        if flt.get("exclude_sent"):
+            sent_emails = {((d.get("lead") or {}).get("email") or "").strip().lower()
+                           for d in self.db.leads.find({"status": "sent"}, {"lead.email": 1})}
+            sent_emails.discard("")
         out: dict[str, dict] = {}
         for d in rows:
             lead = Lead.model_validate(d["lead"])
@@ -466,7 +481,7 @@ class MongoStore:
                 continue
             if want_eng and not engaged.get(email, {}).get(want_eng):
                 continue
-            if self.is_suppressed(email):
+            if self._is_sup(email, sup):
                 continue
             out[email] = {"email": email, "key": d["_id"], "lead": lead}
         return list(out.values())
@@ -479,6 +494,18 @@ class MongoStore:
 
     def library_topics(self) -> list[str]:
         return sorted(t for t in self.db.leads.distinct("topics") if t)
+
+    def library_campaigns(self) -> list[dict]:
+        """Campaigns that actually have reachable people in the Library, with counts.
+        Counted by distinct email, because the number a blast cares about is people,
+        not lead rows — the same person can sit in two campaigns."""
+        seen: dict[str, set] = {}
+        for d in self.db.leads.find({}, {"campaign": 1, "lead.email": 1}):
+            email = ((d.get("lead") or {}).get("email") or "").strip().lower()
+            if email and d.get("campaign"):
+                seen.setdefault(d["campaign"], set()).add(email)
+        return sorted(({"name": k, "count": len(v)} for k, v in seen.items()),
+                      key=lambda c: -c["count"])
 
     # saved audiences: named, reusable filters — resolved live at every use
     def create_audience(self, name: str, flt: dict) -> str:
@@ -864,6 +891,20 @@ class MongoStore:
         if "@" in e:
             keys.append(e.rsplit("@", 1)[-1])
         return self.db.suppression.count_documents({"_id": {"$in": keys}}) > 0
+
+    @staticmethod
+    def _is_sup(email: str, sup: set[str]) -> bool:
+        e = (email or "").strip().lower().lstrip("@")
+        return bool(e) and (e in sup or ("@" in e and e.rsplit("@", 1)[-1] in sup))
+
+    def suppressed_set(self) -> set[str]:
+        """The whole do-not-contact list, for checking many addresses at once.
+
+        is_suppressed costs one round trip per address, which is right for one
+        address and ruinous for a list: resolving the 4,735-person Library made 4,735
+        calls to Atlas against a collection of 156 documents, and the audience
+        preview took minutes. Fetch it once instead."""
+        return {d["_id"] for d in self.db.suppression.find({}, {"_id": 1})}
 
     def list_suppressed(self) -> list[dict]:
         return [{"value": d["_id"], "reason": d.get("reason", ""), "added_at": d.get("added_at", "")}

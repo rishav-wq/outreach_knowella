@@ -67,7 +67,6 @@
   --chev-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364707c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   --chev-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2396a1af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
-
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
@@ -84,16 +83,13 @@ h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter
 h3 { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin: 0 0 8px; }
 code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
 .muted { color: var(--muted); }
-
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
-
 /* Section eyebrows — the product's micro-label register:
    12px SemiBold uppercase in #96A5B5, the only uppercase in the UI. */
 .section-label, .drawer-label {
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-bottom: 14px;
 }
-
 /* ---------- app shell — the product's light flat chrome ----------
    Header, sidebar and page share ONE #F4F7FA field (no dark band, no
    shadow); the content lives in a single white 16px-radius card. Nav
@@ -102,7 +98,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 /* header + sidebar are ONE continuous chrome surface (the product's anatomy):
    a full-width 64px bar with the logo in it, the sidebar starting beneath */
 .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px 1fr; }
-
 .sidebar {
   background: var(--bg); color: var(--text-2);
   display: flex; flex-direction: column; padding: 4px 12px 16px;
@@ -114,7 +109,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .brand-name { font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--ink); }
 .brand-sub { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint); margin-left: -1px; padding-top: 3px; }
 .topbar-user { display: flex; align-items: center; flex: none; }
-
 /* the engine switcher — Sales / Marketing, the product's workspace-switch pattern */
 .mode-seg {
   display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 8px 4px 4px;
@@ -127,7 +121,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .mode-seg button:hover { color: var(--signal); }
 .mode-seg button.on { background: var(--signal-pill); color: var(--signal); }
-
 .side-campaign { padding: 10px 4px 4px; }
 .side-campaign label {
   display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase;
@@ -142,7 +135,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .side-campaign select:hover { border-color: var(--signal); }
 .side-campaign select:focus { outline: none; border-color: var(--signal); box-shadow: var(--ring); }
-
 .nav { display: flex; flex-direction: column; gap: 4px; padding-top: 16px; }
 .nav-item {
   position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 10px;
@@ -162,7 +154,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .nav-op:hover { border-radius: 6px; border-top-color: transparent; }
 /* consecutive operational items (Library, Settings) share ONE divider, not stacked ones */
 .nav-op + .nav-op { margin-top: 0; border-top: none; padding-top: 9px; }
-
 /* topbar instrument register: live send state as product pills */
 .register { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .reg-item {
@@ -173,7 +164,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .reg-item.reg-low { color: var(--alert); border-color: rgba(251, 30, 57, 0.35); }
 .reg-link:hover { background: var(--signal-tint); }
 .register .dot { width: 8px; height: 8px; }
-
 /* work hero — the next action leads the page */
 .work-hero {
   position: relative; background: var(--panel); border: 1px solid var(--line-strong);
@@ -191,7 +181,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .wh-running-label { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
 .run-progress { position: relative; height: 6px; width: 280px; max-width: 100%; border-radius: 999px; background: var(--signal-pill); overflow: hidden; }
 .run-progress > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--grad-ella); transition: width 0.4s ease; }
-
 /* pipeline rail — the lifecycle wearing the pinwheel's own colors:
    green = leads in · indigo = the AI's work · yellow = waiting on you · teal = sent.
    The logo's geometry as the product's information design. */
@@ -208,11 +197,9 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .rail-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); }
 .rail-link { position: absolute; top: 8px; right: 12px; left: auto; width: calc(100% - 96px); max-width: 120px; height: 1px; background: var(--line-strong); }
 @media (max-width: 760px) { .rail { flex-wrap: wrap; gap: 14px; } .rail-stage { min-width: 40%; } .rail-link { display: none; } }
-
 .sidebar-foot { margin-top: auto; padding: 12px 8px 0; font-size: 11px; letter-spacing: 0.02em; color: var(--faint); display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 .sidebar-foot .foot-status { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-foot .dot { width: 7px; height: 7px; flex: none; }
-
 /* Clerk sign-in gate — shown to signed-out users on the app view */
 .auth-gate {
   min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -223,7 +210,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .auth-gate-brand .logo { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
 .auth-gate-brand-sub { font-weight: 500; color: var(--muted); }
 .auth-gate-tag { margin: 12px 0 0; color: var(--text-2); font-size: 14.5px; max-width: 380px; }
-
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 6px 20px 20px 8px; }
 /* full-width product header: logo → page title → register pills → user */
 .topbar {
@@ -245,14 +231,12 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .content::-webkit-scrollbar { width: 5px; }
 .content::-webkit-scrollbar-track { background: transparent; }
 .content::-webkit-scrollbar-thumb { background: #96a5b5; border-radius: 10px; }
-
 /* ---------- generic ---------- */
 .banner {
   background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--verify);
   color: var(--text-2); padding: 11px 15px; border-radius: var(--radius-sm); margin-bottom: 20px; font-size: 13px;
 }
 .banner.error { border-left-color: var(--alert); color: var(--alert); background: var(--alert-tint); border-color: #efc9c5; }
-
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: inherit;
   font-size: 13.5px; font-weight: 500; cursor: pointer; padding: 9px 16px; border-radius: var(--radius-sm);
@@ -274,15 +258,12 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .btn.dark { background: var(--ink); border-color: var(--ink); color: #fff; }
 .btn.dark:hover { background: var(--ink-3); border-color: var(--ink-3); color: #fff; }
 .btn.lg { padding: 12px 24px; font-size: 14.5px; }
-
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(255, 255, 255, 0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner-dark { border-color: rgba(20, 27, 23, 0.2); border-top-color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .skeleton { background: linear-gradient(90deg, #e6ecf1 25%, #f4f7fa 50%, #e6ecf1 75%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skel-row { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-
 /* ---------- empty state ---------- */
 .empty { text-align: center; padding: 64px 20px; max-width: 430px; margin: 40px auto 0; }
 .empty-icon {
@@ -292,7 +273,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .empty h3 { font-size: 20px; }
 .empty p { color: var(--muted); line-height: 1.6; }
 .empty-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
-
 /* ---------- dashboard ---------- */
 .dash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 26px; }
 .dash-eyebrow { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
@@ -309,7 +289,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   transition: border-color 0.12s ease;
 }
 .src-select:hover, .filters select:hover { border-color: var(--signal); }
-
 /* funnel: one connected ledger strip, not five floating cards */
 .funnel { display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 26px; }
 .stage { flex: 1; min-width: 0; position: relative; padding: 20px 22px 18px; }
@@ -320,7 +299,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .stage-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--line); }
 .stage-bar i { display: block; height: 100%; background: var(--signal); transition: width 0.5s ease; }
 .stage.done .stage-bar i { background: var(--verify); }
-
 .attention { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 26px; }
 .pill-stat { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
 .pill-stat b { color: var(--text); font-weight: 600; }
@@ -329,7 +307,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .d-held { background: var(--caution); }
 .d-invalid, .d-error, .d-rejected { background: var(--alert); }
 .d-dropped { background: #a9aea6; }
-
 .nudge {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   background: var(--ink); color: var(--ink-text); border-radius: var(--radius); padding: 18px 22px;
@@ -339,10 +316,8 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .nudge strong { color: #fff; font-family: var(--font-display); font-size: 15px; }
 .nudge .muted { color: var(--ink-muted); font-size: 13px; margin-top: 2px; }
 .nudge .btn { flex-shrink: 0; }
-
 .stats { display: flex; gap: 28px; color: var(--muted); font-family: var(--font-mono); font-size: 12px; flex-wrap: wrap; }
 .stats strong { color: var(--text); font-weight: 600; }
-
 /* ---------- badges & tags — the product's dot-pills ----------
    Fully rounded, 4px status dot, SemiBold micro-type on a soft tint
    (success = #04B49229 bg / #005343 ink, exactly like the product). */
@@ -370,7 +345,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 }
 .seed-btn:hover { border-color: var(--signal); color: var(--signal-deep); }
 .seed-btn.on { background: var(--signal-tint); border-color: var(--signal-line); color: var(--signal-deep); font-weight: 600; }
-
 /* ---------- master leads library ---------- */
 .lib-head { margin-bottom: 20px; }
 .lib-title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
@@ -389,7 +363,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .fn-supply_chain { background: var(--signal-tint); color: var(--signal-deep); }
 .fn-operations { background: var(--info-tint); color: var(--info); }
 .fn-other { background: #e6ecf1; color: var(--muted); }
-
 /* the main app's avatar: round pastel tint, initials in the same hue */
 .avatar {
   width: 30px; height: 30px; border-radius: 50%; background: var(--signal-pill); color: var(--signal);
@@ -397,7 +370,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
   text-transform: uppercase; flex-shrink: 0;
 }
 .avatar.sm { width: 26px; height: 26px; font-size: 10.5px; }
-
 /* ---------- leads: import + table ---------- */
 .import-bar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }
 .import-controls { display: flex; align-items: center; gap: 9px; }
@@ -427,7 +399,6 @@ code { font-family: var(--font-mono); background: var(--line); padding: 1px 6px;
 .table tr:last-child td { border-bottom: none; }
 .table tbody tr { transition: box-shadow 0.2s ease-in-out; }
 .table tbody tr:hover { background: var(--panel); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
-
 /* ---------- marketing: blasts & newsletters ---------- */
 .mkt-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .ghostlink { border: none; background: none; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; padding: 0; margin-bottom: 16px; }
@@ -460,7 +431,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .mkt-stats b { display: block; font-size: 18px; font-weight: 600; color: var(--ink); line-height: 1.2; }
 .mkt-stats span { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
 @media (max-width: 900px) { .mkt-grid { grid-template-columns: 1fr; } }
-
 /* ---------- kanban board ---------- */
 .board-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
 .filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -470,7 +440,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   font: inherit; font-size: 13px; background: var(--panel); transition: border-color 0.12s ease;
 }
 .search:focus { outline: none; border-color: var(--signal); box-shadow: var(--ring); }
-
 /* Kanban — mirrors customerweb's subs-kanban exactly: #F4F7FA columns with a
    full-width colored header bar per status, white 8px cards with Knowella's
    card shadows, and the card title accented by a left border. */
@@ -510,7 +479,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .k-approved { --kbg: #e6f8f4; --ktx: #037a63; --kc: #04b492; }
 .k-sent     { --kbg: #dff5d8; --ktx: #2f7d1e; --kc: #87dd75; }
 .k-skipped  { --kbg: #f8d7da; --ktx: #842029; --kc: #d80000; }
-
 /* ---------- drawer — Knowella's signature slideout (workflow-panel pattern):
    a floating panel inset 8px from the viewport edge, wrapped in a slowly
    animating purple→teal gradient border. ---------- */
@@ -576,7 +544,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .ready-form .field-input { flex: 1; background: #fff; }
 .ready-form .btn { flex-shrink: 0; }
 .ready-err { font-size: 12.5px; color: var(--alert); margin-top: 8px; }
-
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .kv:last-child { border-bottom: none; }
 .kv span { color: var(--muted); }
@@ -585,7 +552,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .drawer-actions .hint { margin-right: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
 /* Knowella action buttons: 40px tall, 8px radius (customerweb _action_btn.scss) */
 .drawer-actions .btn { height: 40px; padding: 8px 22px; border-radius: 8px; }
-
 /* ============================================================
    Focused review — the hero. Queue rail · draft · evidence.
    ============================================================ */
@@ -605,11 +571,9 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .seg button + button { border-left: 1px solid var(--line-strong); }
 .seg button.on { background: var(--signal-pill); color: var(--signal); }
 .seg button:not(.on):hover { background: var(--bg); color: var(--text); }
-
 .review-work { display: grid; grid-template-columns: 258px minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
 .review-work.no-evidence { grid-template-columns: 258px minmax(0, 1fr); }   /* draft reclaims the evidence width */
 .review-work > * { max-height: calc(100vh - 172px); }
-
 /* live send-progress bar under the review header — a 100+ send never looks frozen */
 .send-progress { position: relative; height: 24px; margin: 2px 0 12px; border-radius: 6px;
   background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
@@ -617,7 +581,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   transition: width 0.4s ease; }
 .send-progress-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text, #1f2430); }
-
 /* collapsed follow-ups + revise toggles — keep the review footer calm until you need them */
 .fu-toggle, .ai-tweak-toggle {
   display: inline-flex; align-items: center; gap: 7px; padding: 3px 0; background: none;
@@ -627,7 +590,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .fu-toggle:hover, .ai-tweak-toggle:hover { opacity: 0.72; }
 .fu-toggle .chev { transition: transform 0.15s ease; }
 .fu-toggle .chev.up { transform: rotate(180deg); }
-
 .rq-list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow-y: auto; }
 .rq-skel { padding: 13px 15px; border-bottom: 1px solid var(--line); }
 .rq-item {
@@ -650,7 +612,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .rq-item-wrap:hover .rq-del, .rq-del:focus-visible { opacity: 1; }
 .rq-del:hover { background: #fdecec; color: var(--alert); }
-
 .rq-mark { flex-shrink: 0; width: 18px; display: flex; justify-content: center; padding-top: 3px; color: var(--muted); }
 .rq-item.approved .rq-mark { color: var(--verify); }
 .rq-item.rejected .rq-mark { color: var(--alert); }
@@ -658,7 +619,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .rq-id { min-width: 0; }
 .rq-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rq-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-
 .rq-draft { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 20px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
 .rq-draft > * { flex-shrink: 0; }   /* the pane scrolls; content must never be squashed to fit */
 .rq-who { display: flex; gap: 13px; align-items: flex-start; }
@@ -689,7 +649,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .exclude-confirm { margin-top: 12px; padding: 14px 15px; border: 1px solid #e3b6b1; background: var(--alert-tint); border-radius: var(--radius-sm); }
 .exclude-confirm-text { font-size: 13px; color: var(--text-2); line-height: 1.55; }
 .exclude-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-
 .rq-evidence { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 18px 18px 4px; overflow-y: auto; }
 .rq-noev { font-size: 13px; line-height: 1.55; }
 .ev-list { list-style: none; margin: 0; padding: 0 0 14px; display: flex; flex-direction: column; gap: 12px; }
@@ -701,7 +660,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .ev-date { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
 .ev-link { font-family: var(--font-mono); font-size: 10.5px; display: inline-flex; align-items: center; gap: 4px; color: var(--signal-deep); }
 .ev-link:hover { text-decoration: underline; }
-
 @media (max-width: 1080px) {
   .review-work, .review-work.no-evidence { grid-template-columns: 1fr; }
   .review-work > * { max-height: none; }
@@ -709,7 +667,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   .rq-item { border-bottom: none; border-right: 1px solid var(--line); min-width: 180px; }
   .rq-item.on { box-shadow: inset 0 -3px 0 var(--signal); }
 }
-
 /* ---------- settings ---------- */
 .settings { max-width: 920px; }
 .set-note { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
@@ -717,7 +674,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .set-bullets { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .set-bullets li { font-size: 12.5px; color: var(--text-2); line-height: 1.45; padding-left: 12px; border-left: 2px solid var(--line-strong); }
-
 .set-conn { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
 .set-conn.ok { border-color: #c6e3d2; background: var(--verify-tint); }
 .set-conn.warn { border-color: #ecd9b4; background: var(--caution-tint); }
@@ -728,9 +684,7 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .set-conn.ok .set-conn-title { color: var(--verify); }
 .set-conn.warn .set-conn-title { color: var(--caution); }
 .set-conn-sub { font-size: 13px; color: var(--text-2); margin-top: 3px; line-height: 1.5; }
-
 @media (max-width: 760px) { .set-grid { grid-template-columns: 1fr; } }
-
 /* ---------- reply inbox (unibox pattern) ---------- */
 .inbox { display: grid; grid-template-columns: 320px 1fr; gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; min-height: 480px; }
 .inbox-list { border-right: 1px solid var(--line); overflow-y: auto; max-height: calc(100vh - 200px); }
@@ -756,7 +710,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .unread-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); margin-left: 7px; vertical-align: middle; }
 .inbox-item-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .inbox-item-snippet { font-size: 12.5px; color: var(--text-2); margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
 .inbox-thread { padding: 20px 24px; overflow-y: auto; max-height: calc(100vh - 200px); display: flex; flex-direction: column; }
 .thread-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .thread-name { font-family: var(--font-display); font-weight: 600; font-size: 16px; }
@@ -778,11 +731,9 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .msg.note .msg-text { background: #04b49229; border-color: transparent; color: #005343; font-style: italic; }
 .thread-note { font-size: 12px; border-top: 1px solid var(--line); padding-top: 12px; margin: 0; }
 .icon-btn .spin { animation: spin 0.8s linear infinite; }
-
 /* delivery analytics strip reuses the funnel ledger */
 .funnel.delivery { margin-bottom: 26px; }
 .stage-rate { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; color: var(--verify); margin-left: 8px; letter-spacing: 0; }
-
 /* A/B tile — signal-led vs plain control reply rate */
 .ab-row { display: flex; gap: 16px; margin-bottom: 26px; flex-wrap: wrap; }
 .ab-cell { flex: 1; min-width: 180px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
@@ -792,12 +743,10 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .ab-cell.signal .ab-rate { color: var(--signal-deep); }
 .ab-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); margin-top: 10px; }
 .ab-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); margin-top: 4px; }
-
 @media (max-width: 900px) {
   .inbox { grid-template-columns: 1fr; }
   .inbox-list { max-height: 300px; border-right: none; border-bottom: 1px solid var(--line); }
 }
-
 /* ---------- new-campaign wizard ---------- */
 /* Flex-center the modal on a scrim. Centering lives on the scrim (not a CSS
    transform on .wizard) so framer-motion's entrance transform can't fight it. */
@@ -855,6 +804,10 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .chip:hover { border-color: var(--signal-line); color: var(--text); }
 .chip.on { background: var(--signal-tint); border-color: var(--signal); color: var(--signal-deep); font-weight: 600; }
 .chip.custom svg { opacity: 0.7; }
+/* The count is what makes a campaign chip a decision rather than a label — the
+   difference between 4,735 and 1,391 is the whole point of choosing one. */
+.chip-n { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--faint); font-weight: 500; }
+.chip.on .chip-n { color: var(--signal); }
 .chip-input { margin-top: 0; }
 .inbox-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
 .mbox-select { position: relative; }
@@ -873,7 +826,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .mbox-opt input { accent-color: var(--signal); }
 .mbox-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .set-savebar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 14px 0; margin-top: 8px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
-
 /* searchable multi-select (audience filters) */
 .msel { position: relative; }
 .msel-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; font: inherit; font-size: 13.5px; color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 9px 12px; cursor: pointer; }
@@ -886,18 +838,15 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .msel-opt:hover { background: var(--signal-tint); color: var(--text); }
 .msel-opt input { accent-color: var(--signal); }
 .msel-none { padding: 12px; font-size: 12.5px; color: var(--muted); }
-
 /* A/B control-share slider (wizard) */
 .slider-row { display: flex; align-items: center; gap: 14px; }
 .slider-row input[type=range] { flex: 1; accent-color: var(--signal); }
 .slider-val { font-family: var(--font-mono); font-size: 12px; color: var(--signal-deep); min-width: 40px; text-align: right; }
-
 /* campaign row: selector + edit-dialog trigger */
 .side-campaign-row { display: flex; align-items: center; gap: 6px; }
 .side-campaign-row select { flex: 1; min-width: 0; }
 .side-edit { color: var(--faint); flex: none; }
 .side-edit:hover { color: var(--signal); }
-
 /* sending health (Settings) */
 .health-list { list-style: none; margin: 0; padding: 0; }
 .health-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 9px 2px; border-top: 1px solid var(--line); }
@@ -906,7 +855,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .health-main code { font-size: 12.5px; }
 .health-dns { display: flex; align-items: center; gap: 6px; }
 .dot.d-bounced { background: var(--alert); }
-
 /* inbox waiting station — shown when there is nothing to triage */
 .inbox-wait {
   position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -917,10 +865,8 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .iw-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(20px, 2.6vw, 26px); letter-spacing: -0.015em; margin: 0 0 8px; }
 .iw-sub { max-width: 520px; font-size: 13.5px; margin: 0 0 18px; }
 .iw-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
 /* do-not-contact list (Settings) + thread tools (Inbox) */
 .supp-list { list-style: none; margin: 4px 0 0; padding: 0; }
-
 /* LinkedIn-capture token: shown once after generation */
 .token-reveal { margin-bottom: 12px; }
 .token-value { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding: 7px 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--panel-2, rgba(110, 99, 255, 0.06)); font-size: 12px; margin-right: 8px; }
@@ -929,7 +875,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .supp-list li .icon-btn { margin-left: auto; }
 .dot.d-suppressed { background: var(--muted); }
 .thread-tools { display: flex; align-items: center; gap: 12px; }
-
 /* the draft as a document: form-style header (To / From / Subject), body on paper */
 .doc { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
 .doc-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--line); background: var(--bg); }
@@ -943,10 +888,8 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .doc .body { white-space: pre-wrap; line-height: 1.7; color: var(--text-2); font: inherit; font-size: 14px; margin: 0; padding: 18px; }
 .doc .body.sig { padding-top: 14px; margin-top: -4px; border-top: 1px dashed var(--line-strong); color: var(--muted); font-size: 13px; line-height: 1.6; }
 .doc .sig-missing { padding: 12px 18px; border-top: 1px dashed var(--line-strong); font-size: 12.5px; color: var(--muted); }
-
 /* approve as the sign-off stamp */
 .btn.approve.stamp { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em; }
-
 /* follow-up emails under the main draft in Review */
 .fu-block { margin-top: 10px; }
 .fu-card { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); margin-top: 10px; overflow: hidden; }
@@ -960,7 +903,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .inbox-none { padding: 18px 14px; font-size: 13px; }
 .wizard-foot { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--panel); }
 .wizard-review .kv b { text-align: right; }
-
 .field { margin-bottom: 16px; }
 .field > label {
   display: block; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase;
@@ -991,7 +933,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .use-ai-toggle .muted { font-size: 12.5px; line-height: 1.5; }
 .field-check { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-bottom: 12px; cursor: pointer; }
 .field-check input { width: 15px; height: 15px; accent-color: var(--signal); cursor: pointer; }
-
 .side-new {
   display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 8px; padding: 8px 10px;
   border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: none;
@@ -999,19 +940,16 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   transition: color 0.12s ease, border-color 0.12s ease;
 }
 .side-new:hover { color: var(--signal); border-color: var(--signal); }
-
 .board-send { display: flex; align-items: center; gap: 14px; }
 .guard-note { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 /* why the Send button is locked — shown inline so it isn't hidden in a tooltip */
 .send-block { font-size: 12px; color: var(--caution); max-width: 300px; line-height: 1.35; text-align: right; }
-
 .edit-form { display: flex; flex-direction: column; gap: 12px; }
 .edit-subject, .edit-body { font: inherit; width: 100%; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; color: var(--text); transition: border-color 0.12s ease; }
 .edit-subject:focus, .edit-body:focus { outline: none; border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-tint); }
 .edit-subject { font-weight: 600; }
 .edit-body { resize: vertical; line-height: 1.7; min-height: 220px; }
 .edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
-
 /* Carry the landing's bright glass through the app: primary panels become
    frosted, lifted surfaces floating over the aurora canvas. */
 .funnel, .table-wrap, .inbox, .rq-list, .rq-draft, .rq-evidence, .set-card {
@@ -1021,7 +959,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .topbar { background: rgba(255, 254, 251, 0.82); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); box-shadow: 0 1px 0 rgba(16, 20, 44, 0.04); }
 .content { position: relative; }
-
 /* ---------- responsive (app) ---------- */
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 100vh; }
@@ -1038,18 +975,15 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   .funnel { flex-wrap: wrap; }
   .stage { flex: 1 1 33%; border-top: 1px solid var(--line); }
 }
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
-
 /* ============================================================
    Landing page
    ============================================================ */
 .lp { background: var(--paper); color: var(--text); }
 .lp h1, .lp h2, .lp h3, .lp h4 { margin: 0; }
 .lp-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-
 .lp-nav { position: sticky; top: 0; z-index: 20; background: rgba(247, 246, 241, 0.85); backdrop-filter: blur(14px) saturate(1.4); border-bottom: 1px solid var(--line); }
 .lp-nav::after { content: ''; display: block; height: 3px; background: var(--stripe); }
 .lp-nav-inner { max-width: 1080px; margin: 0 auto; padding: 13px 24px; display: flex; align-items: center; gap: 20px; }
@@ -1059,7 +993,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-links { display: flex; gap: 24px; margin-left: auto; margin-right: 8px; }
 .lp-links a { font-size: 14px; color: var(--text-2); font-weight: 500; }
 .lp-links a:hover { color: var(--text); text-decoration: none; }
-
 /* Hero: everything lives inside ONE contained panel washed in Knowella's
    actual login gradient — copy left, live product window right, metrics as
    a frosted strip along the panel's bottom edge. */
@@ -1097,7 +1030,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-trust { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
 .lp-trust span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .lp-trust svg { color: var(--verify); }
-
 /* Hero signature: the TRACE — footnoted claims joined to flanking source notes by
    measured hairline leader lines; hover either end and the pair lights up. */
 .trace {
@@ -1116,7 +1048,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .trace-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
 .trace-svg path { fill: none; stroke: var(--line-strong); stroke-width: 1.25; transition: stroke 0.15s; }
 .trace-svg path.on { stroke: var(--verify); stroke-width: 1.5; }
-
 .receipt { position: relative; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
 .receipt-head {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -1145,7 +1076,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .receipt-foot .facts { font-family: var(--font-mono); font-size: 11px; color: var(--verify); }
 .receipt-foot .actions { display: flex; gap: 8px; }
 .receipt-foot .btn { padding: 6px 12px; font-size: 12.5px; }
-
 /* margin notes: the sources, docked beside the draft like citations in a reviewed document */
 .trace-rail { display: flex; flex-direction: column; gap: 18px; padding-top: 34px; }
 .trace-note {
@@ -1163,7 +1093,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .tn-quote { font-size: 12px; line-height: 1.5; color: var(--text); margin: 8px 0 6px; }
 .tn-meta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
-
 /* ============ hero signature: THE PINWHEEL PIPELINE ============
    The logo's four petals as the lifecycle — green (lead in), indigo (the AI
    works), yellow (you approve), teal (sent) — with one lead card traveling
@@ -1176,7 +1105,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-head.center { text-align: center; margin-left: auto; margin-right: auto; }
 .lp-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--signal-deep); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; }
 .lp-head h2 { font-family: var(--font-display); font-size: clamp(27px, 3.5vw, 37px); font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; }
-
 .lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--panel); }
 .lp-step { padding: 34px 30px 38px; position: relative; transition: background 0.2s ease-in-out; }
 .lp-step + .lp-step { border-left: 1px solid var(--line); }
@@ -1184,13 +1112,11 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-step-num { font-family: var(--font-mono); font-size: 11px; color: var(--signal-deep); letter-spacing: 0.08em; }
 .lp-step h3 { font-size: 18px; margin: 16px 0 9px; }
 .lp-step p, .lp-feature p { color: var(--text-2); line-height: 1.65; font-size: 14px; margin: 0; }
-
 .lp-features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .lp-feature { display: flex; gap: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
 .lp-feature:hover { transform: translateY(-4px); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
 .lp-feature h3 { font-size: 16px; margin-bottom: 7px; }
 .lp-badge { width: 44px; height: 44px; border-radius: 12px; background: var(--grad-brand); color: #fff; display: grid; place-items: center; flex-shrink: 0; box-shadow: var(--shadow-glow); }
-
 .lp-band-stats { position: relative; background: var(--ink); color: var(--ink-text); padding: 72px 0; overflow: hidden; }
 /* the band's glow speaks brand: Ella's purple->teal, not the legacy orange */
 .lp-band-stats::before { content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -1199,7 +1125,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-stat-n { font-family: var(--font-display); font-size: clamp(48px, 6vw, 60px); font-weight: 700; letter-spacing: -0.03em; color: #fff; }
 .lp-stat-n .accent { color: var(--signal); }
 .lp-stat-l { font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-top: 12px; }
-
 .lp-quotes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .lp-quote { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--verify); border-radius: var(--radius); padding: 28px 30px; box-shadow: var(--shadow-sm); transition: transform 0.16s ease, box-shadow 0.16s ease; }
 .lp-quote:hover { transform: translateY(-3px); box-shadow: 0 0 16px 0 rgba(24, 38, 75, 0.08); }
@@ -1207,7 +1132,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-quote-by { margin-top: 20px; display: flex; flex-direction: column; }
 .lp-quote-by strong { font-size: 13.5px; }
 .lp-quote-by span { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 3px; }
-
 .lp-band { position: relative; background: var(--ink); color: #fff; text-align: center; padding: 84px 0; overflow: hidden; }
 .lp-band-stripe { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--stripe); }
 .lp-band::before { content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -1215,7 +1139,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-band .lp-inner { position: relative; }
 .lp-band h2 { font-family: var(--font-display); font-size: clamp(28px, 3.6vw, 37px); font-weight: 700; letter-spacing: -0.02em; }
 .lp-band p { font-size: 16px; color: var(--ink-muted); margin: 16px 0 30px; }
-
 /* Below ~1100px the margin-note rail can't sit beside the draft: stack the notes
    under it (two-up), keep the footnote numbers carrying the mapping, drop the lines. */
 /* Narrow screens: draft first, then the two source notes stacked beneath it —
@@ -1230,7 +1153,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 @media (max-width: 560px) {
   .receipt-head { flex-wrap: wrap; row-gap: 4px; }
 }
-
 /* metric strip under the window (the reference's logo-strip slot) */
 /* Metrics: a frosted strip bleeding to the panel's edges — part of the hero,
    not four cards floating in dead space. */
@@ -1257,7 +1179,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lim-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-top: 1px solid var(--line); font-size: 13.5px; }
 .lim-row:first-child { border-top: none; }
 @media (max-width: 820px) { .lp-row { grid-template-columns: 1fr; gap: 22px; padding: 30px 0; } .lp-row.rev .lp-row-text { order: 1; } .lp-row.rev .lp-row-art { order: 2; } }
-
 .lp-footer { background: var(--paper); border-top: 1px solid var(--line); color: var(--text-2); padding: 56px 0 30px; }
 .lp-foot { display: grid; grid-template-columns: 1.4fr 2fr; gap: 40px; }
 .lp-foot-brand p { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 14px 0 0; max-width: 26em; }
@@ -1266,7 +1187,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .lp-foot-cols a, .linklike { display: block; color: var(--muted); font-size: 14px; margin-bottom: 10px; background: none; border: none; padding: 0; cursor: pointer; text-align: left; font: inherit; }
 .lp-foot-cols a:hover, .linklike:hover { color: var(--signal-deep); text-decoration: none; }
 .lp-copy { color: var(--muted); font-family: var(--font-mono); font-size: 11px; margin-top: 36px; border-top: 1px solid var(--line); padding-top: 24px; }
-
 @media (max-width: 880px) {
   .lp-hero { padding: 0; }
   .lp-hero-panel { grid-template-columns: minmax(0, 1fr); padding: 44px 24px 36px; gap: 32px; }
@@ -1275,7 +1195,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   .lp-features, .lp-quotes, .lp-foot, .lp-foot-cols { grid-template-columns: 1fr; }
   .lp-links { display: none; }
 }
-
 /* ============================================================
    Signals — the listening post.
    One idea carries the layout: a NAMED PERSON asking something
@@ -1285,10 +1204,8 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
    between them IS the information.
    ============================================================ */
 .sig-title-sub { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
-
 /* the intake meter: both channels, honest about what's actually on */
 .sig-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
-
 .sig-seg { margin-bottom: 18px; }
 .sig-bar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .sig-sect + .sig-sect { margin-top: 34px; }
@@ -1303,7 +1220,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .sig-h-quiet { color: var(--muted); }
 .sig-h-quiet .sig-h-n { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
 .sig-h-sub { font-size: 13px; color: var(--muted); margin: 5px 0 14px; line-height: 1.55; max-width: 62ch; }
-
 /* people: the loud register */
 .sig-cards { display: grid; gap: 12px; }
 .sig-card {
@@ -1333,7 +1249,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .btn.ghost { border-color: transparent; background: none; color: var(--muted); }
 .btn.ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); border-color: var(--line); }
 .sig-card-foot .btn.ghost { margin-left: auto; }
-
 /* topics: the quiet register — a list, not a set of cards */
 .sig-topics { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); overflow: hidden; }
 .sig-topic { display: flex; align-items: center; gap: 12px; padding: 9px 14px; font-size: 13px; }
@@ -1346,7 +1261,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .sig-topic-t { flex: 1; color: var(--text-2); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
-
 /* add-by-hand: the manual path, which for communities is the ONLY path */
 .sig-add {
   background: var(--panel); border: 1px solid var(--signal-line); border-radius: var(--radius-sm);
@@ -1356,13 +1270,11 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-add-head .muted { font-size: 12.5px; line-height: 1.5; }
 .sig-add-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 .sig-add-foot { display: flex; gap: 8px; margin-top: 12px; }
-
 /* the setup path, which IS the product on day one */
 .sig-empty { max-width: 560px; }
 .sig-setup { text-align: left; margin: 18px 0 4px; padding-left: 20px; display: grid; gap: 9px; }
 .sig-setup li { font-size: 13px; color: var(--muted); line-height: 1.55; }
 .sig-setup li b { color: var(--text); }
-
 /* backlog + feeds share one list shape */
 .sig-list { display: grid; gap: 8px; margin-top: 14px; }
 .sig-bl {
@@ -1384,25 +1296,21 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-stage.on { background: var(--signal-pill); color: var(--signal); }
 .sig-stage:not(.on):hover { background: var(--bg); color: var(--text); }
 .sig-backlog-lede { margin-bottom: 4px; }
-
 @media (max-width: 900px) {
   .sig-intake, .sig-add-row, .sig-feed-form { grid-template-columns: 1fr; }
   .sig-topic-src { width: 88px; }
   .sig-bl { flex-wrap: wrap; }
 }
-
 /* Sources: reply rate is the comparison column — a rate that beats the bought-list
    baseline should read as good news without needing the reader to do the division. */
 .src-rate-good { color: var(--verify); font-weight: 700; }
 /* The Signals empty state IS the setup path, so it sits up near the tabs rather
    than floating in the middle of an otherwise blank page. */
 .sig-empty { margin-top: 4px; padding: 30px 20px 40px; }
-
 /* Signals: keyword tuning. An unfiltered feed is the difference between a monitor
    and a firehose, so the state is a control, not a caption — click it to fix it. */
 .sig-h-act { margin-left: auto; font-size: 12px; padding: 3px 10px; }
 .sig-more { display: block; margin: 10px auto 0; }
-
 /* Signals: OSHA citations. The one card on the page that is a lead, so it gets the
    only number set in display size — the penalty. Everything else stays quiet. */
 .sig-card.k-citation { border-left-color: var(--caution); }
@@ -1438,7 +1346,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-cite-done { background: var(--verify-tint); color: #0b6b58; }
 .sig-cite-none { background: var(--bg); color: var(--muted); border: 1px dashed var(--line-strong); }
 .sig-cite-pick .btn.ghost { margin-top: 8px; }
-
 /* Sources → campaigns. The middle is the point: a source matters because of what it
    feeds, a campaign is ready because something is queued for it. Line weight carries
    volume so a busy route reads before you get to the label. */
@@ -1477,18 +1384,15 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .sig-fit-none { color: var(--caution); background: var(--caution-tint); }
 .sig-card-foot .sig-fit { margin-right: auto; }
 .sig-cite-pick-h .sig-fit { margin-left: 6px; }
-
 @media (max-width: 800px) {
   .flow-board { grid-template-columns: 1fr; }
   .flow-links { display: none; }
   .flow-col + .flow-col { margin-top: 12px; }
 }
-
 /* Shared stat block for the routing board header. */
 .flow-stat { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
 .flow-stat-k { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
 .flow-clear { margin-left: auto; align-self: center; }
-
 /* One status line where three cards used to be. It reports the only thing the list
    itself can't: whether the inbound address is actually receiving. */
 .sig-bar-status {
@@ -1505,7 +1409,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   font-size: 11.5px; background: var(--bg); border: 1px solid var(--line);
   border-radius: 4px; padding: 1px 5px; color: var(--text-2);
 }
-
 /* A register with nothing in it still has to be visible — otherwise four OSHA
    citations read as "OSHA is all this does", which is exactly how it read. */
 .sig-dormant {
@@ -1523,7 +1426,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 }
 .sig-quiet .sig-dormant { padding: 9px 12px; }
 .sig-dormant-n { color: var(--text) !important; }
-
 /* Citations as a dashboard. Fit leads and penalty is a column, because reading the
    releases showed the biggest fine is usually the worst lead — a willful citation
    means the employer decided, and no software fixes intent. */
@@ -1565,13 +1467,11 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   color: var(--muted); cursor: pointer;
 }
 .cit-more:hover { border-color: var(--signal); color: var(--signal); }
-
 @media (max-width: 900px) {
   .cit-head { display: none; }
   .cit-line { grid-template-columns: 1fr auto; row-gap: 4px; }
   .cit-line .cit-mut:nth-of-type(2) { display: none; }
 }
-
 /* Choosing who hears about a citation. Ranked by whose job it actually is, with the
    best one pre-selected — sending three colleagues the same email about the same
    citation is what a blast looks like from the inside, and it costs 3x the credits. */
@@ -1589,7 +1489,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .cit-p-name { font-weight: 600; color: var(--text); }
 .cit-p-title { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cit-p-why { color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 @media (max-width: 760px) {
   .cit-people label { grid-template-columns: 18px 1fr; }
   .cit-p-title, .cit-p-why { grid-column: 2; }
@@ -1598,12 +1497,10 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
    hour, not credits, and reading it as credits makes a free action look expensive. */
 .cit-free { font-size: 11.5px; color: var(--faint); line-height: 1.5; align-self: center; }
 .cit-act .cit-free { margin-left: 4px; }
-
 /* Which campaign a citation routes to, shown where you act on it rather than on a
    separate tab that repeated the whole table. */
 .cit-camp { font-size: 11.5px; color: var(--verify); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cit-camp.none { color: var(--caution); }
-
 /* ============================================================
    Hero — WIRED PROOF.
    The draft on the left, its evidence on the right, and a dashed line drawn
@@ -1619,7 +1516,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   padding: 60px max(24px, calc((100vw - 1080px) / 2)) 72px;
 }
 .lp-hero-panel::before { display: none; }
-
 .lp-hero-head { position: relative; z-index: 1; max-width: 20ch; }
 .lp-eyebrow-hero {
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
@@ -1629,73 +1525,82 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   font-family: var(--font-display); font-size: clamp(36px, 4.6vw, 58px); font-weight: 800;
   letter-spacing: -0.035em; line-height: 1.05; color: var(--ink); margin: 0;
 }
-
-/* --- the wiring ------------------------------------------------------------ */
-.wired {
-  position: relative; margin-top: 40px;
-  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 70px;
-  align-items: start;
-}
-.wired-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
-.wired-link { fill: none; stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.75; }
-.wired-link.t-violet { stroke: var(--signal); }
-.wired-link.t-teal { stroke: var(--verify); }
-
-.wired-draft {
-  position: relative; z-index: 1; background: var(--panel);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px 26px 22px;
-  box-shadow: 0 18px 40px -26px rgba(36, 42, 50, 0.25);
-}
-.wired-k {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--faint);
-}
-.wired-subj { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -0.015em; margin: 12px 0 12px; }
-.wired-body { font-size: 15px; line-height: 1.8; color: var(--text-2); margin: 0; }
-
 /* a highlighted claim IS its source's colour — that pairing is the whole idea */
 .mark { border-radius: 3px; padding: 2px 4px; margin: 0 -1px; }
 .mark.m-violet { background: var(--signal-pill); box-shadow: inset 0 -1.5px 0 var(--signal-line); }
 .mark.m-teal { background: #d5f4ec; box-shadow: inset 0 -1.5px 0 rgba(4, 180, 146, 0.45); }
+/* ── The evidence ledger ─────────────────────────────────────────────────────
+   A findings table, not a product shot. Hairline rules and no card: the moment it
+   gains a border-radius and a shadow it becomes the floating mockup this replaced,
+   which is what every tool in this category puts on its homepage.
 
-.wired-actions {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line);
+   A REAL monospace, declared locally. The app's --font-mono is Poppins, so nothing
+   has ever actually read as machine output; changing that token would repaint every
+   screen in the product, so the register stays scoped to the hero. */
+.lp-ledger {
+  --lg-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  position: relative; z-index: 1; width: 100%; max-width: 860px; margin-top: 38px;
+  font-family: var(--lg-mono); font-size: 13px;
+  border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line);
 }
-.wired-approve { background: var(--verify); border-color: var(--verify); color: #fff; font-weight: 600; }
-.wired-approve:hover:not(:disabled) { background: var(--verify-hover); border-color: var(--verify-hover); color: #fff; }
-.wired-note { margin-left: auto; font-size: 12px; color: var(--faint); }
+.lp-ledger-head, .lp-ledger-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 15em) 4em 1.5em;
+  gap: 18px; align-items: baseline; padding: 11px 2px;
+}
+.lp-ledger-head {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--signal); border-bottom: 1px solid var(--line); padding: 9px 2px;
+}
+.lp-ledger-row + .lp-ledger-row { border-top: 1px solid var(--line); }
+.lp-lg-claim { position: relative; color: var(--ink); line-height: 1.5; }
+.lp-lg-src, .lp-lg-seen { color: var(--muted); overflow-wrap: anywhere; }
+.lp-lg-seen { text-align: right; }
+.lp-lg-mark { font-size: 15px; line-height: 1; text-align: center; }
+.is-kept .lp-lg-mark { color: var(--verify); }        /* the one sanctioned use of teal */
+.is-cut  .lp-lg-mark { color: var(--faint); }
 
-.wired-sources { position: relative; z-index: 1; display: grid; gap: 14px; padding-top: 46px; }
-.wired-src {
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 14px 16px;
+/* The cut. Drawn as a line that sweeps across the claim, because a claim being
+   struck OUT is an event; text-decoration would just be how it was typed. */
+.lp-lg-strike {
+  position: absolute; left: 0; top: 52%; width: 100%; height: 1px;
+  background: var(--muted); transform: scaleX(0); transform-origin: left center;
+  transition: transform .5s cubic-bezier(.22,1,.36,1);
 }
-.wired-src.t-violet { border-left: 3px solid var(--signal); }
-.wired-src.t-teal { border-left: 3px solid var(--verify); }
-.wired-src-k {
-  display: flex; align-items: baseline; font-family: var(--font-mono); font-size: 10px;
-  font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+.struck .lp-lg-strike { transform: scaleX(1); }
+.is-cut .lp-lg-claim, .is-cut .lp-lg-src, .is-cut .lp-lg-seen {
+  transition: color .5s ease .12s;
 }
-.wired-src.t-violet .wired-src-k { color: var(--signal); }
-.wired-src.t-teal .wired-src-k { color: var(--verify); }
-.wired-when { margin-left: auto; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); text-transform: none; font-size: 11px; }
-.wired-where { font-size: 14.5px; font-weight: 700; color: var(--ink); margin-top: 8px; letter-spacing: -0.01em; }
-.wired-quote { font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 4px; }
+.struck .lp-lg-claim, .struck .lp-lg-src, .struck .lp-lg-seen { color: var(--faint); }
 
-/* the negative proof — what never reaches the draft argues as hard as what does */
-.wired-neg {
-  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
-  padding: 13px 16px; font-size: 13px; color: var(--faint); background: none;
+.lp-ledger-foot {
+  padding: 13px 2px 14px; font-size: 12.5px; color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.lp-ledger-foot b { color: var(--ink); font-weight: 700; }
+
+/* Two classes on purpose. `.lp-hero p` is (0,1,1) and would out-specify a lone
+   `.lp-hero-sub` (0,1,0) — its `margin: … auto` would centre this under a
+   left-aligned headline. The same cascade trap cost a pass on the last hero. */
+.lp-hero .lp-hero-sub {
+  max-width: 46ch; margin: 16px 0 0; font-size: 16px; line-height: 1.65; color: var(--text-2);
+}
+
+@media (max-width: 760px) {
+  /* Four columns at this width would set two characters a line. The source and the
+     date drop under the claim and keep their labels through the tick alone. */
+  .lp-ledger-head { display: none; }
+  .lp-ledger-row {
+    grid-template-columns: 1fr 1.5em; grid-template-areas: "claim mark" "src mark" "seen mark";
+    gap: 3px 12px; padding: 12px 2px;
+  }
+  .lp-lg-claim { grid-area: claim; }
+  .lp-lg-src { grid-area: src; font-size: 11.5px; }
+  .lp-lg-seen { grid-area: seen; font-size: 11.5px; text-align: left; }
+  .lp-lg-mark { grid-area: mark; align-self: center; }
 }
 
 .lp-cta-hero { position: relative; z-index: 1; justify-content: flex-start; margin-top: 40px; }
-
 @media (max-width: 940px) {
-  .wired { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .wired-sources { padding-top: 0; }
-  .wired-links { display: none; }          /* stacked: there is nothing to wire */
-  .lp-hero-head { max-width: none; }
   .lp-hero-panel { padding: 44px 24px 52px; }
 }
 /* Two cascade traps, both mine:
@@ -1709,13 +1614,10 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .lp-hero-panel > * { max-width: 100%; margin-left: 0; margin-right: 0; }
 .lp-hero-head { max-width: 640px; text-align: left; }
 .lp-hero h1 { text-align: left; }
-.wired { width: 100%; }
 .lp-cta-hero { width: 100%; }
-
 @media (max-width: 940px) {
   .lp-hero-head { max-width: none; }
 }
-
 /* ============================================================
    Hero, type + interaction pass.
 
@@ -1733,37 +1635,15 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   --font-record: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
                  "Liberation Mono", monospace;
 }
-
-.wired-k, .wired-src-k, .wired-when, .lp-eyebrow-hero {
-  font-family: var(--font-record);
-}
-.wired-k { letter-spacing: 0.1em; font-size: 10.5px; }
-.wired-src-k { letter-spacing: 0.09em; font-size: 10.5px; }
 .lp-eyebrow-hero { letter-spacing: 0.11em; font-size: 11px; }
-/* the domain is a record too — it is quoted evidence, not a headline */
-.wired-where { font-family: var(--font-record); font-size: 13.5px; letter-spacing: -0.01em; }
-
-/* --- the wire carries current --------------------------------------------- */
-.wired-link {
-  transition: opacity 0.25s ease, stroke-width 0.25s ease;
-  animation: wire-flow 1.4s linear infinite;
-}
 @keyframes wire-flow { to { stroke-dashoffset: -20; } }
-.wired-link.is-hot { stroke-width: 2.4; opacity: 1; }
-.wired-link.is-dim { opacity: 0.18; }
-
 /* claim, line and card behave as one object under the cursor */
 .mark { transition: opacity 0.25s ease, box-shadow 0.25s ease; cursor: default; }
 .mark.is-dim { opacity: 0.35; }
 .mark.m-violet:hover { box-shadow: inset 0 -1.5px 0 var(--signal), 0 0 0 3px var(--signal-pill); }
 .mark.m-teal:hover { box-shadow: inset 0 -1.5px 0 var(--verify), 0 0 0 3px #d5f4ec; }
-
-.wired-src { transition: opacity 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease; }
-.wired-src.is-hot { transform: translateX(-4px); box-shadow: 0 10px 26px -14px rgba(36, 42, 50, 0.35); }
-.wired-src.is-dim { opacity: 0.42; }
-
 @media (prefers-reduced-motion: reduce) {
-  .wired-link { animation: none; }
+  .lp-ledger-row, .lp-lg-strike { animation: none; transition: none; }
 }
 /* Batch send. The default action is the small one — warming a list is the safe
    habit, and "send to all" should take a deliberate second click. */
@@ -1803,7 +1683,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .gen-note b { color: var(--text-2); }
 .gen-omit { margin-top: 4px; color: var(--caution); }
 .gen-omit b { color: var(--caution); }
-
 /* Question suggestions — offered, never imposed: each is a claim you'd have to
    stand behind, so they stay quiet until asked for. */
 /* LinkedIn's own blue, which is the point: it has to read as a link to somewhere
@@ -1817,7 +1696,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 }
 .li-cell:hover { background: #eef4fb; border-color: #bcd6ee; }
 .li-cell:focus-visible { outline: none; box-shadow: var(--ring); }
-
 /* Publications — the knowledge block is the page's real content, so it gets the
    room. Everything else is one line and gets out of the way. */
 .pub-form { max-width: 720px; margin-top: 12px; }
@@ -1830,7 +1708,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .pub-knowledge { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; resize: vertical; }
 .pub-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .pub-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
-
 .pub-card {
   display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
   border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 16px; margin-bottom: 12px;
@@ -1845,7 +1722,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .pub-from { margin-top: 7px; font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
 .pub-warn { margin-top: 8px; font-size: 12px; color: #a34a05; }
 .pub-card-actions { display: flex; gap: 8px; }
-
 .idea-row { margin: -4px 0 10px; }
 .ideas { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .idea {
@@ -1855,7 +1731,6 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   transition: border-color .12s, color .12s;
 }
 .idea:hover { border-color: var(--signal); color: var(--text-1); }
-
 .send-blocked {
   font-size: 12.5px; color: #a34a05; background: var(--caution-tint);
   border: 1px solid #ecd9b4; border-radius: var(--radius-sm);

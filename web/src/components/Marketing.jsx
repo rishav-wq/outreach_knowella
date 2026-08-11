@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', publication_id: '', audience: { topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
+const EMPTY = { name: '', subject: '', body: '', publication_id: '', audience: { campaigns: [], topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -18,6 +18,7 @@ export default function Marketing() {
   const [draft, setDraft] = useState(EMPTY)
   const [draftId, setDraftId] = useState(null)      // editing an existing draft
   const [topics, setTopics] = useState([])
+  const [camps, setCamps] = useState([])            // [{name, count}] with reachable people
   const [audiences, setAudiences] = useState([])
   const [pubs, setPubs] = useState([])
   const [question, setQuestion] = useState('')
@@ -33,7 +34,9 @@ export default function Marketing() {
   const load = () => api.listBlasts().then(setBlasts).catch(() => setBlasts([]))
   useEffect(() => {
     load()
-    api.getMarketingMeta().then((d) => setTopics(d.topics || [])).catch(() => {})
+    api.getMarketingMeta().then((d) => {
+      setTopics(d.topics || []); setCamps(d.campaigns || [])
+    }).catch(() => {})
     api.listAudiences().then(setAudiences).catch(() => {})
     api.listPublications().then(setPubs).catch(() => {})
     api.getMarketingStatus().then(setConn).catch(() => {})
@@ -69,6 +72,9 @@ export default function Marketing() {
                audience: { ...EMPTY.audience, ...b.audience } })
     setDraftId(b.id); setMsg(null); setView('edit')
   }
+  const toggleCampaign = (c) => setDraft((d) => ({ ...d, audience: { ...d.audience,
+    campaigns: d.audience.campaigns.includes(c)
+      ? d.audience.campaigns.filter((x) => x !== c) : [...d.audience.campaigns, c] } }))
   const toggleTopic = (t) => setDraft((d) => ({ ...d, audience: { ...d.audience,
     topics: d.audience.topics.includes(t) ? d.audience.topics.filter((x) => x !== t) : [...d.audience.topics, t] } }))
 
@@ -369,7 +375,23 @@ export default function Marketing() {
               <span><b>Skip anyone sales already emailed</b>
                 <span className="muted"> — keeps cold-sequence targets out of bulk mail</span></span>
             </label>
-            <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Topics (any match; none selected = whole Library)</div>
+            {/* Campaign is the coarsest cut and belongs above topics: a Freight
+                Paperwork issue has no business reaching the venture and private-equity
+                contacts, and without this the audience was the entire Library. */}
+            <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>
+              Campaigns (any match; none selected = whole Library)
+            </div>
+            <div className="chip-row">
+              {camps.map((c) => (
+                <button key={c.name} title={`${c.count.toLocaleString()} with an email address`}
+                  className={`chip ${draft.audience.campaigns.includes(c.name) ? 'on' : ''}`}
+                  onClick={() => toggleCampaign(c.name)}>
+                  {c.name} <span className="chip-n">{c.count.toLocaleString()}</span>
+                </button>
+              ))}
+              {camps.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No campaigns with leads yet.</span>}
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, margin: '12px 0 6px' }}>Topics (any match; none selected = whole Library)</div>
             <div className="chip-row">
               {topics.map((t) => (
                 <button key={t} className={`chip ${draft.audience.topics.includes(t) ? 'on' : ''}`} onClick={() => toggleTopic(t)}>{t}</button>

@@ -1294,6 +1294,7 @@ def all_leads():
 
 
 class AudienceFilter(BaseModel):
+    campaigns: list[str] = []        # any-match; empty = the whole Library
     topics: list[str] = []
     statuses: list[str] = []
     exclude_sent: bool = False
@@ -1604,8 +1605,10 @@ def _blast_out(b: dict) -> dict:
 
 @app.get("/api/marketing/meta")
 def marketing_meta():
-    """Everything the audience builder needs: the Library's live topic vocabulary."""
-    return {"topics": open_store().library_topics()}
+    """Everything the audience builder needs: the Library's live topic vocabulary,
+    and which campaigns have reachable people in it."""
+    st = open_store()
+    return {"topics": st.library_topics(), "campaigns": st.library_campaigns()}
 
 
 @app.post("/api/marketing/preview")
