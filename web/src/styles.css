@@ -808,6 +808,13 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
    difference between 4,735 and 1,391 is the whole point of choosing one. */
 .chip-n { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--faint); font-weight: 500; }
 .chip.on .chip-n { color: var(--signal); }
+/* A campaign with nobody in it stays listed so this agrees with the Sales picker,
+   but it cannot be chosen — selecting it would resolve to an empty send. */
+.chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.chip:disabled:hover { border-color: var(--line-strong); color: var(--text-2); }
+/* Leads whose campaign was deleted. Dashed because they are real people you can
+   still reach, attached to something that no longer exists. */
+.chip.orphan { border-style: dashed; }
 .chip-input { margin-top: 0; }
 .inbox-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
 .mbox-select { position: relative; }

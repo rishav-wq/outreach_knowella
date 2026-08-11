@@ -496,16 +496,30 @@ class MongoStore:
         return sorted(t for t in self.db.leads.distinct("topics") if t)
 
     def library_campaigns(self) -> list[dict]:
-        """Campaigns that actually have reachable people in the Library, with counts.
-        Counted by distinct email, because the number a blast cares about is people,
-        not lead rows — the same person can sit in two campaigns."""
+        """Every campaign an audience can name, with its reachable count.
+
+        Counted by distinct email, because a blast cares about people, not lead rows
+        — the same person can sit in two campaigns.
+
+        Reads BOTH collections on purpose. Deriving this from leads alone made the
+        marketing chips disagree with the Sales campaign picker in both directions:
+        a defined campaign with no leads (knowella-safety-ai) vanished from
+        marketing, and leads whose campaign had been deleted (zz-par-test) showed up
+        as a campaign that exists nowhere else in the app. Both are reported and
+        labelled, because "these two lists don't match" deserves a visible answer
+        rather than a filter that quietly drops one side.
+        """
         seen: dict[str, set] = {}
         for d in self.db.leads.find({}, {"campaign": 1, "lead.email": 1}):
             email = ((d.get("lead") or {}).get("email") or "").strip().lower()
             if email and d.get("campaign"):
                 seen.setdefault(d["campaign"], set()).add(email)
-        return sorted(({"name": k, "count": len(v)} for k, v in seen.items()),
-                      key=lambda c: -c["count"])
+        defined = set(self.campaign_names())
+        out = [{"name": n, "count": len(seen.get(n, ())), "orphan": False} for n in defined]
+        out += [{"name": n, "count": len(v), "orphan": True}
+                for n, v in seen.items() if n not in defined]
+        # orphans last: they are a thing to clean up, not a thing to send to
+        return sorted(out, key=lambda c: (c["orphan"], -c["count"], c["name"]))
 
     # saved audiences: named, reusable filters — resolved live at every use
     def create_audience(self, name: str, flt: dict) -> str:

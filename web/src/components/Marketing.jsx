@@ -383,8 +383,11 @@ export default function Marketing() {
             </div>
             <div className="chip-row">
               {camps.map((c) => (
-                <button key={c.name} title={`${c.count.toLocaleString()} with an email address`}
-                  className={`chip ${draft.audience.campaigns.includes(c.name) ? 'on' : ''}`}
+                <button key={c.name} disabled={c.count === 0}
+                  title={c.count === 0 ? 'This campaign has no leads with an email address yet'
+                    : c.orphan ? `${c.count} leads whose campaign no longer exists — still reachable, but nothing else in the app knows about it`
+                    : `${c.count.toLocaleString()} with an email address`}
+                  className={`chip ${draft.audience.campaigns.includes(c.name) ? 'on' : ''} ${c.orphan ? 'orphan' : ''}`}
                   onClick={() => toggleCampaign(c.name)}>
                   {c.name} <span className="chip-n">{c.count.toLocaleString()}</span>
                 </button>
