@@ -207,6 +207,15 @@ def render_message(blast: dict, lead, email: str) -> dict:
             f' &nbsp;·&nbsp; <a href="{prefs_link(email)}" style="color:#6e63ff">'
             f'Choose what you get</a></p>')
 
+    # A designed template usually carries its own footer. Wiring the placeholder into
+    # ITS link — <a href="{{{ pm:unsubscribe }}}">Unsubscribe</a> — makes that link
+    # the real one, and appending ours underneath would just be the duplicate again.
+    # The unsubscribe is never dropped, only relocated: it is still exactly one
+    # working link, sitting where the designer put it. Anything without the
+    # placeholder still gets our footer, so the guarantee cannot be lost by omission.
+    if PM_UNSUB in body:
+        foot = ""
+
     if raw and _IS_DOC.search(body):
         # A pasted design is usually a WHOLE document, and appending to it put the
         # footer after </html>, where every client discards it. Worse than losing the
