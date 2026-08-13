@@ -320,6 +320,83 @@ def unsubscribe_link(t: str = ""):
     return HTMLResponse(_unsubscribe_page(bool(email)))
 
 
+PREF_CSS = ("body{font-family:Poppins,-apple-system,Segoe UI,sans-serif;background:#f7f9fb;"
+            "color:#242a32;margin:0;padding:48px 20px;line-height:1.6}"
+            ".c{max-width:520px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;"
+            "border-radius:14px;padding:32px}"
+            "h1{font-size:22px;margin:0 0 6px}p{color:#64707c;font-size:14px}"
+            "label{display:flex;gap:11px;align-items:flex-start;padding:13px 0;"
+            "border-top:1px solid #e6ecf1;font-size:14.5px;cursor:pointer}"
+            "label b{display:block}label span{color:#64707c;font-size:13px}"
+            "input[type=checkbox]{margin-top:3px;width:17px;height:17px;accent-color:#6e63ff}"
+            ".btn{display:inline-block;border:0;border-radius:9px;padding:11px 18px;"
+            "font:inherit;font-weight:600;font-size:14px;cursor:pointer}"
+            ".save{background:#6e63ff;color:#fff}"
+            ".all{background:none;color:#96a5b5;text-decoration:underline;padding-left:0}"
+            ".row{display:flex;align-items:center;gap:18px;margin-top:22px;"
+            "border-top:1px solid #e6ecf1;padding-top:20px}")
+
+
+def _prefs_page(email: str, pubs: list, off: list) -> str:
+    # The store hands back raw docs keyed by _id; the API's own serialiser renames it
+    # to id. This page reads the store directly, so it accepts either.
+    def pid(p):
+        return p.get("id") or p.get("_id") or ""
+    rows = "".join(
+        f'<label><input type="checkbox" name="pub" value="{html.escape(pid(p))}"'
+        f'{"" if pid(p) in off else " checked"}>'
+        f'<span><b>{html.escape(p.get("name") or "")}</b>{html.escape(p.get("description") or "")}</span>'
+        "</label>" for p in pubs)
+    return (f"<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+            f"<title>Your subscriptions</title><style>{PREF_CSS}</style><div class=c>"
+            f"<h1>Choose what you get</h1>"
+            f"<p>Sent to <b>{html.escape(email)}</b>. Untick anything you would rather not receive.</p>"
+            f"<form method=post action='/api/preferences'>"
+            f"<input type=hidden name=t value='{html.escape(unsubscribe.token(email))}'>"
+            f"{rows}"
+            f"<div class=row><button class='btn save' type=submit>Save</button>"
+            f"<button class='btn all' type=submit name=all value='1'>Unsubscribe from everything</button>"
+            f"</div></form></div>")
+
+
+@app.get("/api/preferences")
+def preferences_page(t: str = ""):
+    """Public. Which publications this person wants — the softer door beside the
+    one-click unsubscribe, never in place of it.
+
+    An unrecognised or tampered token gets the same page as a stranger: nothing is
+    revealed and nothing can be changed, because the token IS the authentication."""
+    email = unsubscribe.email_from_token(t)
+    if not email:
+        return HTMLResponse(_unsubscribe_page(False), status_code=400)
+    store = open_store()
+    return HTMLResponse(_prefs_page(email, store.list_publications(),
+                                    store.subscriber_prefs(email)))
+
+
+@app.post("/api/preferences")
+async def preferences_save(request: Request):
+    """Save the choice, or take the exit. 'Unsubscribe from everything' does exactly
+    what the one-click link does — global suppression — so the softer door can never
+    become the only way out."""
+    form = await request.form()
+    email = unsubscribe.email_from_token(form.get("t") or "")
+    if not email:
+        return HTMLResponse(_unsubscribe_page(False), status_code=400)
+    store = open_store()
+    if form.get("all"):
+        store.suppress(email, reason="unsubscribed via preferences")
+        store.drop_subscriber(email)
+        return HTMLResponse(_unsubscribe_page(True))
+    keep = set(form.getlist("pub"))
+    off = [(p.get("id") or p.get("_id")) for p in store.list_publications()
+           if (p.get("id") or p.get("_id")) not in keep]
+    store.set_subscriber_prefs(email, off)
+    return HTMLResponse(_prefs_page(email, store.list_publications(), off)
+                        .replace("<h1>Choose what you get</h1>",
+                                 "<h1>Saved</h1>"))
+
+
 @app.get("/api/campaigns")
 def campaigns():
     store = open_store()

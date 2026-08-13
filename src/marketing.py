@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from .engine.personalize import fill_placeholders
 from .integrations import postmark_send
+from .unsubscribe import prefs_link
 
 log = logging.getLogger("uvicorn.error")
 
@@ -194,10 +195,17 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # and it stays out of the text part: it is a device for the HTML snippet, and in
     # plain text it would just repeat the opening sentence back at the reader.
     pre = preheader_block(fill_placeholders(blast.get("preheader") or "", lead, {}))
+    # Two links doing two DIFFERENT jobs, which is not the duplicate this footer
+    # once had. Unsubscribe is Postmark's one-click and stops everything on the
+    # spot; the second offers the choice of keeping one publication and dropping
+    # another. Order matters — the hard exit comes first, because burying it behind
+    # a preferences page is the pattern the one-click rules exist to stop.
     foot = (f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:8px;font-family:Poppins,Arial,sans-serif">'
             f"You're receiving this because you've been in touch with Knowella. "
-            f'<a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p>')
+            f'<a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a>'
+            f' &nbsp;·&nbsp; <a href="{prefs_link(email)}" style="color:#6e63ff">'
+            f'Choose what you get</a></p>')
 
     if raw and _IS_DOC.search(body):
         # A pasted design is usually a WHOLE document, and appending to it put the
@@ -244,7 +252,11 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
             issue = store.next_issue_no(pub["_id"])
             store.update_blast(bid, {"issue_no": issue})
             blast["issue_no"] = issue
-        everyone = store.audience_leads(blast.get("audience") or {})
+        # The publication travels with the filter so someone who kept The Safety Brief
+        # and dropped Freight Paperwork is excluded from this issue without being
+        # unsubscribed from everything.
+        everyone = store.audience_leads({**(blast.get("audience") or {}),
+                                         "publication_id": blast.get("publication_id", "")})
         already = store.blast_sent_emails(bid)
         pending = [p for p in everyone if p["email"] not in already]
         people = pending[:limit] if limit and limit > 0 else pending

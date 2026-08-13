@@ -44,3 +44,13 @@ def email_from_token(tok: str) -> str | None:
 
 def link(email: str) -> str:
     return f"{_base_url()}/api/unsubscribe?t={token(email)}"
+
+
+def prefs_link(email: str) -> str:
+    """Where someone chooses which publications they want.
+
+    Sits BESIDE the one-click unsubscribe, never in place of it. Making the only
+    exit route through a preferences page is the dark pattern the one-click rules
+    exist to stamp out, and mailbox providers treat a hard-to-leave list as a spam
+    signal. This is the softer door, offered second."""
+    return f"{_base_url()}/api/preferences?t={token(email)}"
