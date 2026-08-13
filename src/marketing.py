@@ -150,6 +150,28 @@ def preheader_block(text: str) -> str:
             f'{html_mod.escape(t)}{pad}</div>')
 
 
+_IS_DOC = re.compile(r"(?i)<\s*(html|body)\b")
+_BODY_OPEN = re.compile(r"(?i)<\s*body\b[^>]*>")
+_BODY_CLOSE = re.compile(r"(?i)</\s*body\s*>")
+_HTML_CLOSE = re.compile(r"(?i)</\s*html\s*>")
+
+
+def _splice(doc: str, pre: str, foot: str) -> str:
+    """Put the preheader and the footer INSIDE a complete HTML document.
+
+    Wrapping a full document in a div and appending after it produces markup no
+    client will render: the preheader misses the snippet and the unsubscribe lands
+    past </html>. The preheader goes immediately after <body> so it is the first
+    thing the inbox sees; the footer goes immediately before </body>.
+    """
+    out = doc
+    if pre:
+        m = _BODY_OPEN.search(out)
+        out = (out[:m.end()] + pre + out[m.end():]) if m else pre + out
+    m = _BODY_CLOSE.search(out) or _HTML_CLOSE.search(out)
+    return (out[:m.start()] + foot + out[m.start():]) if m else out + foot
+
+
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
     unsubscribe footer + header attached, text + HTML generated from the same body.
@@ -172,11 +194,22 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # and it stays out of the text part: it is a device for the HTML snippet, and in
     # plain text it would just repeat the opening sentence back at the reader.
     pre = preheader_block(fill_placeholders(blast.get("preheader") or "", lead, {}))
-    html = (pre + f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
-            f'line-height:1.7;color:#242a32;max-width:560px">{body if raw else to_html(body)}'
-            f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
-            f'padding-top:12px;margin-top:8px">You\'re receiving this because you\'ve been '
-            f'in touch with Knowella. <a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p></div>')
+    foot = (f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
+            f'padding-top:12px;margin-top:8px;font-family:Poppins,Arial,sans-serif">'
+            f"You're receiving this because you've been in touch with Knowella. "
+            f'<a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a></p>')
+
+    if raw and _IS_DOC.search(body):
+        # A pasted design is usually a WHOLE document, and appending to it put the
+        # footer after </html>, where every client discards it. Worse than losing the
+        # link: Postmark only adds its own when the placeholder is absent, so a token
+        # sitting in dead markup switched off the safety net as well. The message
+        # would have gone out with no reachable unsubscribe at all.
+        html = _splice(body, pre, foot)
+    else:
+        html = (pre + f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
+                f'line-height:1.7;color:#242a32;max-width:560px">'
+                f'{body if raw else to_html(body)}{foot}</div>')
     return {
         "to": email,
         "subject": subject,
