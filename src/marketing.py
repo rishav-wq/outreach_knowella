@@ -173,6 +173,34 @@ def _splice(doc: str, pre: str, foot: str) -> str:
     return (out[:m.start()] + foot + out[m.start():]) if m else out + foot
 
 
+_IMG_SRC = re.compile(r"(?i)<img[^>]+src\s*=\s*[\"']([^\"']+)")
+
+
+def render_warnings(body: str) -> list[str]:
+    """What a browser will show you that a mail client will not.
+
+    A preview renders in a browser, so it is honest about the HTML and can be
+    quietly wrong about the email. The gap that matters most is data: URIs — a
+    design tool exports images inline, the preview shows them perfectly, and Gmail
+    and Outlook strip every one. Finding that out from a delivered newsletter is
+    finding out too late, and it is invisible until then.
+    """
+    out = []
+    srcs = _IMG_SRC.findall(body or "")
+    inline = [u for u in srcs if u.lower().startswith("data:")]
+    rel = [u for u in srcs if not u.lower().startswith(("data:", "http://", "https://", "cid:"))]
+    if inline:
+        out.append(
+            f"{len(inline)} image{'s' if len(inline) > 1 else ''} embedded as data: URIs. "
+            "Browsers render these, Gmail and Outlook strip them — they will be missing "
+            "in the delivered email. Host them at an https:// address instead.")
+    if rel:
+        out.append(
+            f"{len(rel)} image{'s' if len(rel) > 1 else ''} with a relative path. "
+            "An email has no page to be relative to; use a full https:// URL.")
+    return out
+
+
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
     unsubscribe footer + header attached, text + HTML generated from the same body.

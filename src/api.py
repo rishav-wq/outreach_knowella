@@ -1769,6 +1769,9 @@ def render_preview(r: RenderReq):
          "preheader": r.preheader},
         lead, people[0]["email"] if people else "preview@example.com")
     return {"subject": m["subject"], "html": m["html_body"], "text": m["text_body"],
+            # A browser-rendered preview is honest about the HTML and can be quietly
+            # wrong about the email. These are the differences worth naming.
+            "warnings": marketing.render_warnings(r.body),
             "preheader": marketing.fill_placeholders(r.preheader, lead, {}) if r.preheader else "",
             "rendered_for": (people[0]["email"] if people else "a sample lead")}
 

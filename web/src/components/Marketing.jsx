@@ -320,6 +320,11 @@ export default function Marketing() {
             </div>
             {shown && (
               <div className="mail-prev">
+                {(shown.warnings || []).length > 0 && (
+                  <div className="mail-prev-warn">
+                    {shown.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+                  </div>
+                )}
                 <div className="mail-prev-bar">
                   <b>{shown.subject || '(no subject)'}</b>
                   <span className="muted">as {shown.rendered_for}</span>
