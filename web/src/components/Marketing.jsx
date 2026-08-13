@@ -312,6 +312,8 @@ export default function Marketing() {
               onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
               Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code> <code>{'{title}'}</code> — filled per person, same engine as verbatim sales mail.
+              In a template you can also use <code>{'{{{ pm:unsubscribe }}}'}</code> and{' '}
+              <code>{'{preferences_url}'}</code> as hrefs; ours are then left off.
             </div>
             <div className="fmt-row">
               <div className="muted" style={{ fontSize: 11.5 }}>

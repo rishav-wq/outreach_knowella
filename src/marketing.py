@@ -228,6 +228,11 @@ def render_message(blast: dict, lead, email: str) -> dict:
     """
     subject = fill_placeholders(blast["subject"], lead, {})
     body = fill_placeholders(blast["body"], lead, {})
+    # A template that carries its own unsubscribe loses our footer, and the preference
+    # link with it. This puts that link back within reach of the designer: the URL is
+    # per-recipient and so can never be hardcoded, but it can be a merge field like
+    # any other. Substituted after the rest so a body may use it anywhere.
+    body = body.replace("{preferences_url}", prefs_link(email))
     raw = (blast.get("format") or "markdown") == "html"
     text = (html_to_text(body) if raw else to_text(body)) + FOOTER_TEXT
     # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
