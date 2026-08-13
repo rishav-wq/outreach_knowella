@@ -62,7 +62,13 @@ SYSTEM = (
     "this list it would be self-refuting. If you have no URL, name the source in "
     "words and leave it unlinked.\n"
     "- The unsubscribe footer is added automatically; do not write one.\n\n"
-    'Return ONLY JSON: {"subject": str, "body": str, "used": [str], "omitted": [str]}\n'
+    'Return ONLY JSON: {"subject": str, "preheader": str, "body": str, "used": [str], '
+    '"omitted": [str]}\n'
+    '"preheader" is the grey line an inbox shows after the subject — 40-90 characters, '
+    "and it must EXTEND the subject rather than restate it. If the subject asks a "
+    "question, the preheader points at the shape of the answer. Never 'Read on', never "
+    "the opening sentence of the body: the client already falls back to that, which is "
+    "the whole reason to write one.\n"
     '"used" lists the KNOWLEDGE or SIGNAL points you actually leaned on.\n'
     '"omitted" lists ONLY points you WANTED to make but could not, because you had no '
     "source for them. Do NOT list the DO NOT rules — obeying those is expected, not an "
@@ -139,6 +145,7 @@ Write the issue. 150-250 words in the body."""
     if not data.get("subject") or not data.get("body"):
         raise RuntimeError("the model returned no subject or body")
     return {"subject": data.get("subject", "").strip(),
+            "preheader": (data.get("preheader") or "").strip(),
             "body": data.get("body", "").strip(),
             "used": data.get("used") or [],
             "omitted": data.get("omitted") or []}

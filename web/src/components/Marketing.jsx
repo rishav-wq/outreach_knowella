@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 
 const STATUS_BADGE = { draft: 's-drafted', sending: 's-queued', sent: 's-approved', paused: 's-invalid' }
 
-const EMPTY = { name: '', subject: '', body: '', publication_id: '', format: 'markdown', audience: { campaigns: [], topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
+const EMPTY = { name: '', subject: '', body: '', preheader: '', publication_id: '', format: 'markdown', audience: { campaigns: [], topics: [], statuses: [], exclude_sent: true, engagement: '', subscribers_only: false } }
 
 export default function Marketing() {
   const [blasts, setBlasts] = useState(null)
@@ -68,6 +68,7 @@ export default function Marketing() {
     // nothing said what the issue may claim. Spread EMPTY so a new audience field added
     // later can't go missing the same way.
     setDraft({ ...EMPTY, name: b.name, subject: b.subject, body: b.body,
+               preheader: b.preheader || '',
                publication_id: b.publication_id || '', format: b.format || 'markdown',
                audience: { ...EMPTY.audience, ...b.audience } })
     setDraftId(b.id); setMsg(null); setView('edit')
@@ -107,7 +108,8 @@ export default function Marketing() {
       // left the form looking finished while the send buttons stayed disabled.
       const p = pubs.find((x) => x.id === draft.publication_id)
       const auto = p ? `${p.name} #${(p.issues || 0) + 1}` : r.subject
-      setDraft((d) => ({ ...d, subject: r.subject, body: r.body, name: d.name.trim() || auto }))
+      setDraft((d) => ({ ...d, subject: r.subject, body: r.body,
+                         preheader: r.preheader || d.preheader, name: d.name.trim() || auto }))
       // If it had to pick the question itself, show which — an issue answering an
       // unseen question is unreviewable, and a bad pick is the first thing to fix.
       if (r.question) setQuestion(r.question)
@@ -123,7 +125,8 @@ export default function Marketing() {
     setBusy('preview'); setMsg(null)
     try {
       setShown(await api.renderBlast({ subject: draft.subject, body: draft.body,
-                                       format: draft.format, audience: draft.audience }))
+                                       preheader: draft.preheader, format: draft.format,
+                                       audience: draft.audience }))
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
   }
@@ -273,6 +276,22 @@ export default function Marketing() {
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             <input className="field-input" placeholder="Subject — merge fields work: {first_name}, {company}" value={draft.subject}
               onChange={(e) => setDraft({ ...draft, subject: e.target.value })} style={{ marginTop: 10 }} />
+            {/* The inbox shows subject THEN this. Left empty, the client grabs the
+                body's opening sentence — a line written for someone who has already
+                opened, spent on persuading someone who hasn't. */}
+            <input className="field-input" placeholder="Preview text — the grey line after the subject in the inbox"
+              value={draft.preheader} maxLength={140} style={{ marginTop: 10 }}
+              onChange={(e) => setDraft({ ...draft, preheader: e.target.value })} />
+            <div className="inbox-line">
+              <span className="inbox-subj">{draft.subject || 'Subject'}</span>
+              <span className="inbox-pre">
+                {draft.preheader
+                  || (draft.body.trim().split(/\r?\n/)[0] || 'the first line of your body')}
+              </span>
+              <span className={`inbox-n ${draft.preheader.length > 100 ? 'over' : ''}`}>
+                {draft.preheader ? `${draft.preheader.length}/100` : 'falling back to the body'}
+              </span>
+            </div>
             <textarea className="field-input mkt-body" rows={14} value={draft.body}
               placeholder={'Hi {first_name},\n\nWrite the issue…\n\n(unsubscribe footer is added automatically to every message)'}
               onChange={(e) => setDraft({ ...draft, body: e.target.value })} />

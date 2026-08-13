@@ -819,6 +819,22 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 /* Format picker + rendered preview. The preview is the composer's answer to "what
    will they actually get" — until now the only way to find out was to spend a real
    send on yourself. */
+/* A mock of the inbox row itself, because the preview text is only ever judged
+   next to its subject and truncated — reading the field on its own tells you
+   nothing about whether the pair works. */
+.inbox-line {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 6px; padding: 7px 11px;
+  background: var(--bg-soft, #f7f9fb); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); font-size: 12.5px; overflow: hidden;
+}
+.inbox-subj { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.inbox-pre {
+  flex: 1; min-width: 0; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.inbox-n { flex-shrink: 0; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.inbox-n.over { color: var(--caution); }
+
 .fmt-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .fmt-row .muted { flex: 1; min-width: 0; }
 .fmt-pick { width: auto; min-width: 116px; flex-shrink: 0; }

@@ -1592,6 +1592,7 @@ class BlastBody(BaseModel):
     audience: AudienceFilter = AudienceFilter()
     publication_id: str = ""   # which publication this is an issue OF
     format: str = "markdown"   # 'markdown' | 'html' — how the body is rendered
+    preheader: str = ""        # the grey line the inbox shows after the subject
 
 
 def _blast_out(b: dict) -> dict:
@@ -1600,7 +1601,7 @@ def _blast_out(b: dict) -> dict:
             "status": b.get("status", "draft"), "stats": b.get("stats") or {},
             "progress": b.get("progress") or {}, "error": b.get("error", ""),
             "publication_id": b.get("publication_id", ""), "issue_no": b.get("issue_no", 0),
-            "format": b.get("format") or "markdown",
+            "format": b.get("format") or "markdown", "preheader": b.get("preheader", ""),
             "remaining": b.get("remaining", 0), "audience_size": b.get("audience_size", 0),
             "created_at": b.get("created_at", ""), "sent_at": b.get("sent_at", "")}
 
@@ -1616,6 +1617,7 @@ def marketing_meta():
 class RenderReq(BaseModel):
     subject: str = ""
     body: str = ""
+    preheader: str = ""
     format: str = "markdown"
     audience: AudienceFilter = AudienceFilter()
 
@@ -1639,9 +1641,11 @@ def render_preview(r: RenderReq):
     lead = people[0]["lead"] if people else Lead(
         first_name="Maria", last_name="Chen", title="VP Operations", company="Meridian Logistics")
     m = marketing.render_message(
-        {"_id": "preview", "subject": r.subject, "body": r.body, "format": r.format},
+        {"_id": "preview", "subject": r.subject, "body": r.body, "format": r.format,
+         "preheader": r.preheader},
         lead, people[0]["email"] if people else "preview@example.com")
     return {"subject": m["subject"], "html": m["html_body"], "text": m["text_body"],
+            "preheader": marketing.fill_placeholders(r.preheader, lead, {}) if r.preheader else "",
             "rendered_for": (people[0]["email"] if people else "a sample lead")}
 
 
@@ -1856,7 +1860,8 @@ def create_blast(b: BlastBody):
         raise HTTPException(400, "name, subject and body are all required")
     bid = open_store().create_blast({"name": b.name.strip(), "subject": b.subject.strip(),
                                      "body": b.body, "audience": b.audience.model_dump(),
-                                     "publication_id": b.publication_id, "format": b.format})
+                                     "publication_id": b.publication_id, "format": b.format,
+                                     "preheader": b.preheader})
     return {"id": bid}
 
 
@@ -1878,7 +1883,8 @@ def update_blast(bid: str, body: BlastBody):
         raise HTTPException(400, "only drafts can be edited")
     store.update_blast(bid, {"name": body.name.strip(), "subject": body.subject.strip(),
                              "body": body.body, "audience": body.audience.model_dump(),
-                             "publication_id": body.publication_id, "format": body.format})
+                             "publication_id": body.publication_id, "format": body.format,
+                             "preheader": body.preheader})
     return {"ok": True}
 
 

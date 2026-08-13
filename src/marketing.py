@@ -128,6 +128,28 @@ def html_to_text(h: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", s).strip()
 
 
+def preheader_block(text: str) -> str:
+    """The grey line an inbox shows after the subject, made explicit.
+
+    Without one the client grabs whatever the body opens with — "When an auditor
+    requests specific documentation from months ago…" — so the line with the second
+    most influence on whether a message is opened is spent on a sentence written for
+    somebody who has already opened it.
+
+    Hidden with belt and braces because clients disagree about which property they
+    honour, then padded with zero-width joiners: having consumed the preheader, a
+    client keeps filling the snippet from the body, and without padding the inbox
+    reads "…ready before the auditor arrives When an auditor requests specific".
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    pad = "&zwnj;&nbsp;" * 60
+    return ('<div style="display:none;font-size:1px;line-height:1px;max-height:0;'
+            'max-width:0;opacity:0;overflow:hidden;mso-hide:all">'
+            f'{html_mod.escape(t)}{pad}</div>')
+
+
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
     unsubscribe footer + header attached, text + HTML generated from the same body.
@@ -146,7 +168,11 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # research keeps landing on for sustained reading. 14px over 600px ran nearer 85,
     # which is where the eye starts losing its place on the return sweep — a slower
     # read that gets blamed on length.
-    html = (f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
+    # Merge fields work here too — the inbox line is a good place for {company} —
+    # and it stays out of the text part: it is a device for the HTML snippet, and in
+    # plain text it would just repeat the opening sentence back at the reader.
+    pre = preheader_block(fill_placeholders(blast.get("preheader") or "", lead, {}))
+    html = (pre + f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
             f'line-height:1.7;color:#242a32;max-width:560px">{body if raw else to_html(body)}'
             f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:8px">You\'re receiving this because you\'ve been '
