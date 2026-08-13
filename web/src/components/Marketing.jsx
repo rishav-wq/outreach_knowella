@@ -131,6 +131,21 @@ export default function Marketing() {
     finally { setBusy('') }
   }
 
+  // The bytes are already in the body, so the fix does not need an upload: decode
+  // them, store them once by content hash, point the body at a real URL.
+  const doHostImages = async () => {
+    setBusy('host'); setMsg(null)
+    try {
+      const r = await api.hostImages(draft.body)
+      setDraft((d) => ({ ...d, body: r.body }))
+      setShown((p) => (p ? { ...p, warnings: r.warnings } : p))
+      setMsg({ ok: true, text: `${r.moved} image${r.moved === 1 ? '' : 's'} now served from a real URL.`
+        + (r.skipped ? ` ${r.skipped} could not be decoded and were left alone.` : '')
+        + ' Preview again to check them.' })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
+  }
+
   // Questions the publication could answer. Explicitly a stopgap: these are inferred
   // from the product knowledge, and content written from what you sell is weaker than
   // content written from what buyers asked. The label says so.
@@ -323,6 +338,13 @@ export default function Marketing() {
                 {(shown.warnings || []).length > 0 && (
                   <div className="mail-prev-warn">
                     {shown.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+                    {/data: URIs|relative path/.test(shown.warnings.join(' ')) && (
+                      <div>
+                        <button className="btn" disabled={busy !== ''} onClick={doHostImages}>
+                          {busy === 'host' ? 'Moving…' : 'Host these images for me'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="mail-prev-bar">

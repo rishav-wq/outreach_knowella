@@ -499,6 +499,25 @@ class MongoStore:
         d = self.db.leads.find_one({"lead.email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
         return Lead.model_validate(d["lead"]) if d else None
 
+    # --- email images ---------------------------------------------------------
+    # Kept in Mongo rather than on disk deliberately: the app runs from a container
+    # that is rebuilt on every deploy, and an image referenced by mail already sent
+    # must not disappear because somebody shipped a fix. Content-addressed, so the
+    # same logo pasted into ten issues is stored once and never goes stale.
+    def put_asset(self, data: bytes, content_type: str) -> str:
+        import hashlib
+        h = hashlib.sha256(data).hexdigest()[:32]
+        self.db.email_assets.update_one(
+            {"_id": h},
+            {"$setOnInsert": {"_id": h, "data": data, "content_type": content_type,
+                              "bytes": len(data),
+                              "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True)
+        return h
+
+    def get_asset(self, h: str) -> dict | None:
+        return self.db.email_assets.find_one({"_id": h})
+
     def library_topics(self) -> list[str]:
         return sorted(t for t in self.db.leads.distinct("topics") if t)
 

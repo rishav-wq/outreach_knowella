@@ -13,6 +13,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+import base64
 import re
 import tempfile
 import threading
@@ -21,7 +22,7 @@ import time
 import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -1744,6 +1745,59 @@ class RenderReq(BaseModel):
     preheader: str = ""
     format: str = "markdown"
     audience: AudienceFilter = AudienceFilter()
+
+
+class HostImages(BaseModel):
+    body: str = ""
+
+
+_DATA_URI = re.compile(r"data:(image/(?:png|jpe?g|gif|webp|svg\+xml));base64,([A-Za-z0-9+/=\s]+)")
+_MAX_ASSET = 5 * 1024 * 1024
+
+
+@app.post("/api/blasts/host-images")
+def host_images(r: HostImages):
+    """Lift every inline image out of the body and serve it from a real URL.
+
+    Gmail and Outlook strip data: URIs, so a template exported from a design tool
+    arrives with holes where its images were. The bytes are already here, so the fix
+    does not need a CDN account or an upload — decode them, store them once by
+    content hash, and rewrite the body to point at an https:// address.
+
+    Content-addressed, so the same logo across ten issues is stored once, and an
+    image referenced by mail already sent keeps working forever.
+    """
+    body, moved, skipped = r.body or "", 0, 0
+
+    def swap(m):
+        nonlocal moved, skipped
+        ctype, b64 = m.group(1), re.sub(r"\s+", "", m.group(2))
+        try:
+            raw = base64.b64decode(b64, validate=True)
+        except Exception:
+            skipped += 1
+            return m.group(0)
+        if not raw or len(raw) > _MAX_ASSET:
+            skipped += 1
+            return m.group(0)
+        h = open_store().put_asset(raw, ctype)
+        moved += 1
+        return f"{unsubscribe._base_url()}/api/asset/{h}"
+
+    body = _DATA_URI.sub(swap, body)
+    return {"body": body, "moved": moved, "skipped": skipped,
+            "warnings": marketing.render_warnings(body)}
+
+
+@app.get("/api/asset/{h}")
+def get_asset(h: str):
+    """Public, immutable, cacheable. Named by content hash, so the URL can never
+    point at different bytes than the message that referenced it."""
+    d = open_store().get_asset(h)
+    if not d:
+        raise HTTPException(404, "no such image")
+    return Response(content=bytes(d["data"]), media_type=d.get("content_type", "image/png"),
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @app.post("/api/blasts/render")

@@ -31,6 +31,8 @@ _jwks_client = None  # cached PyJWKClient (network fetch of Clerk's public keys)
 _OPEN_API_PATHS = {"/api/health", "/api/unsubscribe", "/api/postmark/events",
                    "/api/signals/inbound", "/api/subscribe", "/api/subscribe/confirm",
                    "/api/preferences"}
+# Images referenced by sent mail: fetched by Gmail's proxy, which carries no session.
+_OPEN_PREFIXES = ("/api/asset/",)
 
 # The browser extension can't carry a Clerk session, so these routes authenticate
 # with a per-user capture token instead (X-Capture-Token header). Requests carrying
@@ -144,7 +146,7 @@ async def require_auth(request: Request):
     path = request.url.path
     # Protect only the API; the static frontend + SPA routes (/, /sign-in, /assets…)
     # stay public — the app gates itself via Clerk, and every /api call carries a token.
-    if request.method == "OPTIONS" or not path.startswith("/api/") or path in _OPEN_API_PATHS:
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in _OPEN_API_PATHS or path.startswith(_OPEN_PREFIXES):
         return None
     if path in _CAPTURE_TOKEN_PATHS and request.headers.get("x-capture-token"):
         return None  # the endpoint validates the capture token itself
