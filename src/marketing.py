@@ -174,6 +174,7 @@ def _splice(doc: str, pre: str, foot: str) -> str:
 
 
 _IMG_SRC = re.compile(r"(?i)<img[^>]+src\s*=\s*[\"']([^\"']+)")
+_ANCHOR_TEXT = re.compile(r"(?is)<a[^>]+href\s*=\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a>")
 
 
 def render_warnings(body: str) -> list[str]:
@@ -198,6 +199,20 @@ def render_warnings(body: str) -> list[str]:
         out.append(
             f"{len(rel)} image{'s' if len(rel) > 1 else ''} with a relative path. "
             "An email has no page to be relative to; use a full https:// URL.")
+
+    # A designed template ships with a placeholder unsubscribe — href="#" — which
+    # looks right and does nothing. Ours gets appended underneath, so the message
+    # carries a working link and a dead one, and the dead one is on top. Somebody who
+    # clicks it and sees nothing happen reaches for Report spam next, which costs far
+    # more than the unsubscribe would have.
+    dead = [h for h, label in _ANCHOR_TEXT.findall(body or "")
+            if "unsubscribe" in re.sub(r"<[^>]+>", "", label).lower()
+            and h.strip() in ("#", "", "javascript:void(0)", "javascript:;")]
+    if dead and PM_UNSUB not in (body or ""):
+        out.append(
+            "Your template has an Unsubscribe link pointing at nothing (href=\"#\"), so "
+            "ours is added below it — two links, and the dead one first. Point yours at "
+            "{{{ pm:unsubscribe }}} instead and it becomes the real one; ours stands down.")
     return out
 
 
