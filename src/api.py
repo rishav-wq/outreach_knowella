@@ -201,7 +201,13 @@ h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
 p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
 .foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
 .card.wide .foot{text-align:center}
-.to{margin:0 0 4px}.ok{color:#04b492;font-weight:600;margin-top:8px}
+.to{margin:0 0 4px}
+.ok{display:flex;align-items:center;gap:11px;color:#04b492;font-weight:600;margin-top:14px;font-size:15px;padding:14px 16px;background:#e6f8f4;border-radius:10px}
+.tick{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#04b492;color:#fff;display:inline-flex;align-items:center;justify-content:center}
+.tick svg{width:15px;height:15px}
+.ok.warn .tick{background:#fd750e}
+.ok.warn{color:#a34a05;background:#ffeadb}
+@media(prefers-color-scheme:dark){.ok{background:#0f2a24}.ok.warn{background:#2b1d10}}
 .grp{margin-top:22px}
 h2{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#6e63ff;margin:0 0 10px;font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -342,6 +348,42 @@ def unsubscribe_link(t: str = ""):
     return HTMLResponse(_unsubscribe_page(bool(email)))
 
 
+def _join(names: list[str]) -> str:
+    if len(names) <= 1:
+        return names[0] if names else ""
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _saved_note(chosen: list) -> str:
+    """What saving actually DID, in the reader's terms.
+
+    A green "Saved" on an otherwise identical page is a receipt for a transaction
+    nobody can see. The useful confirmation is which newsletters now arrive, so it
+    names them — and says so plainly in the case that reads as a bug otherwise:
+    picking only topics nothing covers means nothing will ever arrive, and the
+    person deserves to learn that here rather than from months of silence.
+    """
+    # The same tick the unsubscribe page uses. That page reads as definite because
+    # something visibly happened; a lone green line on an otherwise identical form
+    # does not, however true it is.
+    tick = f'<span class="tick">{_CHECK}</span>'
+    if not chosen:
+        return (f'<p class="ok">{tick}Saved — you will get everything we publish.</p>'
+                '<p>Tick some topics if you would rather narrow it.</p>')
+    try:
+        pubs = [p for p in open_store().list_publications()
+                if set(p.get("topics") or []) & set(chosen)]
+    except Exception:
+        pubs = []
+    got = _join([p.get("name", "") for p in pubs])
+    lead = (f'<p class="ok">{tick}Saved — you will receive {html.escape(got)}.</p>' if pubs else
+            f'<p class="ok warn">{tick}Saved, but nothing we publish covers those topics yet.</p>'
+            '<p>You will not receive anything until it does. Tick something else if '
+            'you would rather hear from us sooner.</p>')
+    return (lead + f'<p>Based on: {html.escape(_join(sorted(chosen)))}. '
+                   f'Change any of it below.</p>' if pubs else lead)
+
+
 def _prefs_page(email: str, chosen: list, saved: bool = False) -> str:
     """The same three groups the signup form offers, so somebody who ticked Cold
     Chain on knowella.com sees Cold Chain here — not a list of publication names
@@ -355,7 +397,7 @@ def _prefs_page(email: str, chosen: list, saved: bool = False) -> str:
             for t in g["topics"])
         groups += (f'<div class=grp><h2>{html.escape(g["name"])}</h2>'
                    f'<div class=chips>{chips}</div></div>')
-    note = ("<p class=ok>Saved. You will only hear about these.</p>" if saved else
+    note = (_saved_note(chosen) if saved else
             "<p>Tick what you want to hear about. Nothing ticked means everything.</p>")
     inner = (f'<h1>Choose what you get</h1>'
              f'<p class=to>Sent to <b>{html.escape(email)}</b>.</p>{note}'
