@@ -18,10 +18,13 @@ dumb, excellent pipe, same philosophy as the rest of the app.
 """
 from __future__ import annotations
 
+import logging
 import os
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+
+log = logging.getLogger("uvicorn.error")
 
 BASE = "https://api.postmarkapp.com"
 BATCH = 500
@@ -104,6 +107,36 @@ def events_reach_us(stream: str = "broadcast") -> str | None:
         if sent == want:
             return "ok"
     return "token_mismatch"
+
+
+def suppress(email: str, stream: str | None = None) -> bool:
+    """Tell Postmark about an unsubscribe that happened on OUR pages.
+
+    Postmark's own unsubscribe link leaves both systems agreeing: it suppresses at
+    the stream, then tells us through the SubscriptionChange webhook. Ours only ever
+    wrote to our database, so somebody who left through our preferences page stayed
+    active on Postmark's stream — suppressed with us, and missing the one safety net
+    that catches a send our own filter fails to.
+
+    Fail-soft on purpose: an outage at Postmark must never stop us honouring an
+    opt-out, and our list is the one the audience is resolved against. Logged rather
+    than raised, because the person is already unsubscribed by the time we get here.
+    """
+    e = (email or "").strip().lower()
+    if not e or not has_key():
+        return False
+    s = stream or os.environ.get("POSTMARK_STREAM", "broadcast")
+    try:
+        r = httpx.post(f"{BASE}/message-streams/{s}/suppressions",
+                       json={"Suppressions": [{"EmailAddress": e}]},
+                       headers=_hdr(), timeout=10.0)
+        if r.status_code >= 400:
+            log.warning("[postmark] could not suppress %s on %s: %s", e, s, r.text[:200])
+            return False
+        return True
+    except Exception as ex:
+        log.warning("[postmark] could not suppress %s: %s", e, ex)
+        return False
 
 
 def send_batch(messages: list[dict], stream: str | None = None) -> list[dict]:

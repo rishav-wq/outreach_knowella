@@ -344,6 +344,7 @@ def unsubscribe_link(t: str = ""):
     if email:
         store = open_store()
         store.suppress(email, reason="unsubscribed via email link")
+        postmark_send.suppress(email)   # keep Postmark's stream in step with ours
         store.drop_subscriber(email)   # suppression alone would leave them in the audience
     return HTMLResponse(_unsubscribe_page(bool(email)))
 
@@ -435,6 +436,7 @@ async def preferences_save(request: Request):
     store = open_store()
     if form.get("all"):
         store.suppress(email, reason="unsubscribed via preferences")
+        postmark_send.suppress(email)   # keep Postmark's stream in step with ours
         store.drop_subscriber(email)
         return HTMLResponse(_unsubscribe_page(True))
     picked = topiclib.clean(form.getlist("topic"))
