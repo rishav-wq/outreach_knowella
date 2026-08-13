@@ -29,6 +29,7 @@ from . import auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
+from . import topics as topiclib
 from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, osha, postmark_send
 from .models import Fact, Lead, Research
 from .store import open_store
@@ -171,21 +172,27 @@ _CROSS = ('<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="c
           'stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>')
 
 
-def _unsubscribe_page(ok: bool) -> str:
-    heading = "You’re unsubscribed" if ok else "Link not valid"
-    msg = ("You won’t receive any more emails from us. Sorry for the interruption."
-           if ok else
-           "This unsubscribe link couldn’t be verified — it may be old or altered. If you’re "
-           "still getting emails, reply “unsubscribe” to one and we’ll remove you.")
-    return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe · Knowella</title>
-<style>
+# Every public page — unsubscribe, subscribe, preferences — wears the same chrome.
+# A page that doesn't look like it came from us reads as phishing, which is the last
+# impression to leave at the exact moment somebody is deciding whether to trust us.
+#
+# Type and colour are customerweb's, the shipping product's own: Poppins,
+# $primary-color #6e63ff, $header-black #242a32, $secondary-font-color #64707c,
+# $table-header-bg #e6ecf1. The stripe across the card top is the logo itself — the
+# four pinwheel petals in their order — so the brand is present even before the mark
+# is read.
+_PAGE_CSS = """
 :root{color-scheme:light dark}
+*{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
-background:#f6fafa;color:#242a32;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
-.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;
+background:#f6f8fb;color:#242a32;font-family:Poppins,'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
+.card{position:relative;overflow:hidden;background:#fff;border:1px solid #e6ecf1;border-radius:16px;
 padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
-.brand{display:flex;justify-content:center;align-items:center;gap:9px;margin-bottom:22px}
+.card.wide{max-width:620px;text-align:left}
+.card:before{content:"";position:absolute;inset:0 0 auto;height:3px;
+background:linear-gradient(90deg,#87dd75,#04b492,#6459ff,#ffd600)}
+.brand{display:flex;align-items:center;gap:9px;margin-bottom:22px}
+.card:not(.wide) .brand{justify-content:center}
 .brand b{font-size:16px;font-weight:600;letter-spacing:-.01em}
 .brand i{font-style:normal;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#96a1af;font-weight:600}
 .mark{width:54px;height:54px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;background:#e6f8f4;color:#04b492}
@@ -193,58 +200,67 @@ padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
 h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
 p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
 .foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
-@media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
-.card{background:#161d1a;border-color:#28322d}
-p{color:#9aa5ac}.mark.bad{background:#222b27}}
-</style></head><body><div class="card">
-<div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
-<div class="mark __BAD__">__ICON__</div>
-<h1>__HEADING__</h1><p>__MSG__</p>
-<div class="foot">Knowella AI Inc.</div>
-</div></body></html>""".replace("__PINWHEEL__", _PINWHEEL)
-        .replace("__BAD__", "" if ok else "bad").replace("__ICON__", _CHECK if ok else _CROSS)
-        .replace("__HEADING__", heading).replace("__MSG__", msg))
+.card.wide .foot{text-align:center}
+.to{margin:0 0 4px}.ok{color:#04b492;font-weight:600;margin-top:8px}
+.grp{margin-top:22px}
+h2{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#6e63ff;margin:0 0 10px;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid #e6ecf1;background:#fff;
+border-radius:999px;padding:7px 13px;font-size:13px;cursor:pointer;color:#464e57;transition:.12s}
+.chip:hover{border-color:#dbd8fd}
+.chip input{width:15px;height:15px;margin:0;accent-color:#6e63ff}
+.chip:has(input:checked){background:#f8f7ff;border-color:#6e63ff;color:#584fcc;font-weight:500}
+.row{display:flex;align-items:center;gap:18px;margin-top:26px;border-top:1px solid #e6ecf1;padding-top:20px}
+.btn{border:0;border-radius:9px;padding:11px 20px;font:inherit;font-weight:600;font-size:14px;cursor:pointer}
+.save{background:#6e63ff;color:#fff}.save:hover{background:#584fcc}
+.all{background:none;color:#96a1af;text-decoration:underline;padding-left:0}
+.all:hover{color:#fb1e39}
+@media(prefers-color-scheme:dark){body{background:#0f1216;color:#eef0f4}
+.card{background:#171b21;border-color:#28303a}
+p,.chip{color:#9aa5ac}.chip{background:#171b21;border-color:#28303a}
+.mark.bad{background:#222b27}}
+"""
+
+
+def _public_page(title: str, inner: str, wide: bool = False) -> str:
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>{title} · Knowella</title>'
+            f'<link rel="preconnect" href="https://fonts.googleapis.com">'
+            f'<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            f'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700'
+            f'&display=swap" rel="stylesheet">'
+            f'<style>{_PAGE_CSS}</style></head><body>'
+            f'<div class="card{" wide" if wide else ""}">'
+            f'<div class="brand">{_PINWHEEL}<b>Knowella</b><i>Outreach</i></div>'
+            f'{inner}<div class="foot">Knowella AI Inc.</div></div></body></html>')
+
+
+def _result_page(title: str, ok: bool, heading: str, msg: str) -> str:
+    return _public_page(title,
+                        f'<div class="mark {"" if ok else "bad"}">{_CHECK if ok else _CROSS}</div>'
+                        f'<h1>{heading}</h1><p>{msg}</p>')
+
+
+def _unsubscribe_page(ok: bool) -> str:
+    return _result_page(
+        "Unsubscribe", ok,
+        "You’re unsubscribed" if ok else "Link not valid",
+        "You won’t receive any more emails from us. Sorry for the interruption."
+        if ok else
+        "This unsubscribe link couldn’t be verified — it may be old or altered. If you’re "
+        "still getting emails, reply “unsubscribe” to one and we’ll remove you.")
 
 
 def _subscribe_page(ok: bool) -> str:
-    """Confirmation landing. Same chrome as the unsubscribe page on purpose: a page
-    that doesn't look like it came from us reads as phishing, which is the last
-    impression to give someone at the moment they opt in."""
-    heading = "You’re subscribed" if ok else "Link not valid"
-    msg = ("Thanks — you’ll hear from us when we have something worth sending. "
-           "Every email has a one-click unsubscribe."
-           if ok else
-           "This confirmation link couldn’t be verified — it may be old or altered. "
-           "Subscribe again and we’ll send a fresh one.")
-    return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe · Knowella</title>
-<style>
-:root{color-scheme:light dark}
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
-background:#f6fafa;color:#242a32;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif}
-.card{background:#fff;border:1px solid #e6ecf1;border-radius:16px;
-padding:40px 36px 30px;max-width:430px;width:100%;text-align:center}
-.brand{display:flex;justify-content:center;align-items:center;gap:9px;margin-bottom:22px}
-.brand b{font-size:16px;font-weight:600;letter-spacing:-.01em}
-.brand i{font-style:normal;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#96a1af;font-weight:600}
-.mark{width:54px;height:54px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;background:#e6f8f4;color:#04b492}
-.mark.bad{background:#f0f1ec;color:#96a1af}
-h1{margin:0 0 10px;font-size:21px;font-weight:700;letter-spacing:-.02em}
-p{margin:0;color:#64707c;line-height:1.65;font-size:14px}
-.foot{margin-top:24px;font-size:11px;color:#aab3bc;letter-spacing:.04em}
-@media(prefers-color-scheme:dark){body{background:#0d1411;color:#eef0f4}
-.card{background:#161d1a;border-color:#28322d}
-p{color:#9aa5ac}.mark.bad{background:#222b27}}
-</style></head><body><div class="card">
-<div class="brand">__PINWHEEL__<b>Knowella</b><i>Outreach</i></div>
-<div class="mark __BAD__">__ICON__</div>
-<h1>__HEADING__</h1><p>__MSG__</p>
-<div class="foot">Knowella AI Inc.</div>
-</div></body></html>""".replace("__PINWHEEL__", _PINWHEEL)
-        .replace("__BAD__", "" if ok else "bad").replace("__ICON__", _CHECK if ok else _CROSS)
-        .replace("__HEADING__", heading).replace("__MSG__", msg))
-
-
+    return _result_page(
+        "Subscribe", ok,
+        "You’re subscribed" if ok else "Link not valid",
+        "Thanks — you’ll hear from us when we have something worth sending. "
+        "Every email has a one-click unsubscribe."
+        if ok else
+        "This confirmation link couldn’t be verified — it may be old or altered. "
+        "Subscribe again and we’ll send a fresh one.")
 
 
 # --- subscribers: the only audience a newsletter may go to --------------------
@@ -256,6 +272,7 @@ class SubscribeIn(BaseModel):
     email: str
     name: str = ""
     source: str = "web"
+    topics: list[str] = []   # what they ticked on the signup form; empty = everything
 
 
 @app.post("/api/subscribe")
@@ -274,6 +291,11 @@ def subscribe(r: SubscribeIn):
         # They previously opted out. Honour that silently rather than re-adding.
         return {"ok": True}
     doc = store.add_subscriber(email, r.name, r.source)
+    # The website's form already asks what they care about; dropping it here would
+    # mean asking twice and honouring neither.
+    picked = topiclib.clean(r.topics)
+    if picked:
+        store.set_subscriber_prefs(email, picked)
     if doc.get("status") != "confirmed" and postmark_send.has_key() and postmark_send.from_address():
         link = f"{unsubscribe._base_url()}/api/subscribe/confirm?t={unsubscribe.token(email)}"
         try:
@@ -320,58 +342,43 @@ def unsubscribe_link(t: str = ""):
     return HTMLResponse(_unsubscribe_page(bool(email)))
 
 
-PREF_CSS = ("body{font-family:Poppins,-apple-system,Segoe UI,sans-serif;background:#f7f9fb;"
-            "color:#242a32;margin:0;padding:48px 20px;line-height:1.6}"
-            ".c{max-width:520px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;"
-            "border-radius:14px;padding:32px}"
-            "h1{font-size:22px;margin:0 0 6px}p{color:#64707c;font-size:14px}"
-            "label{display:flex;gap:11px;align-items:flex-start;padding:13px 0;"
-            "border-top:1px solid #e6ecf1;font-size:14.5px;cursor:pointer}"
-            "label b{display:block}label span{color:#64707c;font-size:13px}"
-            "input[type=checkbox]{margin-top:3px;width:17px;height:17px;accent-color:#6e63ff}"
-            ".btn{display:inline-block;border:0;border-radius:9px;padding:11px 18px;"
-            "font:inherit;font-weight:600;font-size:14px;cursor:pointer}"
-            ".save{background:#6e63ff;color:#fff}"
-            ".all{background:none;color:#96a5b5;text-decoration:underline;padding-left:0}"
-            ".row{display:flex;align-items:center;gap:18px;margin-top:22px;"
-            "border-top:1px solid #e6ecf1;padding-top:20px}")
-
-
-def _prefs_page(email: str, pubs: list, off: list) -> str:
-    # The store hands back raw docs keyed by _id; the API's own serialiser renames it
-    # to id. This page reads the store directly, so it accepts either.
-    def pid(p):
-        return p.get("id") or p.get("_id") or ""
-    rows = "".join(
-        f'<label><input type="checkbox" name="pub" value="{html.escape(pid(p))}"'
-        f'{"" if pid(p) in off else " checked"}>'
-        f'<span><b>{html.escape(p.get("name") or "")}</b>{html.escape(p.get("description") or "")}</span>'
-        "</label>" for p in pubs)
-    return (f"<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
-            f"<title>Your subscriptions</title><style>{PREF_CSS}</style><div class=c>"
-            f"<h1>Choose what you get</h1>"
-            f"<p>Sent to <b>{html.escape(email)}</b>. Untick anything you would rather not receive.</p>"
-            f"<form method=post action='/api/preferences'>"
-            f"<input type=hidden name=t value='{html.escape(unsubscribe.token(email))}'>"
-            f"{rows}"
-            f"<div class=row><button class='btn save' type=submit>Save</button>"
-            f"<button class='btn all' type=submit name=all value='1'>Unsubscribe from everything</button>"
-            f"</div></form></div>")
+def _prefs_page(email: str, chosen: list, saved: bool = False) -> str:
+    """The same three groups the signup form offers, so somebody who ticked Cold
+    Chain on knowella.com sees Cold Chain here — not a list of publication names
+    they were never asked to choose between."""
+    on = set(chosen)
+    groups = ""
+    for g in topiclib.GROUPS:
+        chips = "".join(
+            f'<label class=chip><input type=checkbox name=topic value="{html.escape(t)}"'
+            f'{" checked" if t in on else ""}><span>{html.escape(t)}</span></label>'
+            for t in g["topics"])
+        groups += (f'<div class=grp><h2>{html.escape(g["name"])}</h2>'
+                   f'<div class=chips>{chips}</div></div>')
+    note = ("<p class=ok>Saved. You will only hear about these.</p>" if saved else
+            "<p>Tick what you want to hear about. Nothing ticked means everything.</p>")
+    inner = (f'<h1>Choose what you get</h1>'
+             f'<p class=to>Sent to <b>{html.escape(email)}</b>.</p>{note}'
+             f"<form method=post action='/api/preferences'>"
+             f"<input type=hidden name=t value='{html.escape(unsubscribe.token(email))}'>"
+             f'{groups}'
+             f'<div class=row><button class="btn save" type=submit>Save</button>'
+             f'<button class="btn all" type=submit name=all value="1">Unsubscribe from everything</button>'
+             f'</div></form>')
+    return _public_page("Choose what you get", inner, wide=True)
 
 
 @app.get("/api/preferences")
 def preferences_page(t: str = ""):
-    """Public. Which publications this person wants — the softer door beside the
+    """Public. What this person wants to hear about — the softer door beside the
     one-click unsubscribe, never in place of it.
 
-    An unrecognised or tampered token gets the same page as a stranger: nothing is
-    revealed and nothing can be changed, because the token IS the authentication."""
+    An unrecognised or tampered token gets nothing: the token IS the authentication,
+    it names one address and carries no other authority."""
     email = unsubscribe.email_from_token(t)
     if not email:
         return HTMLResponse(_unsubscribe_page(False), status_code=400)
-    store = open_store()
-    return HTMLResponse(_prefs_page(email, store.list_publications(),
-                                    store.subscriber_prefs(email)))
+    return HTMLResponse(_prefs_page(email, open_store().subscriber_prefs(email)))
 
 
 @app.post("/api/preferences")
@@ -388,13 +395,9 @@ async def preferences_save(request: Request):
         store.suppress(email, reason="unsubscribed via preferences")
         store.drop_subscriber(email)
         return HTMLResponse(_unsubscribe_page(True))
-    keep = set(form.getlist("pub"))
-    off = [(p.get("id") or p.get("_id")) for p in store.list_publications()
-           if (p.get("id") or p.get("_id")) not in keep]
-    store.set_subscriber_prefs(email, off)
-    return HTMLResponse(_prefs_page(email, store.list_publications(), off)
-                        .replace("<h1>Choose what you get</h1>",
-                                 "<h1>Saved</h1>"))
+    picked = topiclib.clean(form.getlist("topic"))
+    store.set_subscriber_prefs(email, picked)
+    return HTMLResponse(_prefs_page(email, picked, saved=True))
 
 
 @app.get("/api/campaigns")

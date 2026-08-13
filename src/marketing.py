@@ -252,11 +252,11 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
             issue = store.next_issue_no(pub["_id"])
             store.update_blast(bid, {"issue_no": issue})
             blast["issue_no"] = issue
-        # The publication travels with the filter so someone who kept The Safety Brief
-        # and dropped Freight Paperwork is excluded from this issue without being
-        # unsubscribed from everything.
+        # What this publication covers travels with the filter, so an issue reaches
+        # the subscribers who asked for those topics and skips the rest — without
+        # unsubscribing anybody from everything.
         everyone = store.audience_leads({**(blast.get("audience") or {}),
-                                         "publication_id": blast.get("publication_id", "")})
+                                         "publication_topics": pub.get("topics") or []})
         already = store.blast_sent_emails(bid)
         pending = [p for p in everyone if p["email"] not in already]
         people = pending[:limit] if limit and limit > 0 else pending

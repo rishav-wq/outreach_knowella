@@ -439,14 +439,16 @@ class MongoStore:
         if flt.get("subscribers_only"):
             out: dict[str, dict] = {}
             sup = self.suppressed_set()
-            # Someone who kept The Safety Brief and dropped Freight Paperwork is still
-            # a confirmed subscriber; they are simply not in THIS issue's audience.
-            pub = flt.get("publication_id") or ""
+            # An issue reaches a subscriber when what they asked for overlaps what
+            # this publication covers. No topics chosen means everything — the honest
+            # reading of somebody who subscribed without ticking a box.
+            want = set(flt.get("publication_topics") or [])
             for d in self.list_subscribers("confirmed"):
                 email = d["_id"]
                 if self._is_sup(email, sup):
                     continue
-                if pub and pub in (d.get("unsub_pubs") or []):
+                mine = set(d.get("topics") or [])
+                if want and mine and not (want & mine):
                     continue
                 lead = self.lead_by_email(email) or Lead(
                     first_name=(d.get("name") or "").split(" ")[0], email=email)
@@ -637,21 +639,21 @@ class MongoStore:
         doc = {"_id": e, "name": name.strip(), "source": source or "web",
                "status": "pending", "created_at": (existing or {}).get("created_at", now),
                "asked_at": now,
-               # Publications this person has said no to. Absent = wants everything,
-               # which is what someone who just subscribed has actually asked for.
-               "unsub_pubs": (existing or {}).get("unsub_pubs") or []}
+               # What they asked for. Empty = everything, which is what somebody who
+               # subscribed without ticking anything has actually said.
+               "topics": (existing or {}).get("topics") or []}
         self.db.subscribers.replace_one({"_id": e}, doc, upsert=True)
         return doc
 
     def subscriber_prefs(self, email: str) -> list[str]:
         d = self.db.subscribers.find_one({"_id": (email or "").strip().lower()}) or {}
-        return d.get("unsub_pubs") or []
+        return d.get("topics") or []
 
-    def set_subscriber_prefs(self, email: str, unsub_pubs: list[str]) -> bool:
-        """Which publications this person no longer wants. Returns False for an
-        address that isn't a subscriber, so a tampered token changes nothing."""
+    def set_subscriber_prefs(self, email: str, topics: list[str]) -> bool:
+        """What this person wants to hear about. Returns False for an address that
+        isn't a subscriber, so a tampered token changes nothing."""
         e = (email or "").strip().lower()
-        r = self.db.subscribers.update_one({"_id": e}, {"$set": {"unsub_pubs": list(unsub_pubs)}})
+        r = self.db.subscribers.update_one({"_id": e}, {"$set": {"topics": list(topics)}})
         return r.matched_count > 0
 
     def confirm_subscriber(self, email: str) -> bool:
