@@ -40,6 +40,7 @@ export default function Marketing() {
     api.listAudiences().then(setAudiences).catch(() => {})
     api.listPublications().then(setPubs).catch(() => {})
     api.getMarketingStatus().then(setConn).catch(() => {})
+    api.listAssets().then((d) => setAssets(d.assets || [])).catch(() => {})
     return () => { clearInterval(poll.current); clearTimeout(debounce.current) }
   }, [])
 
@@ -149,17 +150,22 @@ export default function Marketing() {
   // A PNG on the desktop -> a URL the template can use, without a round trip
   // through base64. The URL is copied rather than inserted: only the author knows
   // where in the markup it belongs.
-  const [lastUrl, setLastUrl] = useState('')
+  const [assets, setAssets] = useState([])
+  const [assetName, setAssetName] = useState('')
   const onPickImage = async (e) => {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
     setBusy('upload'); setMsg(null)
     try {
-      const r = await api.uploadAsset(f)
-      setLastUrl(r.url)
-      try { await navigator.clipboard.writeText(r.url) } catch { /* clipboard blocked */ }
-      setMsg({ ok: true, text: `${f.name} uploaded (${Math.round(r.bytes / 1024)}KB). URL copied — paste it into a src.` })
+      const r = await api.uploadAsset(f, assetName)
+      api.listAssets().then((d) => setAssets(d.assets || [])).catch(() => {})
+      const put = r.ref || r.url
+      try { await navigator.clipboard.writeText(put) } catch { /* clipboard blocked */ }
+      setAssetName('')
+      setMsg({ ok: true, text: r.ref
+        ? `Saved as ${r.ref} — copied. Use it in any issue; upload again with the same name to replace it everywhere.`
+        : `${f.name} uploaded (${Math.round(r.bytes / 1024)}KB). URL copied. Give it a name next time and you can reuse it as {asset:name}.` })
     } catch (e2) { setMsg({ ok: false, text: String(e2.message).slice(0, 260) }) }
     finally { setBusy('') }
   }
@@ -349,6 +355,9 @@ export default function Marketing() {
                 <option value="markdown">Markdown</option>
                 <option value="html">Raw HTML</option>
               </select>
+              <input className="field-input asset-name" placeholder="name, e.g. logo"
+                value={assetName} onChange={(e) => setAssetName(e.target.value)}
+                title="Save the image under this name so every issue can reuse it" />
               <label className="btn" style={{ cursor: busy ? 'default' : 'pointer' }}>
                 {busy === 'upload' ? 'Uploading…' : 'Upload image'}
                 <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
@@ -358,9 +367,13 @@ export default function Marketing() {
                 {busy === 'preview' ? 'Rendering…' : 'Preview'}
               </button>
             </div>
-            {lastUrl && (
-              <div className="muted" style={{ fontSize: 11.5, marginTop: 6, wordBreak: 'break-all' }}>
-                <code>{lastUrl}</code>
+            {assets.length > 0 && (
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                Saved images — click to copy:{' '}
+                {assets.map((a) => (
+                  <button key={a.name} className="asset-chip" title={`${Math.round(a.bytes / 1024)}KB`}
+                    onClick={() => navigator.clipboard?.writeText(a.ref)}>{a.ref}</button>
+                ))}
               </div>
             )}
             {shown && (
@@ -368,7 +381,7 @@ export default function Marketing() {
                 {(shown.warnings || []).length > 0 && (
                   <div className="mail-prev-warn">
                     {shown.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
-                    {/data: URIs|relative path/.test(shown.warnings.join(' ')) && (
+                    {/data: URIs/.test(shown.warnings.join(' ')) && (
                       <div>
                         <button className="btn" disabled={busy !== ''} onClick={doHostImages}>
                           {busy === 'host' ? 'Moving…' : 'Host these images for me'}

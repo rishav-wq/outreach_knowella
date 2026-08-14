@@ -81,7 +81,11 @@ export const sendMarketingTest = (to) => apiSend('/api/marketing/test', 'POST', 
 export const getMarketingMeta = () => apiGet('/api/marketing/meta')
 // Rendered by the server with the same code the send uses — a preview built in the
 // browser would be a preview of something nobody receives.
-export const uploadAsset = (file) => { const fd = new FormData(); fd.append('file', file); return apiForm('/api/assets/upload', fd) }
+export const listAssets = () => apiGet('/api/assets')
+export const uploadAsset = (file, name = '') => {
+  const fd = new FormData(); fd.append('file', file); if (name) fd.append('name', name)
+  return apiForm('/api/assets/upload', fd)
+}
 export const hostImages = (body) => apiSend('/api/blasts/host-images', 'POST', { body })
 export const renderBlast = (b) => apiSend('/api/blasts/render', 'POST', b)
 export const previewAudience = (filter) => apiSend('/api/marketing/preview', 'POST', filter)

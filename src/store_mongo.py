@@ -515,6 +515,30 @@ class MongoStore:
             upsert=True)
         return h
 
+    # Named assets: the logo and the social icons are the SAME image in every issue,
+    # so re-uploading them per newsletter is work that exists only because nothing
+    # remembered them. A name is a stable handle; the hash underneath can change when
+    # a new logo is uploaded, and every future issue picks it up without being edited.
+    def name_asset(self, name: str, h: str) -> None:
+        n = (name or "").strip().lower()
+        if n:
+            self.db.asset_names.replace_one(
+                {"_id": n}, {"_id": n, "hash": h,
+                             "updated_at": datetime.now(timezone.utc).isoformat()}, upsert=True)
+
+    def asset_by_name(self, name: str) -> str:
+        d = self.db.asset_names.find_one({"_id": (name or "").strip().lower()})
+        return (d or {}).get("hash", "")
+
+    def named_assets(self) -> list[dict]:
+        out = []
+        for d in self.db.asset_names.find().sort("_id", 1):
+            a = self.db.email_assets.find_one({"_id": d["hash"]}, {"bytes": 1, "content_type": 1})
+            out.append({"name": d["_id"], "hash": d["hash"],
+                        "bytes": (a or {}).get("bytes", 0),
+                        "type": (a or {}).get("content_type", "")})
+        return out
+
     def get_asset(self, h: str) -> dict | None:
         return self.db.email_assets.find_one({"_id": h})
 

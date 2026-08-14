@@ -1793,7 +1793,7 @@ _UPLOADABLE = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "ima
 
 
 @app.post("/api/assets/upload")
-async def upload_asset(file: UploadFile = File(...)):
+async def upload_asset(file: UploadFile = File(...), name: str = Form("")):
     """A PNG on someone's desktop → a URL an email can use.
 
     Hosting images was only reachable by first pasting them into a body as base64,
@@ -1805,16 +1805,16 @@ async def upload_asset(file: UploadFile = File(...)):
     would upload perfectly, preview perfectly, and be missing on arrival — the exact
     failure the data: URI warning exists to stop.
     """
-    name = (file.filename or "").lower()
+    fname = (file.filename or "").lower()      # NOT `name` — that is the caller's label
     ctype = (file.content_type or "").split(";")[0].strip().lower()
     if ctype not in _UPLOADABLE:
         # Some browsers and most drag-and-drop sources send a generic type or none
         # at all. The extension is the next best signal, and refusing a valid PNG
         # over a missing header would be a support ticket, not a safeguard.
-        ext = name.rsplit(".", 1)[-1] if "." in name else ""
+        ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
         ctype = next((c for c, e in _UPLOADABLE.items()
                       if e == ext or (ext == "jpeg" and e == "jpg")), ctype)
-    if "svg" in ctype or name.endswith(".svg"):
+    if "svg" in ctype or fname.endswith(".svg"):
         raise HTTPException(400, "Email clients strip SVG — Gmail, Outlook and Yahoo all "
                                  "show nothing. Export it as PNG at twice the display "
                                  "size and upload that.")
@@ -1827,8 +1827,21 @@ async def upload_asset(file: UploadFile = File(...)):
     if len(raw) > _MAX_ASSET:
         raise HTTPException(400, f"{len(raw) // 1024}KB is too big for an email image — "
                                  "keep it under 5MB, and under 200KB if you can.")
-    h = open_store().put_asset(raw, ctype)
-    return {"url": f"{unsubscribe._base_url()}/api/asset/{h}", "bytes": len(raw), "type": ctype}
+    store = open_store()
+    h = store.put_asset(raw, ctype)
+    slug = re.sub(r"[^a-z0-9._-]+", "-", (name or "").strip().lower()).strip("-")
+    if slug:
+        store.name_asset(slug, h)
+    return {"url": f"{unsubscribe._base_url()}/api/asset/{h}", "bytes": len(raw),
+            "type": ctype, "name": slug, "ref": f"{{asset:{slug}}}" if slug else ""}
+
+
+@app.get("/api/assets")
+def list_assets():
+    """The images saved under a name — the logo and the icons that every issue reuses."""
+    base = unsubscribe._base_url()
+    return {"assets": [{**a, "url": f"{base}/api/asset/{a['hash']}",
+                        "ref": f"{{asset:{a['name']}}}"} for a in open_store().named_assets()]}
 
 
 @app.get("/api/asset/{h}")

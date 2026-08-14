@@ -173,6 +173,35 @@ def _splice(doc: str, pre: str, foot: str) -> str:
     return (out[:m.start()] + foot + out[m.start():]) if m else out + foot
 
 
+_ASSET_REF = re.compile(r"\{asset:([A-Za-z0-9._-]{1,40})\}")
+
+
+def _asset_base() -> str:
+    import os
+    return (os.environ.get("APP_BASE_URL") or "https://outreach.knowella.com").rstrip("/")
+
+
+def fill_assets(body: str) -> str:
+    """{asset:logo} becomes the URL of the image saved under that name.
+
+    The logo and the social icons are the same file in every issue, so pasting their
+    URLs into each new draft is work that exists only because nothing remembered
+    them. A name survives being copied to the next issue, and replacing the logo
+    once updates every issue that refers to it.
+
+    An unknown name is left exactly as written rather than blanked. A visible
+    {asset:logo} in a preview is a question somebody can answer; an empty src is one
+    they cannot.
+    """
+    from .api import open_store          # local import: avoids a cycle at load time
+    base = _asset_base()
+
+    def one(m):
+        h = open_store().asset_by_name(m.group(1))
+        return f"{base}/api/asset/{h}" if h else m.group(0)
+    return _ASSET_REF.sub(one, body or "")
+
+
 _IMG_SRC = re.compile(r"(?i)<img[^>]+src\s*=\s*[\"']([^\"']+)")
 _ANCHOR_TEXT = re.compile(r"(?is)<a[^>]+href\s*=\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a>")
 
@@ -186,7 +215,16 @@ def render_warnings(body: str) -> list[str]:
     and Outlook strip every one. Finding that out from a delivered newsletter is
     finding out too late, and it is invisible until then.
     """
+    from .api import open_store
     out = []
+    # Named assets first: an unresolved {asset:logo} is the one warning that names
+    # its own fix, and it makes the relative-path warning below unnecessary noise.
+    missing = sorted({n for n in _ASSET_REF.findall(body or "")
+                      if not open_store().asset_by_name(n)})
+    if missing:
+        out.append("No image is saved under " + ", ".join('"%s"' % n for n in missing)
+                   + ". Upload it with Upload image and type that exact name.")
+    body = _ASSET_REF.sub("https://example.invalid/x.png", body or "")
     srcs = _IMG_SRC.findall(body or "")
     inline = [u for u in srcs if u.lower().startswith("data:")]
     rel = [u for u in srcs if not u.lower().startswith(("data:", "http://", "https://", "cid:"))]
@@ -233,6 +271,7 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # per-recipient and so can never be hardcoded, but it can be a merge field like
     # any other. Substituted after the rest so a body may use it anywhere.
     body = body.replace("{preferences_url}", prefs_link(email))
+    body = fill_assets(body)
     raw = (blast.get("format") or "markdown") == "html"
     text = (html_to_text(body) if raw else to_text(body)) + FOOTER_TEXT
     # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
