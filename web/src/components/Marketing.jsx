@@ -146,6 +146,24 @@ export default function Marketing() {
     finally { setBusy('') }
   }
 
+  // A PNG on the desktop -> a URL the template can use, without a round trip
+  // through base64. The URL is copied rather than inserted: only the author knows
+  // where in the markup it belongs.
+  const [lastUrl, setLastUrl] = useState('')
+  const onPickImage = async (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    setBusy('upload'); setMsg(null)
+    try {
+      const r = await api.uploadAsset(f)
+      setLastUrl(r.url)
+      try { await navigator.clipboard.writeText(r.url) } catch { /* clipboard blocked */ }
+      setMsg({ ok: true, text: `${f.name} uploaded (${Math.round(r.bytes / 1024)}KB). URL copied — paste it into a src.` })
+    } catch (e2) { setMsg({ ok: false, text: String(e2.message).slice(0, 260) }) }
+    finally { setBusy('') }
+  }
+
   // Questions the publication could answer. Explicitly a stopgap: these are inferred
   // from the product knowledge, and content written from what you sell is weaker than
   // content written from what buyers asked. The label says so.
@@ -331,10 +349,20 @@ export default function Marketing() {
                 <option value="markdown">Markdown</option>
                 <option value="html">Raw HTML</option>
               </select>
+              <label className="btn" style={{ cursor: busy ? 'default' : 'pointer' }}>
+                {busy === 'upload' ? 'Uploading…' : 'Upload image'}
+                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+                  disabled={busy !== ''} onChange={onPickImage} style={{ display: 'none' }} />
+              </label>
               <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doPreview}>
                 {busy === 'preview' ? 'Rendering…' : 'Preview'}
               </button>
             </div>
+            {lastUrl && (
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6, wordBreak: 'break-all' }}>
+                <code>{lastUrl}</code>
+              </div>
+            )}
             {shown && (
               <div className="mail-prev">
                 {(shown.warnings || []).length > 0 && (

@@ -1789,6 +1789,48 @@ def host_images(r: HostImages):
             "warnings": marketing.render_warnings(body)}
 
 
+_UPLOADABLE = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}
+
+
+@app.post("/api/assets/upload")
+async def upload_asset(file: UploadFile = File(...)):
+    """A PNG on someone's desktop → a URL an email can use.
+
+    Hosting images was only reachable by first pasting them into a body as base64,
+    which is backwards when the file is right there. Same store, same content
+    addressing, same permanent URL.
+
+    SVG is refused rather than accepted and left to fail: Gmail, Outlook and Yahoo
+    all strip it, so an SVG logo renders as nothing in the clients that matter. It
+    would upload perfectly, preview perfectly, and be missing on arrival — the exact
+    failure the data: URI warning exists to stop.
+    """
+    name = (file.filename or "").lower()
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype not in _UPLOADABLE:
+        # Some browsers and most drag-and-drop sources send a generic type or none
+        # at all. The extension is the next best signal, and refusing a valid PNG
+        # over a missing header would be a support ticket, not a safeguard.
+        ext = name.rsplit(".", 1)[-1] if "." in name else ""
+        ctype = next((c for c, e in _UPLOADABLE.items()
+                      if e == ext or (ext == "jpeg" and e == "jpg")), ctype)
+    if "svg" in ctype or name.endswith(".svg"):
+        raise HTTPException(400, "Email clients strip SVG — Gmail, Outlook and Yahoo all "
+                                 "show nothing. Export it as PNG at twice the display "
+                                 "size and upload that.")
+    if ctype not in _UPLOADABLE:
+        raise HTTPException(400, f"{ctype or 'that file'} is not an image an email can show. "
+                                 "Use PNG, JPEG, GIF or WebP.")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "that file is empty")
+    if len(raw) > _MAX_ASSET:
+        raise HTTPException(400, f"{len(raw) // 1024}KB is too big for an email image — "
+                                 "keep it under 5MB, and under 200KB if you can.")
+    h = open_store().put_asset(raw, ctype)
+    return {"url": f"{unsubscribe._base_url()}/api/asset/{h}", "bytes": len(raw), "type": ctype}
+
+
 @app.get("/api/asset/{h}")
 def get_asset(h: str):
     """Public, immutable, cacheable. Named by content hash, so the URL can never
