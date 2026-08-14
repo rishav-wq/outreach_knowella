@@ -238,6 +238,15 @@ export default function Marketing() {
       <b>Marketing can't send yet</b> — {unwired}. Add it to the server's <code>.env</code> and
       restart. Drafts still save; nothing leaves, including tests.
     </div>
+  ) : conn?.connected && conn.unsub_postmark && (conn.unsub_postmark === 'Custom') !== !!conn.unsub_ours ? (
+    <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
+      <b>The unsubscribe link is misconfigured</b> — Postmark is set to{' '}
+      <code>{conn.unsub_postmark}</code> while this app is set to{' '}
+      <code>{conn.unsub_ours ? 'manage its own' : 'let Postmark handle it'}</code>.{' '}
+      {conn.unsub_ours
+        ? 'Every message will carry two unsubscribe links until they match.'
+        : 'Every message will go out with no List-Unsubscribe header, which Gmail reads as a sender who will not let people leave.'}
+    </div>
   ) : conn?.connected && conn.events === 'no_webhook' ? (
     <div className="send-blocked" style={{ marginTop: 0, marginBottom: 14 }}>
       <b>Postmark's events won't reach this app</b> — no webhook on the{' '}

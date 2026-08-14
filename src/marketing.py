@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from .engine.personalize import fill_placeholders
 from .integrations import postmark_send
-from .unsubscribe import prefs_link
+from .unsubscribe import link as unsub_link, prefs_link
 
 log = logging.getLogger("uvicorn.error")
 
@@ -273,7 +273,13 @@ def render_message(blast: dict, lead, email: str) -> dict:
     body = body.replace("{preferences_url}", prefs_link(email))
     body = fill_assets(body)
     raw = (blast.get("format") or "markdown") == "html"
-    text = (html_to_text(body) if raw else to_text(body)) + FOOTER_TEXT
+    # The text part carries the same link the HTML does — a plain-text reader must
+    # have a working way out, and on our own handling that is our URL, not a
+    # placeholder Postmark is no longer substituting.
+    text = ((html_to_text(body) if raw else to_text(body))
+            + FOOTER_TEXT.replace(
+                PM_UNSUB,
+                unsub_link(email) if postmark_send.own_unsubscribe() else PM_UNSUB))
     # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
     # research keeps landing on for sustained reading. 14px over 600px ran nearer 85,
     # which is where the eye starts losing its place on the return sweep — a slower
@@ -287,12 +293,20 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # spot; the second offers the choice of keeping one publication and dropping
     # another. Order matters — the hard exit comes first, because burying it behind
     # a preferences page is the pattern the one-click rules exist to stop.
+    # Whose link this is decides everything else about the footer. On Postmark's own
+    # handling the placeholder is the only way to stop it appending a second link. On
+    # ours the link is our page, which can suppress and THEN offer the narrower
+    # option — the flow a hosted page cannot give us.
+    mine = postmark_send.own_unsubscribe()
+    unsub_href = unsub_link(email) if mine else PM_UNSUB
     foot = (f'<p style="color:#96a5b5;font-size:12px;border-top:1px solid #e6ecf1;'
             f'padding-top:12px;margin-top:8px;font-family:Poppins,Arial,sans-serif">'
             f"You're receiving this because you've been in touch with Knowella. "
-            f'<a href="{PM_UNSUB}" style="color:#6e63ff">Unsubscribe</a>'
-            f' &nbsp;·&nbsp; <a href="{prefs_link(email)}" style="color:#6e63ff">'
-            f'Choose what you get</a></p>')
+            f'<a href="{unsub_href}" style="color:#6e63ff">Unsubscribe</a>'
+            + ('' if mine else
+               f' &nbsp;·&nbsp; <a href="{prefs_link(email)}" style="color:#6e63ff">'
+               f'Choose what you get</a>')
+            + '</p>')
 
     # A designed template usually carries its own footer. Wiring the placeholder into
     # ITS link — <a href="{{{ pm:unsubscribe }}}">Unsubscribe</a> — makes that link
@@ -319,9 +333,13 @@ def render_message(blast: dict, lead, email: str) -> dict:
         "subject": subject,
         "text_body": text,
         "html_body": html,
-        # No List-Unsubscribe header here: Postmark writes its own for broadcast
-        # streams, and ours pointed somewhere different, which would have given
-        # mailbox providers two conflicting one-click targets for one message.
+        # Postmark writes these itself while it owns the flow — supplying our own
+        # then would give mailbox providers two conflicting one-click targets. Once
+        # it stops, nobody else will, and a broadcast with no List-Unsubscribe reads
+        # to Gmail as a sender who will not let people leave.
+        **({"headers": {"List-Unsubscribe": f"<{unsub_link(email)}>",
+                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}}
+           if postmark_send.own_unsubscribe() else {}),
         "metadata": {"blast_id": blast["_id"], "email": email},
     }
 

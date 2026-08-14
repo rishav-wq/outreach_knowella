@@ -109,6 +109,32 @@ def events_reach_us(stream: str = "broadcast") -> str | None:
     return "token_mismatch"
 
 
+def own_unsubscribe() -> bool:
+    """Are WE responsible for the unsubscribe link and headers?
+
+    Set POSTMARK_OWN_UNSUB=1 only when the stream's UnsubscribeHandlingType is
+    'Custom'. Getting the two out of step is expensive in both directions: on while
+    Postmark still handles it means two links again, off while Postmark has stopped
+    means a broadcast with no List-Unsubscribe header at all, which Gmail reads as a
+    sender who will not let people leave. marketing_status compares them and says so.
+    """
+    return (os.environ.get("POSTMARK_OWN_UNSUB", "") or "").strip().lower() in ("1", "true", "yes")
+
+
+def unsubscribe_mode(stream: str = "broadcast") -> str | None:
+    """What Postmark believes it is doing — 'Postmark' or 'Custom'. None if unknown."""
+    if not has_key():
+        return None
+    try:
+        r = httpx.get(f"{BASE}/message-streams/{stream}", headers=_hdr(), timeout=8.0)
+        if r.status_code >= 400:
+            return None
+        return ((r.json().get("SubscriptionManagementConfiguration") or {})
+                .get("UnsubscribeHandlingType"))
+    except Exception:
+        return None
+
+
 def suppress(email: str, stream: str | None = None) -> bool:
     """Tell Postmark about an unsubscribe that happened on OUR pages.
 
@@ -136,6 +162,26 @@ def suppress(email: str, stream: str | None = None) -> bool:
         return True
     except Exception as ex:
         log.warning("[postmark] could not suppress %s: %s", e, ex)
+        return False
+
+
+def unsuppress(email: str, stream: str | None = None) -> bool:
+    """Lift a suppression at Postmark, for the one case that justifies it: somebody
+    who unsubscribed and then chose topics on the page that followed.
+
+    Only ever called behind that explicit action. A suppression removed for any other
+    reason would be us deciding on someone's behalf that they didn't mean it."""
+    e = (email or "").strip().lower()
+    if not e or not has_key():
+        return False
+    s = stream or os.environ.get("POSTMARK_STREAM", "broadcast")
+    try:
+        r = httpx.post(f"{BASE}/message-streams/{s}/suppressions/delete",
+                       json={"Suppressions": [{"EmailAddress": e}]},
+                       headers=_hdr(), timeout=10.0)
+        return r.status_code < 400
+    except Exception as ex:
+        log.warning("[postmark] could not unsuppress %s: %s", e, ex)
         return False
 
 

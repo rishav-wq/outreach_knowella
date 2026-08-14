@@ -346,8 +346,13 @@ def unsubscribe_link(t: str = ""):
         store = open_store()
         store.suppress(email, reason="unsubscribed via email link")
         postmark_send.suppress(email)   # keep Postmark's stream in step with ours
+        _stop_sequenced(store, email)
         store.drop_subscriber(email)   # suppression alone would leave them in the audience
-    return HTMLResponse(_unsubscribe_page(bool(email)))
+        # Owning this page is the reason for owning the flow: the opt-out is already
+        # recorded above, so what follows is an offer, not a hurdle. Nobody has to do
+        # anything more to stay unsubscribed.
+        return HTMLResponse(_unsubscribed_then_offer(email))
+    return HTMLResponse(_unsubscribe_page(False))
 
 
 def _join(names: list[str]) -> str:
@@ -384,6 +389,40 @@ def _saved_note(chosen: list) -> str:
             'you would rather hear from us sooner.</p>')
     return (lead + f'<p>Based on: {html.escape(_join(sorted(chosen)))}. '
                    f'Change any of it below.</p>' if pubs else lead)
+
+
+def _unsubscribed_then_offer(email: str) -> str:
+    """Done, then a door back — in that order, and never the reverse.
+
+    The suppression is already written by the time this renders, so nothing below is
+    a condition of leaving. Offering topics BEFORE recording the opt-out would be the
+    retention dark pattern one-click rules exist to stamp out; offering them after
+    costs the reader nothing and occasionally keeps a subscriber who only wanted
+    less, not none.
+    """
+    groups = ""
+    for g in topiclib.GROUPS:
+        chips = "".join(
+            f'<label class=chip><input type=checkbox name=topic value="{html.escape(t)}">'
+            f'<span>{html.escape(t)}</span></label>' for t in g["topics"])
+        groups += (f'<div class=grp><h2>{html.escape(g["name"])}</h2>'
+                   f'<div class=chips>{chips}</div></div>')
+    inner = (f'<div class="mark">{_CHECK}</div>'
+             f'<h1>You’re unsubscribed</h1>'
+             f'<p>Nothing more will be sent to <b>{html.escape(email)}</b>. '
+             f'You don’t need to do anything else.</p>'
+             f'<div class="offer">'
+             f'<h3>Would less have been enough?</h3>'
+             f'<p>If you only wanted fewer emails rather than none, pick what you '
+             f'care about and we’ll send only that. Leaving this page as it is '
+             f'keeps you unsubscribed.</p>'
+             f'<form method=post action="/api/preferences">'
+             f'<input type=hidden name=t value="{html.escape(unsubscribe.token(email))}">'
+             f'<input type=hidden name=resub value="1">'
+             f'{groups}'
+             f'<div class=row><button class="btn save" type=submit>'
+             f'Send me only these</button></div></form></div>')
+    return _public_page("Unsubscribed", inner, wide=True)
 
 
 def _prefs_page(email: str, chosen: list, saved: bool = False) -> str:
@@ -441,8 +480,39 @@ async def preferences_save(request: Request):
         store.drop_subscriber(email)
         return HTMLResponse(_unsubscribe_page(True))
     picked = topiclib.clean(form.getlist("topic"))
+    if form.get("resub"):
+        # Coming back from the unsubscribe page. They are suppressed right now, so
+        # this is a fresh opt-in and has to be an explicit one: no topics ticked
+        # means they clicked through without choosing, and the honest reading of
+        # that is that they meant to stay unsubscribed.
+        if not picked:
+            return HTMLResponse(_unsubscribe_page(True))
+        store.unsuppress(email)
+        postmark_send.unsuppress(email)
+        store.add_subscriber(email, "", "resubscribed after unsubscribe")
+        store.confirm_subscriber(email)
     store.set_subscriber_prefs(email, picked)
     return HTMLResponse(_prefs_page(email, picked, saved=True))
+
+
+@app.post("/api/unsubscribe")
+async def unsubscribe_one_click(t: str = ""):
+    """RFC 8058 one-click. Gmail and Yahoo POST here with List-Unsubscribe=One-Click
+    in the body and expect a 2xx and nothing else — no page, no confirmation, no
+    redirect. A GET-only endpoint fails this silently, and a failed one-click reads
+    to a mailbox provider as a sender who will not let people leave.
+
+    Postmark supplies this while it owns the flow. Once it does not, nobody else
+    will."""
+    email = unsubscribe.email_from_token(t)
+    if not email:
+        raise HTTPException(400, "bad token")
+    store = open_store()
+    store.suppress(email, reason="unsubscribed (one-click)")
+    store.drop_subscriber(email)
+    _stop_sequenced(store, email)
+    postmark_send.suppress(email)
+    return {"ok": True}
 
 
 @app.get("/api/campaigns")
@@ -1679,7 +1749,12 @@ def marketing_status():
     return {"connected": postmark_send.has_key(), "from": postmark_send.from_address(),
             "stream": stream,
             # Events happen at Postmark; this is whether they get back to us.
-            "events": postmark_send.events_reach_us(stream)}
+            "events": postmark_send.events_reach_us(stream),
+            # Who owns the unsubscribe. Ours and Postmark's must agree: on while
+            # Postmark still handles it means two links, off after it has stopped
+            # means a broadcast with no List-Unsubscribe header at all.
+            "unsub_ours": postmark_send.own_unsubscribe(),
+            "unsub_postmark": postmark_send.unsubscribe_mode(stream)}
 
 
 class MarketingTest(BaseModel):
