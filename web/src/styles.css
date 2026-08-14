@@ -835,10 +835,16 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .inbox-n { flex-shrink: 0; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .inbox-n.over { color: var(--caution); }
 
-.fmt-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-.fmt-row .muted { flex: 1; min-width: 0; }
-.fmt-pick { width: auto; min-width: 116px; flex-shrink: 0; }
-.asset-name { width: 130px; flex-shrink: 0; font-size: 12.5px; padding: 7px 10px; }
+.fmt-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+.fmt-row .muted { flex: 1 1 260px; min-width: 260px; }
+/* Scoped with two classes, and that is the whole fix. `.asset-name` (0,1,0) sits
+   above `.field-input` (0,1,0) in this file, so the later rule's width:100% won and
+   the input took the entire row — squeezing the hint beside it to one word a line.
+   flex-shrink:0 was no help: it stops an item shrinking, not one that wants to grow.
+   The same cascade trap cost a pass on the hero. */
+.fmt-row .fmt-pick { flex: 0 0 auto; width: auto; min-width: 116px; }
+.fmt-row .asset-name { flex: 0 0 132px; width: 132px; font-size: 12.5px; padding: 7px 10px; }
+.fmt-row .btn { flex: 0 0 auto; }
 /* The reference, not the URL — that is what goes in a template and what survives
    being copied to the next issue. */
 .asset-chip {
