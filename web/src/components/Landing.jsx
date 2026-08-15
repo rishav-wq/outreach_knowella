@@ -15,77 +15,86 @@ const QUOTES = [
   { q: 'Knowella made it easy to digitize our hazard tracking, audits, and training records — saving time and strengthening compliance across our operations.', r: 'Supply Chain Manager', c: 'Food Distribution Company' },
 ]
 
-// Hero signature: THE EVIDENCE LEDGER.
+// Hero signature: THE REVIEW SCREEN ITSELF.
 //
-// Not a picture of the product — the product's argument, performed. Five claims a
-// model wanted to make about one company; two of them had a source. The other three
-// are struck out on load and never reach the draft.
+// Not a drawing of the product — the product. Every class below is the one the real
+// Review page uses (.doc, .doc-row, .ev-card, .rq-actions), so the type, the rules,
+// the stamp on Approve and the evidence cards are not reproduced here, they are
+// inherited. Change the app and this changes with it; it cannot drift into a
+// flattering fiction the way a mockup does.
 //
-// A mockup of the app was the wrong device here twice over: everybody recognises
-// invented dashboard data, so it persuades nobody, and a floating card with a soft
-// shadow is what every AI-SDR tool's homepage looks like — the same tools this
-// product exists to argue against. A findings table is also the register these
-// buyers already work in: OSHA 300 logs, audit trails, inspection reports.
+// Three heroes failed before this by illustrating the idea instead of showing it: a
+// wired diagram, a floating card, a ledger. All three were pictures OF grounding,
+// and a picture of evidence is the one thing evidence cannot be.
 //
-// Teal appears once, on the tick. That is the only thing in the design system it is
-// allowed to mean. The rejects are grey and struck rather than red: they are not
-// errors, they are claims that failed to earn a place.
-const LEDGER = [
-  { claim: 'opened a second distribution hub in Dayton', src: 'meridianlogistics.com/news', seen: '11d', ok: true },
-  { claim: 'hiring two operations coordinators', src: 'Apollo · 2 open roles', seen: '4d', ok: true },
-  { claim: 'paperwork volume jumped before headcount', src: '—', seen: '—', ok: false },
-  { claim: 'a leading logistics innovator', src: '—', seen: '—', ok: false },
-  { claim: 'saves 40% of admin time', src: '—', seen: '—', ok: false },
+// It is deliberately cropped at the right edge rather than centred in space. A whole
+// window shrunk to fit reads as a screenshot of a demo; a screen running past the
+// edge reads as a screen you are looking at.
+const SHOT_FACTS = [
+  { claim: 'Opened a second distribution hub in Dayton',
+    quote: 'our second Dayton hub is now operational',
+    src: 'press', when: '11 days ago' },
+  { claim: 'Hiring two operations coordinators',
+    quote: '“Operations Coordinator” ×2, posted this month',
+    src: 'hiring', when: '4 days ago' },
 ]
-const KEPT = LEDGER.filter((r) => r.ok).length
 
-function Ledger({ reduce }) {
-  // Rows land in sequence, then the unsourced ones strike through together. One
-  // orchestrated moment rather than five scattered ones — the cut is the point, so
-  // it happens at once and is over.
-  const [cut, setCut] = useState(!!reduce)
-  useEffect(() => {
-    if (reduce) return
-    const t = setTimeout(() => setCut(true), 1150)
-    return () => clearTimeout(t)
-  }, [reduce])
-
-  const row = (i) => (reduce ? {} : {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { delay: 0.35 + i * 0.07, duration: 0.34, ease: EASE },
+function ReviewShot({ reduce }) {
+  const rise = (d) => (reduce ? {} : {
+    initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 },
+    transition: { delay: d, duration: 0.5, ease: EASE },
   })
-
   return (
-    <div className="lp-ledger" role="table" aria-label="Claims and their sources">
-      <div className="lp-ledger-head" role="row">
-        <span role="columnheader">Claim</span>
-        <span role="columnheader">Source</span>
-        <span role="columnheader">Seen</span>
-        <span role="columnheader" aria-label="Verified" />
+    <motion.div className="lp-shot" {...rise(0.25)} aria-label="The review screen">
+      <div className="lp-shot-inner">
+
+        <main className="rq-draft">
+          <div className="doc">
+            <div className="doc-head">
+              <div className="doc-row">
+                <span className="doc-k">To</span>
+                <span className="doc-v"><b>Maria Chen</b><span className="muted"> · VP Operations</span></span>
+              </div>
+              <div className="doc-row">
+                <span className="doc-k">Subject</span>
+                <span className="doc-v doc-subject">Your new Dayton hub</span>
+              </div>
+            </div>
+            <pre className="body">{`Hi Maria — saw Meridian opened a second distribution hub in Dayton, and that you're hiring two operations coordinators.
+
+Usually that means the paperwork volume jumped before the headcount did.`}</pre>
+          </div>
+          <div className="rq-footer">
+            <div className="rq-actions">
+              <span className="rq-keys">A approve · R reject · E edit</span>
+              <button className="btn" tabIndex={-1}>Edit</button>
+              <button className="btn reject" tabIndex={-1}><Icon name="x" size={15} /> Reject</button>
+              <button className="btn approve stamp" tabIndex={-1}><Icon name="check" size={15} /> Approve</button>
+            </div>
+          </div>
+        </main>
+
+        <aside className="rq-evidence">
+          <div className="drawer-label">Grounded in 2 verified facts</div>
+          <ul className="ev-list">
+            {SHOT_FACTS.map((f, i) => (
+              <motion.li className="ev-card" key={f.claim} {...rise(0.5 + i * 0.12)}>
+                <div className="ev-claim">{f.claim}</div>
+                <div className="ev-quote">“{f.quote}”</div>
+                <div className="ev-meta">
+                  <span className="src">{f.src}</span>
+                  <span className="ev-date">{f.when}</span>
+                </div>
+              </motion.li>
+            ))}
+          </ul>
+          <motion.p className="lp-shot-cut" {...rise(0.8)}>
+            Anything we couldn’t source never reached this draft.
+          </motion.p>
+        </aside>
+
       </div>
-
-      {LEDGER.map((r, i) => (
-        <motion.div key={r.claim} role="row"
-          className={`lp-ledger-row ${r.ok ? 'is-kept' : 'is-cut'} ${cut && !r.ok ? 'struck' : ''}`}
-          {...row(i)}>
-          <span className="lp-lg-claim" role="cell">
-            {r.claim}
-            {/* Drawn, not text-decoration: a line that sweeps left to right reads as
-                something being done to the claim rather than as how it was typed. */}
-            {!r.ok && <i className="lp-lg-strike" aria-hidden="true" />}
-          </span>
-          <span className="lp-lg-src" role="cell">{r.src}</span>
-          <span className="lp-lg-seen" role="cell">{r.seen}</span>
-          <span className="lp-lg-mark" role="cell">{r.ok ? '✓' : '✗'}</span>
-        </motion.div>
-      ))}
-
-      <motion.div className="lp-ledger-foot"
-        {...(reduce ? {} : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { delay: 1.5, duration: 0.4 } })}>
-        <b>{KEPT} of {LEDGER.length} survived.</b> The other {LEDGER.length - KEPT} never reach the draft.
-      </motion.div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -125,12 +134,12 @@ export default function Landing({ onLaunch }) {
             <div className="lp-eyebrow-hero">Research → Draft → Your approval</div>
             <h1>The proof travels with the sentence.</h1>
             <p className="lp-hero-sub">
-              So a sentence without proof doesn't travel at all. Here is one lead's
-              research, and what was left of it.
+              Every draft arrives beside the evidence it was written from — and nothing
+              we couldn't source ever reaches it. This is the screen you approve on.
             </p>
           </motion.div>
 
-          <Ledger reduce={reduce} />
+          <ReviewShot reduce={reduce} />
 
           <motion.div className="lp-cta lp-cta-hero"
             {...(reduce ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 1.6, duration: 0.5, ease: EASE } })}>

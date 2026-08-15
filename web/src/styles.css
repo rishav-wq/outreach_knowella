@@ -815,7 +815,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 /* Leads whose campaign was deleted. Dashed because they are real people you can
    still reach, attached to something that no longer exists. */
 .chip.orphan { border-style: dashed; }
-
 /* Format picker + rendered preview. The preview is the composer's answer to "what
    will they actually get" — until now the only way to find out was to spend a real
    send on yourself. */
@@ -834,7 +833,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .inbox-n { flex-shrink: 0; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .inbox-n.over { color: var(--caution); }
-
 .fmt-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
 .fmt-row .muted { flex: 1 1 260px; min-width: 260px; }
 /* Scoped with two classes, and that is the whole fix. `.asset-name` (0,1,0) sits
@@ -853,7 +851,6 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
   border-radius: 5px; padding: 2px 6px; margin: 0 4px 4px 0; cursor: pointer;
 }
 .asset-chip:hover { border-color: var(--signal); }
-
 .mail-prev { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
 .mail-prev-bar {
   display: flex; align-items: center; gap: 12px; padding: 8px 12px;
@@ -1594,74 +1591,57 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .mark { border-radius: 3px; padding: 2px 4px; margin: 0 -1px; }
 .mark.m-violet { background: var(--signal-pill); box-shadow: inset 0 -1.5px 0 var(--signal-line); }
 .mark.m-teal { background: #d5f4ec; box-shadow: inset 0 -1.5px 0 rgba(4, 180, 146, 0.45); }
-/* ── The evidence ledger ─────────────────────────────────────────────────────
-   A findings table, not a product shot. Hairline rules and no card: the moment it
-   gains a border-radius and a shadow it becomes the floating mockup this replaced,
-   which is what every tool in this category puts on its homepage.
-
-   A REAL monospace, declared locally. The app's --font-mono is Poppins, so nothing
-   has ever actually read as machine output; changing that token would repaint every
-   screen in the product, so the register stays scoped to the hero. */
-.lp-ledger {
-  --lg-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  position: relative; z-index: 1; width: 100%; max-width: 860px; margin-top: 38px;
-  font-family: var(--lg-mono); font-size: 13px;
-  border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line);
-}
-.lp-ledger-head, .lp-ledger-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 15em) 4em 1.5em;
-  gap: 18px; align-items: baseline; padding: 11px 2px;
-}
-.lp-ledger-head {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--signal); border-bottom: 1px solid var(--line); padding: 9px 2px;
-}
-.lp-ledger-row + .lp-ledger-row { border-top: 1px solid var(--line); }
-.lp-lg-claim { position: relative; color: var(--ink); line-height: 1.5; }
-.lp-lg-src, .lp-lg-seen { color: var(--muted); overflow-wrap: anywhere; }
-.lp-lg-seen { text-align: right; }
-.lp-lg-mark { font-size: 15px; line-height: 1; text-align: center; }
-.is-kept .lp-lg-mark { color: var(--verify); }        /* the one sanctioned use of teal */
-.is-cut  .lp-lg-mark { color: var(--faint); }
-
-/* The cut. Drawn as a line that sweeps across the claim, because a claim being
-   struck OUT is an event; text-decoration would just be how it was typed. */
-.lp-lg-strike {
-  position: absolute; left: 0; top: 52%; width: 100%; height: 1px;
-  background: var(--muted); transform: scaleX(0); transform-origin: left center;
-  transition: transform .5s cubic-bezier(.22,1,.36,1);
-}
-.struck .lp-lg-strike { transform: scaleX(1); }
-.is-cut .lp-lg-claim, .is-cut .lp-lg-src, .is-cut .lp-lg-seen {
-  transition: color .5s ease .12s;
-}
-.struck .lp-lg-claim, .struck .lp-lg-src, .struck .lp-lg-seen { color: var(--faint); }
-
-.lp-ledger-foot {
-  padding: 13px 2px 14px; font-size: 12.5px; color: var(--muted);
-  border-top: 1px solid var(--line);
-}
-.lp-ledger-foot b { color: var(--ink); font-weight: 700; }
-
 /* Two classes on purpose. `.lp-hero p` is (0,1,1) and would out-specify a lone
    `.lp-hero-sub` (0,1,0) — its `margin: … auto` would centre this under a
    left-aligned headline. The same cascade trap cost a pass on the last hero. */
 .lp-hero .lp-hero-sub {
   max-width: 46ch; margin: 16px 0 0; font-size: 16px; line-height: 1.65; color: var(--text-2);
 }
-
 @media (max-width: 760px) {
   /* Four columns at this width would set two characters a line. The source and the
      date drop under the claim and keep their labels through the tick alone. */
-  .lp-ledger-head { display: none; }
-  .lp-ledger-row {
-    grid-template-columns: 1fr 1.5em; grid-template-areas: "claim mark" "src mark" "seen mark";
-    gap: 3px 12px; padding: 12px 2px;
-  }
-  .lp-lg-claim { grid-area: claim; }
-  .lp-lg-src { grid-area: src; font-size: 11.5px; }
-  .lp-lg-seen { grid-area: seen; font-size: 11.5px; text-align: left; }
-  .lp-lg-mark { grid-area: mark; align-self: center; }
+}
+/* ── The review screen, shown rather than drawn ──────────────────────────────
+   Everything inside inherits the app's own rules: .doc, .doc-row, .ev-card and
+   .rq-actions are the real Review page's classes, so this cannot drift into a
+   flattering fiction the way a hand-drawn mockup does.
+
+   Cropped at the right rather than centred in space. A whole window scaled down to
+   fit reads as a screenshot of a demo; a screen running past the edge reads as one
+   you are looking at. */
+.lp-shot {
+  position: relative; z-index: 1; width: 100%; margin-top: 40px;
+  border: 1px solid var(--line); border-top: 3px solid transparent;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  border-right: 0; background: var(--panel); overflow: hidden;
+  background-image: var(--grad-bar); background-size: 100% 3px;
+  background-repeat: no-repeat; background-position: top left;
+}
+.lp-shot-inner {
+  display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 0; align-items: stretch;
+}
+.lp-shot .rq-draft { padding: 26px 28px 20px; min-width: 0; }
+.lp-shot .rq-evidence {
+  padding: 26px 28px 20px; min-width: 0;
+  border-left: 1px solid var(--line); background: var(--bg-soft, #f7f9fb);
+}
+.lp-shot .doc { border: 0; padding: 0; background: none; }
+.lp-shot .body { margin-top: 16px; }
+.lp-shot .rq-footer { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
+.lp-shot .rq-actions { flex-wrap: wrap; }
+.lp-shot .rq-actions .btn { pointer-events: none; }
+.lp-shot .ev-list { margin-top: 12px; }
+.lp-shot-cut {
+  margin: 16px 0 0; padding-top: 14px; border-top: 1px dashed var(--line-strong);
+  font-size: 12.5px; line-height: 1.6; color: var(--faint);
+}
+
+@media (max-width: 940px) {
+  /* Stacked, the crop stops meaning anything — close the frame instead. */
+  .lp-shot { border-right: 1px solid var(--line); border-radius: var(--radius-lg); }
+  .lp-shot-inner { grid-template-columns: minmax(0, 1fr); }
+  .lp-shot .rq-evidence { border-left: 0; border-top: 1px solid var(--line); }
 }
 
 .lp-cta-hero { position: relative; z-index: 1; justify-content: flex-start; margin-top: 40px; }
@@ -1708,7 +1688,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .mark.m-violet:hover { box-shadow: inset 0 -1.5px 0 var(--signal), 0 0 0 3px var(--signal-pill); }
 .mark.m-teal:hover { box-shadow: inset 0 -1.5px 0 var(--verify), 0 0 0 3px #d5f4ec; }
 @media (prefers-reduced-motion: reduce) {
-  .lp-ledger-row, .lp-lg-strike { animation: none; transition: none; }
+  .lp-shot, .lp-shot .ev-card { animation: none; transition: none; }
 }
 /* Batch send. The default action is the small one — warming a list is the safe
    habit, and "send to all" should take a deliberate second click. */
