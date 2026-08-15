@@ -1584,9 +1584,13 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--signal); margin-bottom: 18px;
 }
 .lp-hero h1 {
-  font-family: var(--font-display); font-size: clamp(36px, 4.6vw, 58px); font-weight: 800;
-  letter-spacing: -0.035em; line-height: 1.05; color: var(--ink); margin: 0;
+  font-family: var(--font-display); font-size: clamp(38px, 5.1vw, 66px); font-weight: 800;
+  letter-spacing: -0.04em; line-height: 1.02; color: var(--ink); margin: 0;
 }
+/* One word carries the colour, and it is the word the whole product is about.
+   Solid violet rather than the purple-to-teal gradient: that gradient is Ella's and
+   means an AI moment, which a headline is not. */
+.lp-hero h1 em { font-style: normal; color: var(--signal); }
 /* a highlighted claim IS its source's colour — that pairing is the whole idea */
 .mark { border-radius: 3px; padding: 2px 4px; margin: 0 -1px; }
 .mark.m-violet { background: var(--signal-pill); box-shadow: inset 0 -1.5px 0 var(--signal-line); }
@@ -1595,7 +1599,7 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
    `.lp-hero-sub` (0,1,0) — its `margin: … auto` would centre this under a
    left-aligned headline. The same cascade trap cost a pass on the last hero. */
 .lp-hero .lp-hero-sub {
-  max-width: 46ch; margin: 16px 0 0; font-size: 16px; line-height: 1.65; color: var(--text-2);
+  max-width: 52ch; margin: 20px 0 0; font-size: 17px; line-height: 1.62; color: var(--text-2);
 }
 @media (max-width: 760px) {
   /* Four columns at this width would set two characters a line. The source and the
@@ -1611,11 +1615,16 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
    you are looking at. */
 .lp-shot {
   position: relative; z-index: 1; width: 100%; margin-top: 40px;
-  border: 1px solid var(--line); border-top: 3px solid transparent;
+  border: 1px solid var(--line); border-right: 0;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  border-right: 0; background: var(--panel); overflow: hidden;
-  background-image: var(--grad-bar); background-size: 100% 3px;
-  background-repeat: no-repeat; background-position: top left;
+  background: var(--panel); overflow: hidden;
+}
+/* The stripe as an element, not a background. Painted under a transparent border it
+   sat in the padding box, where the two panels' own backgrounds covered it — leaving
+   colour showing only in the seams between them, which read as stray dots. */
+.lp-shot::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 3px; z-index: 2;
+  background: var(--grad-bar);
 }
 .lp-shot-inner {
   display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);

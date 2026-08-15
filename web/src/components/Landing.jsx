@@ -132,7 +132,7 @@ export default function Landing({ onLaunch }) {
           <motion.div className="lp-hero-head"
             {...(reduce ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EASE } })}>
             <div className="lp-eyebrow-hero">Research → Draft → Your approval</div>
-            <h1>The proof travels with the sentence.</h1>
+            <h1>The <em>proof</em> travels with the sentence.</h1>
             <p className="lp-hero-sub">
               Every draft arrives beside the evidence it was written from — and nothing
               we couldn't source ever reaches it. This is the screen you approve on.
