@@ -80,6 +80,17 @@ export default function Marketing() {
   const toggleTopic = (t) => setDraft((d) => ({ ...d, audience: { ...d.audience,
     topics: d.audience.topics.includes(t) ? d.audience.topics.filter((x) => x !== t) : [...d.audience.topics, t] } }))
 
+  const writing = draft.format !== 'html'   // 'write an issue' vs 'send a design'
+  const [audOpen, setAudOpen] = useState(false)
+  // What the five audience controls add up to, in a sentence. This is the thing worth
+  // reading before a send; the controls themselves are worth reading once.
+  const a = draft.audience
+  const audienceLine = a.subscribers_only
+    ? 'people who opted in — the only audience safe for a newsletter'
+    : [a.campaigns.length ? `${a.campaigns.length} campaign${a.campaigns.length > 1 ? 's' : ''}` : 'whole Library',
+       a.topics.length ? `${a.topics.length} topic${a.topics.length > 1 ? 's' : ''}` : '',
+       a.exclude_sent ? 'skipping anyone sales emailed' : '',
+       a.engagement ? `who ${a.engagement} a previous blast` : ''].filter(Boolean).join(' · ')
   const complete = draft.name.trim() && draft.subject.trim() && draft.body.trim()
   // A greyed-out button with no reason is a dead end. Name the missing field so the
   // fix is one click away instead of a guess.
@@ -270,13 +281,27 @@ export default function Marketing() {
         {wiring}
         <div className="mkt-grid">
           <div className="mkt-main">
-            <div className="section-label">Compose</div>
+            {/* The mode is the first decision because it decides what the rest of
+                this screen is for. Writing an issue needs a publication, a question
+                and the knowledge that bounds it; sending a design needs none of
+                those and needs an image host instead. Showing both at once was the
+                complexity — every draft used half the controls and the screen never
+                said which half. */}
+            <div className="mode-row">
+              <div className="section-label" style={{ margin: 0 }}>Compose</div>
+              <div className="seg mode-seg">
+                <button className={draft.format === 'markdown' ? 'on' : ''}
+                  onClick={() => { setDraft({ ...draft, format: 'markdown' }); setShown(null) }}>
+                  Write an issue
+                </button>
+                <button className={draft.format === 'html' ? 'on' : ''}
+                  onClick={() => { setDraft({ ...draft, format: 'html' }); setShown(null) }}>
+                  Send a design
+                </button>
+              </div>
+            </div>
 
-            {/* Drafting needs a publication, because the publication is what says
-                which claims are true. The question is the strongest input there is —
-                an issue that answers something a buyer actually asked beats one that
-                announces something nobody wondered about. */}
-            <div className="gen-row">
+            {writing && <div className="gen-row">
               <input className="field-input" value={question} placeholder="What question should this issue answer? (optional)"
                 onChange={(e) => setQuestion(e.target.value)} />
               <button className="btn gen-btn" disabled={!draft.publication_id || busy !== ''}
@@ -285,8 +310,8 @@ export default function Marketing() {
                   : 'Pick a publication first — it decides what may be claimed'}>
                 {busy === 'gen' ? <><span className="spinner spinner-dark" /> Writing…</> : '✦ Write with AI'}
               </button>
-            </div>
-            {draft.publication_id && (
+            </div>}
+            {writing && draft.publication_id && (
               <div className="idea-row">
                 <button className="ghostlink" disabled={busy !== ''} onClick={doSuggest}>
                   {busy === 'ideas' ? 'Thinking…' : ideas ? '↻ Other questions' : 'Not sure what to ask?'}
@@ -304,7 +329,7 @@ export default function Marketing() {
                 )}
               </div>
             )}
-            {gen && (
+            {writing && gen && (
               <div className="gen-note">
                 {gen.picked && (
                   <div style={{ marginBottom: 4 }}>
@@ -350,33 +375,27 @@ export default function Marketing() {
             </div>
             <div className="fmt-row">
               <div className="muted" style={{ fontSize: 11.5 }}>
-                {draft.format === 'html'
-                  ? <>Body is used as raw <b>HTML</b>. Inline every style — mail clients strip{' '}
-                      <code>&lt;style&gt;</code> blocks — and remember images and buttons are what make
-                      a newsletter look like bulk mail.</>
-                  : <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and
+                {writing
+                  ? <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and
                       bare links. Nothing else — no images or buttons, because looking like bulk mail is
-                      what costs opens.</>}
+                      what costs opens.</>
+                  : <>Inline every style — mail clients strip <code>&lt;style&gt;</code> blocks. Use{' '}
+                      <code>{'{{{ pm:unsubscribe }}}'}</code> and <code>{'{preferences_url}'}</code> as
+                      hrefs in your own footer, and ours is left off.</>}
               </div>
-              <select className="src-select fmt-pick" value={draft.format}
-                onChange={(e) => { setDraft({ ...draft, format: e.target.value }); setShown(null) }}
-                title="How the body is turned into the email">
-                <option value="markdown">Markdown</option>
-                <option value="html">Raw HTML</option>
-              </select>
-              <input className="field-input asset-name" placeholder="name, e.g. logo"
+              {!writing && <input className="field-input asset-name" placeholder="name, e.g. logo"
                 value={assetName} onChange={(e) => setAssetName(e.target.value)}
-                title="Save the image under this name so every issue can reuse it" />
-              <label className="btn" style={{ cursor: busy ? 'default' : 'pointer' }}>
+                title="Save the image under this name so every issue can reuse it" />}
+              {!writing && <label className="btn" style={{ cursor: busy ? 'default' : 'pointer' }}>
                 {busy === 'upload' ? 'Uploading…' : 'Upload image'}
                 <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
                   disabled={busy !== ''} onChange={onPickImage} style={{ display: 'none' }} />
-              </label>
+              </label>}
               <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doPreview}>
                 {busy === 'preview' ? 'Rendering…' : 'Preview'}
               </button>
             </div>
-            {assets.length > 0 && (
+            {!writing && assets.length > 0 && (
               <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
                 Saved images — click to copy:{' '}
                 {assets.map((a) => (
@@ -502,6 +521,16 @@ export default function Marketing() {
                 {audiences.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.count})</option>)}
               </select>
             )}
+            {/* Five controls decide who this reaches, and on most sends none of them
+                are touched. They collapse to the sentence they add up to, because the
+                answer — how many people, on what basis — is what you actually check
+                before sending. The controls are one click away when you want them. */}
+            <button className="aud-summary" onClick={() => setAudOpen((o) => !o)} aria-expanded={audOpen}>
+              <b>{preview ? preview.count.toLocaleString() : '…'}</b> recipients
+              <span className="muted">{audienceLine}</span>
+              <span className="aud-toggle">{audOpen ? 'Done' : 'Change'}</span>
+            </button>
+            {audOpen && (<>
             {/* Consent first. Everything below narrows the Library — people we FOUND.
                 This one switches to the people who ASKED, which is the only audience
                 a newsletter may go to, so it sits above the rest and overrides them. */}
@@ -553,10 +582,7 @@ export default function Marketing() {
               <option value="opened">Opened a previous blast</option>
               <option value="clicked">Clicked a previous blast</option>
             </select>
-            <div className="mkt-count">
-              <b>{preview ? preview.count : '…'}</b> recipients
-              <div className="muted" style={{ fontSize: 11 }}>emailless + unsubscribed already excluded · deduped across campaigns</div>
-            </div>
+            </>)}
             {preview?.sample?.length > 0 && (
               <div className="list" style={{ marginTop: 8 }}>
                 {preview.sample.map((p) => (

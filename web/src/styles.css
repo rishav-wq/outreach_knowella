@@ -833,6 +833,21 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 }
 .inbox-n { flex-shrink: 0; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .inbox-n.over { color: var(--caution); }
+/* The audience, as the sentence it adds up to. */
+.aud-summary {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; width: 100%;
+  text-align: left; font: inherit; font-size: 13px; cursor: pointer;
+  background: var(--signal-tint); border: 1px solid var(--signal-line);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px;
+}
+.aud-summary b { font-size: 20px; color: var(--ink); font-weight: 700; }
+.aud-summary .muted { flex: 1 1 100%; font-size: 12px; line-height: 1.5; }
+.aud-toggle { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--signal); }
+
+/* The two jobs this screen does, named. */
+.mode-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.mode-seg { flex-shrink: 0; }
+
 .fmt-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
 .fmt-row .muted { flex: 1 1 260px; min-width: 260px; }
 /* Scoped with two classes, and that is the whole fix. `.asset-name` (0,1,0) sits
