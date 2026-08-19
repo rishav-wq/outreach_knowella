@@ -417,7 +417,11 @@ export default function Marketing() {
               </span>
             </div>
             <textarea className="field-input mkt-body" rows={14} value={draft.body}
-              placeholder={'Hi {first_name},\n\nWrite the issue…\n\n(unsubscribe footer is added automatically to every message)'}
+              placeholder={writing
+                ? `Hi {first_name},
+
+Write the issue. Plain paragraphs — your design handles the rest.`
+                : 'Paste the full HTML for this email.'}
               onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
               Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code>{' '}
