@@ -63,13 +63,17 @@ export default function Marketing() {
     }, 350)
   }, [view, draft.audience])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startNew = () => { setDraft(EMPTY); setDraftId(null); setMsg(null); setTestTo(''); setView('edit') }
+  const startNew = () => { setDraft(EMPTY); setSaved(EMPTY); setDraftId(null); setMsg(null); setTestTo(''); setView('edit') }
   const startEdit = (b) => {
     // publication_id was missing here, so reopening a draft silently turned it into a
     // one-off: no issue number, no per-publication From, and drafting disabled because
     // nothing said what the issue may claim. Spread EMPTY so a new audience field added
     // later can't go missing the same way.
     setDraft({ ...EMPTY, name: b.name, subject: b.subject, body: b.body,
+               preheader: b.preheader || '',
+               publication_id: b.publication_id || '', format: b.format || 'markdown',
+               audience: { ...EMPTY.audience, ...b.audience } })
+    setSaved({ ...EMPTY, name: b.name, subject: b.subject, body: b.body,
                preheader: b.preheader || '',
                publication_id: b.publication_id || '', format: b.format || 'markdown',
                audience: { ...EMPTY.audience, ...b.audience } })
@@ -103,11 +107,31 @@ export default function Marketing() {
 
   // save (create or update) and return the id — test/send both go through here so
   // what you test is always exactly what's stored
+  // A draft used to persist only as a side effect of testing or sending, so writing
+  // an issue and navigating away lost it. `saved` holds what is on the server, so
+  // "unsaved changes" is a fact rather than a flag somebody has to remember to set.
+  const [saved, setSaved] = useState(null)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const doSave = async () => {
+    setBusy('save'); setMsg(null)
+    try {
+      await save()
+      setMsg({ ok: true, text: 'Draft saved.' })
+    } catch (e) { setMsg({ ok: false, text: `Could not save: ${String(e.message).slice(0, 200)}` }) }
+    finally { setBusy('') }
+  }
+  // Leaving with unsaved work should cost a click, not the work.
+  const leave = () => {
+    if (dirty && draft.subject.trim() && !window.confirm(
+      'This draft has unsaved changes. Leave without saving?')) return
+    setView('list'); load()
+  }
+
   const save = async () => {
     const named = { ...draft, name: draft.name.trim() || draft.subject.trim().slice(0, 70) }
-    if (draftId) { await api.updateBlast(draftId, named); return draftId }
+    if (draftId) { await api.updateBlast(draftId, named); setSaved(named); return draftId }
     const r = await api.createBlast(named)
-    setDraftId(r.id)
+    setDraftId(r.id); setSaved(named)
     return r.id
   }
 
@@ -313,7 +337,19 @@ export default function Marketing() {
   if (view === 'edit') {
     return (
       <div className="mkt">
-        <button className="ghostlink" onClick={() => setView('list')}>← All blasts</button>
+        <div className="mkt-top">
+          <button className="ghostlink" onClick={leave}>← All blasts</button>
+          <span className="mkt-save">
+            {dirty
+              ? <span className="muted">Unsaved changes</span>
+              : draftId && <span className="muted">Saved</span>}
+            <button className="btn" disabled={!dirty || !draft.subject.trim() || busy !== ''}
+              onClick={doSave}
+              title={draft.subject.trim() ? 'Keep this draft' : 'A draft needs a subject to be found again'}>
+              {busy === 'save' ? 'Saving…' : 'Save draft'}
+            </button>
+          </span>
+        </div>
         {wiring}
         <div className="mkt-grid">
           <div className="mkt-main">
