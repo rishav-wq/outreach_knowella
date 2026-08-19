@@ -148,6 +148,23 @@ export default function Marketing() {
     finally { setBusy('') }
   }
 
+  // Structure for copy written somewhere else. Explicitly not a rewrite: the endpoint
+  // reports whether a single word changed, and that is surfaced rather than trusted,
+  // because a formatter that quietly edited a claim would undo the one thing this
+  // product argues for.
+  const doFormat = async () => {
+    setBusy('fmt'); setMsg(null)
+    try {
+      const r = await api.formatBody(draft.body)
+      setDraft((d) => ({ ...d, body: r.body })); setShown(null)
+      setMsg({ ok: r.same_words, text: r.same_words
+        ? 'Formatted — headings, bold and lists added, not one word changed.'
+        : `Formatted, but ${r.changed_words} word${r.changed_words === 1 ? '' : 's'} changed. `
+          + 'Read it before sending — it was meant to add structure only.' })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
+  }
+
   // Preview: the rendered message, straight from the server's renderer.
   const [shown, setShown] = useState(null)      // {subject, html, text, rendered_for}
   const [asText, setAsText] = useState(false)
@@ -432,8 +449,9 @@ Write the issue. Plain paragraphs — your design handles the rest.`
             <div className="fmt-row">
               <div className="muted" style={{ fontSize: 11.5 }}>
                 {writing
-                  ? <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code>{' '}
-                      and bare links. Images and layout come from the design, not from here.</>
+                  ? <>Formatting: <code>## heading</code>, <code>**bold**</code>, <code>- bullets</code>,{' '}
+                      <code>[text](url)</code>. Paste plain copy and let{' '}
+                      <b>Format with AI</b> add them. Images and layout come from the design.</>
                   : <>Inline every style — mail clients strip <code>&lt;style&gt;</code> blocks. Use{' '}
                       <code>{'{{{ pm:unsubscribe }}}'}</code> and <code>{'{preferences_url}'}</code> as
                       hrefs in your own footer, and ours is left off.</>}
@@ -446,6 +464,12 @@ Write the issue. Plain paragraphs — your design handles the rest.`
                 <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
                   disabled={busy !== ''} onChange={onPickImage} style={{ display: 'none' }} />
               </label>}
+              {writing && (
+                <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doFormat}
+                  title="Add headings, bold and lists to copy written elsewhere — without changing the words">
+                  {busy === 'fmt' ? 'Formatting…' : '✦ Format with AI'}
+                </button>
+              )}
               <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doPreview}>
                 {busy === 'preview' ? 'Rendering…' : 'Preview'}
               </button>

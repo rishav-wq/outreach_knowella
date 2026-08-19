@@ -88,6 +88,7 @@ export const uploadAsset = (file, name = '') => {
   const fd = new FormData(); fd.append('file', file); if (name) fd.append('name', name)
   return apiForm('/api/assets/upload', fd)
 }
+export const formatBody = (body) => apiSend('/api/blasts/format', 'POST', { body })
 export const hostImages = (body) => apiSend('/api/blasts/host-images', 'POST', { body })
 export const renderBlast = (b) => apiSend('/api/blasts/render', 'POST', b)
 export const previewAudience = (filter) => apiSend('/api/marketing/preview', 'POST', filter)

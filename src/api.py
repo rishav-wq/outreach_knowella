@@ -1872,6 +1872,31 @@ _DATA_URI = re.compile(r"data:(image/(?:png|jpe?g|gif|webp|svg\+xml));base64,([A
 _MAX_ASSET = 5 * 1024 * 1024
 
 
+class FormatReq(BaseModel):
+    body: str = ""
+
+
+@app.post("/api/blasts/format")
+def format_body(r: FormatReq):
+    """Pasted copy in, the same copy marked up out.
+
+    Returns `changed_words` so the caller can prove it did not rewrite anything: this
+    runs on a newsletter whose whole argument is that claims carry sources, and a
+    formatter that quietly edited one would refute that on the company's own list.
+    """
+    body = (r.body or "").strip()
+    if not body:
+        raise HTTPException(400, "nothing to format")
+    try:
+        out = newsletter.format_body(body, (_marketing_models() or {}).get("newsletter"))
+    except Exception as e:
+        raise HTTPException(502, f"couldn't format it: {type(e).__name__}: {e}"[:200])
+    strip = lambda t: re.sub(r"[^a-z0-9]+", " ", t.lower()).split()
+    before, after = strip(body), strip(re.sub(r"(?m)^\s*##\s+|\*\*|^\s*[-*]\s+", "", out))
+    return {"body": out, "changed_words": abs(len(after) - len(before)),
+            "same_words": before == after}
+
+
 @app.post("/api/blasts/host-images")
 def host_images(r: HostImages):
     """Lift every inline image out of the body and serve it from a real URL.

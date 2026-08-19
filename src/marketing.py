@@ -50,6 +50,11 @@ CHUNK = 100   # render+send in small chunks so progress moves and one failure lo
 _MD_LINK = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<]+)")
 _MD_BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
 _BULLET = re.compile(r"^\s*[-*]\s+")
+# Headings were left out on purpose while the newsletter was plain text — they are
+# part of what makes bulk mail look like bulk mail. A designed shell concedes that
+# argument already, and real pasted copy arrives with sections ("What it is", "What
+# makes an injury recordable?") that render as ordinary paragraphs without them.
+_HEADING = re.compile(r"^\s*##\s+(.+)$")
 
 
 def _inline(t: str) -> str:
@@ -89,7 +94,15 @@ def to_html(body: str) -> str:
     for block in body.split("\n\n"):
         para = []
         for ln in (l for l in block.split("\n") if l.strip()):
-            if _BULLET.match(ln):
+            h = _HEADING.match(ln)
+            if h:
+                flush_list()
+                if para:
+                    out.append(f'<p {_P}>{"<br>".join(para)}</p>')
+                    para = []
+                out.append('<h2 style="margin:26px 0 10px;font-size:17px;line-height:24px;'
+                           f'font-weight:600;color:#14142B">{_inline(h.group(1))}</h2>')
+            elif _BULLET.match(ln):
                 if para:
                     out.append(f'<p {_P}>{"<br>".join(para)}</p>')
                     para = []
@@ -107,6 +120,7 @@ def to_text(body: str) -> str:
     """Body → plain text. Bold markers go (they read as noise unformatted) and a
     markdown link becomes 'text (url)' so the address is still there to copy."""
     t = _MD_LINK.sub(lambda m: f"{m.group(1)} ({m.group(2)})" if m.group(2) else m.group(3), body)
+    t = re.sub('(?m)^[ 	]*##[ 	]+', "", t)   # a heading is still a line of text
     return _MD_BOLD.sub(r"\1", t)
 
 

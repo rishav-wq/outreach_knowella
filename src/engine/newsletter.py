@@ -20,6 +20,9 @@ Inputs, best first:
 """
 from __future__ import annotations
 
+import json
+import re
+
 from .. import llm
 
 SYSTEM = (
@@ -149,3 +152,51 @@ Write the issue. 150-250 words in the body."""
             "body": data.get("body", "").strip(),
             "used": data.get("used") or [],
             "omitted": data.get("omitted") or []}
+
+
+FORMAT_SYSTEM = (
+    "You add STRUCTURE to text that has already been written. You are not an editor "
+    "and not a writer.\n\n"
+    "Absolute rules — breaking any of them makes the result useless:\n"
+    "- Do NOT change a single word. Same words, same order, same sentences.\n"
+    "- Do NOT add, remove, summarise, shorten or improve anything. No new claims, no "
+    "dropped ones. If a sentence reads badly, it stays exactly as it is.\n"
+    "- Do NOT invent headings that were not already lines in the text. A heading is a "
+    "SHORT existing line that introduces what follows — promote it, never write one.\n\n"
+    "The four marks available, and nothing else:\n"
+    "  ## Heading      a short existing line that titles the section after it\n"
+    "  **bold**        at most one term per section, for a term being named\n"
+    "  - item          consecutive lines that are genuinely a list\n"
+    "  [text](url)     a URL that already appears in the text\n\n"
+    "Blank line between paragraphs. Leave a greeting and a sign-off as plain lines.\n"
+    'Return ONLY JSON: {"body": str}'
+)
+
+
+def format_body(body: str, spec_cfg: dict | None = None) -> str:
+    """Pasted copy → the same copy, marked up.
+
+    Deliberately not a rewrite. Formatting that also edits would let a model quietly
+    change a claim in a newsletter whose whole argument is that claims are sourced —
+    so the prompt forbids touching the words, and the caller can diff to confirm.
+    """
+    spec = llm.ModelSpec.from_config(spec_cfg or {})
+    text, _ = llm.complete(
+        [{"role": "system", "content": FORMAT_SYSTEM},
+         {"role": "user", "content": body}],
+        spec, temperature=0.1,
+    )
+    # Models answer this two ways whatever the prompt says: bare text, or a JSON
+    # object in a code fence with a greeting around it. Both are accepted rather than
+    # fought, because the guard that matters is the word-drift check downstream, not
+    # the envelope.
+    out = (text or "").strip()
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", out, re.S) or re.match(r"\s*(\{.*\})\s*$", out, re.S)
+    if m:
+        try:
+            out = (json.loads(m.group(1)).get("body") or "").strip() or out
+        except Exception:
+            pass
+    if out.startswith("```"):
+        out = re.sub(r"^```[a-z]*\n?|\n?```$", "", out).strip()
+    return out or body
