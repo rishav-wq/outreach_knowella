@@ -845,6 +845,13 @@ tr:hover .lib-email .icon-btn { opacity: 1; }
 .aud-toggle { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--signal); }
 
 /* The two jobs this screen does, named. */
+/* Labelled fields. Three inputs of the same size and colour with only placeholder
+   text to tell them apart is a guess every time you come back to a draft. */
+.fld { display: block; margin-top: 14px; font-size: 11.5px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); }
+.fld .field-input { margin-top: 5px; font-size: 14px; font-weight: 400;
+  letter-spacing: normal; text-transform: none; color: var(--text); }
+
 .tpl-edit { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px; background: var(--bg-soft, #f7f9fb); }
 .tpl-edit-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
 .tpl-edit textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.5; }

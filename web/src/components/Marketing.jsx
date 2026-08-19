@@ -95,17 +95,18 @@ export default function Marketing() {
        a.topics.length ? `${a.topics.length} topic${a.topics.length > 1 ? 's' : ''}` : '',
        a.exclude_sent ? 'skipping anyone sales emailed' : '',
        a.engagement ? `who ${a.engagement} a previous blast` : ''].filter(Boolean).join(' · ')
-  const complete = draft.name.trim() && draft.subject.trim() && draft.body.trim()
-  // A greyed-out button with no reason is a dead end. Name the missing field so the
-  // fix is one click away instead of a guess.
-  const blocker = draft.name.trim() ? (draft.subject.trim() ? (draft.body.trim() ? '' : 'a body')
-    : 'a subject line') : 'an internal name'
+  const complete = draft.subject.trim() && draft.body.trim()
+  // A greyed-out button with no reason is a dead end, so name the missing field. The
+  // internal name is no longer one of them: it is taken from the subject at save, which
+  // is what it always ended up being, and it existed mostly to block this button.
+  const blocker = draft.subject.trim() ? (draft.body.trim() ? '' : 'a body') : 'a subject line'
 
   // save (create or update) and return the id — test/send both go through here so
   // what you test is always exactly what's stored
   const save = async () => {
-    if (draftId) { await api.updateBlast(draftId, draft); return draftId }
-    const r = await api.createBlast(draft)
+    const named = { ...draft, name: draft.name.trim() || draft.subject.trim().slice(0, 70) }
+    if (draftId) { await api.updateBlast(draftId, named); return draftId }
+    const r = await api.createBlast(named)
     setDraftId(r.id)
     return r.id
   }
@@ -350,9 +351,9 @@ export default function Marketing() {
               </button>
             </div>}
             {writing && house?.has_slot && (
-              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-                Renders into your design — header, footer and brand come with it. Write only
-                the copy. <button className="linklike" onClick={openTemplate}>Edit the design</button>
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Your design supplies the header, footer, logo and unsubscribe.{' '}
+                <button className="linklike" onClick={openTemplate}>Edit the design</button>
               </div>
             )}
             {writing && draft.publication_id && (
@@ -389,16 +390,22 @@ export default function Marketing() {
               </div>
             )}
 
-            <input className="field-input" placeholder="Internal name — e.g. Ops Brief #1" value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <input className="field-input" placeholder="Subject — merge fields work: {first_name}, {company}" value={draft.subject}
-              onChange={(e) => setDraft({ ...draft, subject: e.target.value })} style={{ marginTop: 10 }} />
+            {/* Three fields, each labelled. They looked identical unlabelled, and one of
+                them — the internal name — existed only to block the send button, so it
+                is gone: the subject names the issue in the list. */}
+            <label className="fld">Subject
+              <input className="field-input" value={draft.subject}
+                placeholder="What the inbox shows first"
+                onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
+            </label>
             {/* The inbox shows subject THEN this. Left empty, the client grabs the
                 body's opening sentence — a line written for someone who has already
                 opened, spent on persuading someone who hasn't. */}
-            <input className="field-input" placeholder="Preview text — the grey line after the subject in the inbox"
-              value={draft.preheader} maxLength={140} style={{ marginTop: 10 }}
-              onChange={(e) => setDraft({ ...draft, preheader: e.target.value })} />
+            <label className="fld">Preview text
+              <input className="field-input" value={draft.preheader} maxLength={140}
+                placeholder="The grey line the inbox shows after the subject"
+                onChange={(e) => setDraft({ ...draft, preheader: e.target.value })} />
+            </label>
             <div className="inbox-line">
               <span className="inbox-subj">{draft.subject || 'Subject'}</span>
               <span className="inbox-pre">
@@ -413,16 +420,16 @@ export default function Marketing() {
               placeholder={'Hi {first_name},\n\nWrite the issue…\n\n(unsubscribe footer is added automatically to every message)'}
               onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-              Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code> <code>{'{title}'}</code> — filled per person, same engine as verbatim sales mail.
-              In a template you can also use <code>{'{{{ pm:unsubscribe }}}'}</code> and{' '}
-              <code>{'{preferences_url}'}</code> as hrefs; ours are then left off.
+              Merge fields: <code>{'{first_name}'}</code> <code>{'{company}'}</code>{' '}
+              <code>{'{title}'}</code> — filled per person.
+              {!writing && <> In your own footer use <code>{'{{{ pm:unsubscribe }}}'}</code> and{' '}
+                <code>{'{preferences_url}'}</code> as hrefs.</>}
             </div>
             <div className="fmt-row">
               <div className="muted" style={{ fontSize: 11.5 }}>
                 {writing
-                  ? <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code> and
-                      bare links. Nothing else — no images or buttons, because looking like bulk mail is
-                      what costs opens.</>
+                  ? <>Formatting: <code>**bold**</code>, <code>- bullets</code>, <code>[text](url)</code>{' '}
+                      and bare links. Images and layout come from the design, not from here.</>
                   : <>Inline every style — mail clients strip <code>&lt;style&gt;</code> blocks. Use{' '}
                       <code>{'{{{ pm:unsubscribe }}}'}</code> and <code>{'{preferences_url}'}</code> as
                       hrefs in your own footer, and ours is left off.</>}
