@@ -30,10 +30,6 @@ POLL_SECONDS = 30 * 60          # feeds are hourly-ish news; twice an hour is pl
 _MAX_TEXT = 1200                # keep enough to judge a signal, not the whole email
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def _strip_html(s: str) -> str:
     s = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", s or "")
     s = re.sub(r"(?i)<br\s*/?>|</p>", "\n", s)
@@ -342,20 +338,6 @@ def fetch_feed(url: str, timeout: float = 20.0) -> list[dict]:
         "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8"})
     r.raise_for_status()
     return parse_feed(r.content)
-
-
-@lru_cache(maxsize=512)
-def _kw_re(keyword: str):
-    """Whole words only, plural tolerated, hyphens and spaces interchangeable.
-
-    Whole words because a bare substring test lets three-letter industry acronyms
-    match anything: 'eld' hits held/welding/fields (a story about factory job cuts
-    got through that way) and 'csa' hits inside 'FMCSA'. The trailing s? keeps 'ELD'
-    matching 'ELDs'. The separator class is what makes 'hours of service' find
-    "Companies seek hours-of-service exemptions" — publications write these terms
-    both ways and the hyphenated form is the more common one in headlines."""
-    parts = [re.escape(p) for p in re.split(r"[\s\-]+", keyword.strip()) if p]
-    return re.compile(r"\b" + r"[\s\-]+".join(parts) + r"s?\b", re.I)
 
 
 

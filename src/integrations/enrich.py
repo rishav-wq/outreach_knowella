@@ -42,10 +42,6 @@ def find_domain(company: str) -> str:
     return ""
 
 
-def has_hunter() -> bool:
-    return bool(os.environ.get("HUNTER_API_KEY"))
-
-
 def find_email(domain: str, first: str, last: str) -> str:
     """Domain + name -> email (Hunter). '' on no key / no result / error."""
     key = os.environ.get("HUNTER_API_KEY")

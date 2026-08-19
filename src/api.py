@@ -148,12 +148,6 @@ def _load(name: str) -> dict:
     return cfg
 
 
-def _require_campaign(name: str) -> None:
-    """404 if the campaign doesn't exist — for endpoints that don't need the cfg."""
-    if not open_store().campaign_exists(name):
-        raise HTTPException(404, f"campaign '{name}' not found")
-
-
 @app.get("/api/health")
 def health():
     return {"ok": True}

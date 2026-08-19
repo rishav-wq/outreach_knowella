@@ -52,14 +52,12 @@ export const setMailbox = (campaign, mailbox_ids) => apiSend('/api/campaign/mail
 export const decide = (campaign, key, decision) => apiSend('/api/review/decision', 'POST', { campaign, key, decision })
 // sources: where leads came from, and what each place produced
 export const listSources = () => apiGet('/api/sources')
-export const createSource = (s) => apiSend('/api/sources', 'POST', s)
 export const setSourceNotes = (id, notes) => apiSend(`/api/sources/${encodeURIComponent(id)}/notes`, 'PUT', { notes })
 export const deleteSource = (id) => apiSend(`/api/sources/${encodeURIComponent(id)}`, 'DELETE', {})
 // signals: the monitoring inbox — platforms push (notification email), we poll (RSS)
 export const listSignals = (status = '') => apiGet(`/api/signals${status ? `?status=${status}` : ''}`)
 export const addSignal = (s) => apiSend('/api/signals', 'POST', s)
 export const setSignalStatus = (id, status) => apiSend(`/api/signals/${encodeURIComponent(id)}/status`, 'POST', { status })
-export const deleteSignal = (id) => apiSend(`/api/signals/${encodeURIComponent(id)}`, 'DELETE', {})
 export const pollSignals = () => apiSend('/api/signals/poll', 'POST', {})
 export const clearSignals = (channel = '') => apiSend('/api/signals/clear', 'POST', { channel })
 // OSHA citations: look the employer up (free), then reveal contacts into a campaign (credits)
@@ -103,7 +101,6 @@ export const generateIssue = (b) => apiSend('/api/blasts/generate', 'POST', b)
 export const suggestQuestions = (publication_id) =>
   apiSend('/api/blasts/questions', 'POST', { publication_id })
 export const listBlasts = () => apiGet('/api/blasts')
-export const getBlast = (id) => apiGet(`/api/blasts/${encodeURIComponent(id)}`)
 export const createBlast = (b) => apiSend('/api/blasts', 'POST', b)
 export const updateBlast = (id, b) => apiSend(`/api/blasts/${encodeURIComponent(id)}`, 'PUT', b)
 export const deleteBlast = (id) => apiSend(`/api/blasts/${encodeURIComponent(id)}`, 'DELETE', {})
@@ -152,7 +149,6 @@ export const pullApollo = (campaign, limit = 25) => apiSend('/api/pull/apollo', 
 // wizard calls this before the campaign exists).
 export const previewApollo = (icp, apollo) => apiSend('/api/preview/apollo', 'POST', { icp, apollo })
 // Mark/unmark a lead as a lookalike seed — future pulls find people similar to it
-export const setLookalike = (campaign, key, on) => apiSend('/api/campaign/lookalike', 'POST', { campaign, key, on })
 // University-name typeahead for the alumni filter (returns Apollo school ids + names)
 export const searchSchools = (q) => apiGet(`/api/apollo/schools?q=${encodeURIComponent(q)}`)
 export const getRouting = () => apiGet('/api/routing')
