@@ -254,6 +254,19 @@ def render_warnings(body: str) -> list[str]:
     return out
 
 
+def _links(doc: str, email: str) -> str:
+    """Resolve the two per-recipient links a design may use.
+
+    A template cannot know which side is handling unsubscribes, and getting it wrong
+    fails silently in both directions: {{{ pm:unsubscribe }}} on a Custom stream
+    renders as literal text, and our URL while Postmark still owns the flow earns a
+    second link appended underneath. One merge field, resolved here.
+    """
+    return (doc.replace("{preferences_url}", prefs_link(email))
+               .replace("{unsubscribe_url}",
+                        unsub_link(email) if postmark_send.own_unsubscribe() else PM_UNSUB))
+
+
 def render_message(blast: dict, lead, email: str) -> dict:
     """One fully-rendered Postmark message for one person: merge fields filled,
     unsubscribe footer + header attached, text + HTML generated from the same body.
@@ -270,7 +283,6 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # link with it. This puts that link back within reach of the designer: the URL is
     # per-recipient and so can never be hardcoded, but it can be a merge field like
     # any other. Substituted after the rest so a body may use it anywhere.
-    body = body.replace("{preferences_url}", prefs_link(email))
     body = fill_assets(body)
     raw = (blast.get("format") or "markdown") == "html"
     # The text part carries the same link the HTML does — a plain-text reader must
@@ -324,10 +336,16 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # normally the shell carries its own unsubscribe, in which case ours stands down.
     shell = (blast.get("template") or "") if not raw else ""
     if shell and "{content}" in shell:
-        body = fill_assets(shell.replace("{content}", to_html(body))
-                           .replace("{preferences_url}", prefs_link(email)))
+        body = fill_assets(shell.replace("{content}", to_html(body)))
+    # The links belong to whatever ends up being the document — a shell is where a
+    # designer puts them, and substituting on the composer's body left them untouched
+    # inside the template, so the shell's dead placeholder rendered as literal text
+    # AND our footer was appended on top of it. Resolved after composition, on both
+    # paths, so a design cannot get this wrong.
+    body = _links(body, email)
+    if shell and "{content}" in shell:
         if PM_UNSUB in body or unsub_link(email) in body:
-            foot = ""
+            foot = ""      # the design carries the exit; ours would be a duplicate
         html = _splice(body, pre, foot)
     elif raw and _IS_DOC.search(body):
         # A pasted design is usually a WHOLE document, and appending to it put the
