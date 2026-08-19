@@ -186,17 +186,56 @@ def format_body(body: str, spec_cfg: dict | None = None) -> str:
          {"role": "user", "content": body}],
         spec, temperature=0.1,
     )
-    # Models answer this two ways whatever the prompt says: bare text, or a JSON
-    # object in a code fence with a greeting around it. Both are accepted rather than
-    # fought, because the guard that matters is the word-drift check downstream, not
-    # the envelope.
+    return _strip_chatter(_unwrap(text), body) or body
+
+
+def _strip_chatter(out: str, original: str) -> str:
+    """Drop opening and closing lines the model added of its own accord.
+
+    Even told to return bare text it prefixes "Hello!" and signs off "Goodbye!", and
+    those ship to a reader. Guessing at greetings would eventually delete a real one,
+    so this only removes a leading or trailing line whose words appear NOWHERE in the
+    text that was handed in — which an invented pleasantry never does and the
+    author's own greeting always does.
+    """
+    def words(t):
+        return set(re.findall(r"[a-z0-9]+", t.lower()))
+    had = words(original)
+    lines = out.split("\n")
+    while lines and (not lines[0].strip() or (words(lines[0]) - had and len(words(lines[0])) <= 4)):
+        lines.pop(0)
+    while lines and (not lines[-1].strip() or (words(lines[-1]) - had and len(words(lines[-1])) <= 4)):
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def _unwrap(text: str) -> str:
+    """Get the marked-up body out of whatever the model wrapped it in.
+
+    Told plainly to return bare text, models still answer with a JSON object, a code
+    fence, a greeting, or all three at once — and the failure is not cosmetic: an
+    unextracted envelope ships {"body": "## What it is to a reader. Real output that
+    got through the first version:
+
+        Hello!
+        {"body": "## What it is
+…OSHA 300 log**."}
+        Goodbye!
+
+    So the object is found ANYWHERE in the response rather than only when it is the
+    whole of it, and json is given a chance before the raw-slice fallback because a
+    JSON string carries escaped newlines that must be decoded, not printed.
+    """
     out = (text or "").strip()
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", out, re.S) or re.match(r"\s*(\{.*\})\s*$", out, re.S)
-    if m:
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", out, re.S)
+    if fence:
+        out = fence.group(1).strip()
+    obj = re.search(r'\{\s*"body"\s*:\s*(".*")\s*\}', out, re.S)
+    if obj:
         try:
-            out = (json.loads(m.group(1)).get("body") or "").strip() or out
+            return json.loads(obj.group(1)).strip()
         except Exception:
-            pass
-    if out.startswith("```"):
-        out = re.sub(r"^```[a-z]*\n?|\n?```$", "", out).strip()
-    return out or body
+            # A raw newline inside the string makes it invalid JSON; the text is still
+            # right there, so take it literally rather than losing the whole run.
+            return obj.group(1).strip('"').replace('\\n', '\n').strip()
+    return out
