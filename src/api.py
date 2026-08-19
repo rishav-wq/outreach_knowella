@@ -1815,12 +1815,44 @@ def marketing_meta():
     return {"topics": st.library_topics(), "campaigns": st.library_campaigns()}
 
 
+_HOUSE_TEMPLATE = "marketing_template"
+
+
 def _pub_template(pid: str) -> str:
-    """The designed shell this issue belongs in. Looked up rather than passed, so a
-    preview cannot show a different wrapper from the one the send uses."""
-    if not pid:
-        return ""
-    return ((open_store().get_publication(pid) or {}).get("template") or "")
+    """The designed shell this issue renders into.
+
+    The house template applies to every issue; a publication may override it when one
+    genuinely needs its own look. Tying the design to publications was the wrong way
+    round — most issues are written by hand, and requiring somebody to pick a
+    publication they otherwise have no use for just to get the header and footer made
+    the concept feel mandatory when it is not.
+
+    Looked up rather than passed in, so a preview cannot show a different wrapper
+    from the one the send uses.
+    """
+    store = open_store()
+    if pid:
+        own = (store.get_publication(pid) or {}).get("template") or ""
+        if own:
+            return own
+    return store.get_setting(_HOUSE_TEMPLATE) or ""
+
+
+class HouseTemplate(BaseModel):
+    html: str = ""
+
+
+@app.get("/api/marketing/template")
+def get_house_template():
+    t = open_store().get_setting(_HOUSE_TEMPLATE) or ""
+    return {"html": t, "has_slot": "{content}" in t}
+
+
+@app.put("/api/marketing/template")
+def put_house_template(r: HouseTemplate):
+    """One design, used by every issue that does not override it."""
+    open_store().set_setting(_HOUSE_TEMPLATE, r.html or "")
+    return {"ok": True, "has_slot": "{content}" in (r.html or "")}
 
 
 class RenderReq(BaseModel):

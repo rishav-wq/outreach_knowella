@@ -41,6 +41,7 @@ export default function Marketing() {
     api.listPublications().then(setPubs).catch(() => {})
     api.getMarketingStatus().then(setConn).catch(() => {})
     api.listAssets().then((d) => setAssets(d.assets || [])).catch(() => {})
+    api.getHouseTemplate().then(setHouse).catch(() => {})
     return () => { clearInterval(poll.current); clearTimeout(debounce.current) }
   }, [])
 
@@ -82,6 +83,9 @@ export default function Marketing() {
 
   const writing = draft.format !== 'html'   // 'write an issue' vs 'send a design'
   const [audOpen, setAudOpen] = useState(false)
+  const [house, setHouse] = useState(null)     // the one design every issue uses
+  const [tplOpen, setTplOpen] = useState(false)
+  const [tplDraft, setTplDraft] = useState('')
   // What the five audience controls add up to, in a sentence. This is the thing worth
   // reading before a send; the controls themselves are worth reading once.
   const a = draft.audience
@@ -126,6 +130,19 @@ export default function Marketing() {
       // unseen question is unreviewable, and a bad pick is the first thing to fix.
       if (r.question) setQuestion(r.question)
       setGen({ used: r.used || [], omitted: r.omitted || [], picked: !!r.question_was_picked })
+    } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
+    finally { setBusy('') }
+  }
+
+  const openTemplate = () => { setTplDraft(house?.html || ''); setTplOpen(true) }
+  const saveTemplate = async () => {
+    setBusy('tpl')
+    try {
+      const r = await api.putHouseTemplate(tplDraft)
+      setHouse({ html: tplDraft, has_slot: r.has_slot }); setTplOpen(false); setShown(null)
+      setMsg({ ok: r.has_slot, text: r.has_slot
+        ? 'Design saved. Every issue renders into it.'
+        : 'Saved, but there is no {content} in it — the issue body has nowhere to go.' })
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
   }
@@ -282,6 +299,26 @@ export default function Marketing() {
         {wiring}
         <div className="mkt-grid">
           <div className="mkt-main">
+            {tplOpen && (
+              <div className="tpl-edit">
+                <div className="tpl-edit-head">
+                  <b>The design every issue renders into</b>
+                  <span className="muted">Put <code>{'{content}'}</code> where the copy goes.</span>
+                </div>
+                <textarea className="field-input" rows={10} value={tplDraft}
+                  onChange={(e) => setTplDraft(e.target.value)} spellCheck={false} />
+                <div className="row" style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  <button className="btn primary" disabled={busy !== ''} onClick={saveTemplate}>
+                    {busy === 'tpl' ? 'Saving…' : 'Save design'}
+                  </button>
+                  <button className="btn" onClick={() => setTplOpen(false)}>Cancel</button>
+                  <span className="muted" style={{ fontSize: 11.5, alignSelf: 'center' }}>
+                    {tplDraft.includes('{content}') ? '{content} slot found' : '⚠ no {content} slot'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* The mode is the first decision because it decides what the rest of
                 this screen is for. Writing an issue needs a publication, a question
                 and the knowledge that bounds it; sending a design needs none of
@@ -312,10 +349,10 @@ export default function Marketing() {
                 {busy === 'gen' ? <><span className="spinner spinner-dark" /> Writing…</> : '✦ Write with AI'}
               </button>
             </div>}
-            {writing && pubs.find((x) => x.id === draft.publication_id)?.template && (
+            {writing && house?.has_slot && (
               <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-                Renders into <b>{pubs.find((x) => x.id === draft.publication_id).name}</b>&apos;s
-                design — header, footer and brand come with it. Write only the copy.
+                Renders into your design — header, footer and brand come with it. Write only
+                the copy. <button className="linklike" onClick={openTemplate}>Edit the design</button>
               </div>
             )}
             {writing && draft.publication_id && (
