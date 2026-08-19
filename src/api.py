@@ -31,7 +31,8 @@ from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
 from . import topics as topiclib
-from .integrations import apollo, apollo_send, csv_source, email_verify, enrich, osha, postmark_send
+from .integrations import (apollo, apollo_send, csv_source, email_verify, enrich, ita_msd,
+                           osha, postmark_send)
 from .models import Fact, Lead, Research
 from .store import open_store
 
@@ -1814,7 +1815,16 @@ def marketing_meta():
     return {"topics": st.library_topics(), "campaigns": st.library_campaigns()}
 
 
+def _pub_template(pid: str) -> str:
+    """The designed shell this issue belongs in. Looked up rather than passed, so a
+    preview cannot show a different wrapper from the one the send uses."""
+    if not pid:
+        return ""
+    return ((open_store().get_publication(pid) or {}).get("template") or "")
+
+
 class RenderReq(BaseModel):
+    publication_id: str = ""
     subject: str = ""
     body: str = ""
     preheader: str = ""
@@ -1950,7 +1960,7 @@ def render_preview(r: RenderReq):
         first_name="Maria", last_name="Chen", title="VP Operations", company="Meridian Logistics")
     m = marketing.render_message(
         {"_id": "preview", "subject": r.subject, "body": r.body, "format": r.format,
-         "preheader": r.preheader},
+         "preheader": r.preheader, "template": _pub_template(r.publication_id)},
         lead, people[0]["email"] if people else "preview@example.com")
     return {"subject": m["subject"], "html": m["html_body"], "text": m["text_body"],
             # A browser-rendered preview is honest about the HTML and can be quietly
@@ -2040,6 +2050,7 @@ class PublicationIn(BaseModel):
     audience: dict = {}
     from_address: str = ""
     reply_to: str = ""
+    template: str = ""      # the designed shell; {content} is where the issue goes
 
 
 def _pub_out(p: dict) -> dict:
@@ -2047,7 +2058,7 @@ def _pub_out(p: dict) -> dict:
             "description": p.get("description", ""), "knowledge": p.get("knowledge", ""),
             "voice": p.get("voice", ""), "audience": p.get("audience") or {},
             "from_address": p.get("from_address", ""), "reply_to": p.get("reply_to", ""),
-            "issues": p.get("issues", 0)}
+            "template": p.get("template", ""), "issues": p.get("issues", 0)}
 
 
 @app.get("/api/publications")
@@ -2253,7 +2264,8 @@ def test_blast(bid: str, r: BlastTest):
             + ". A real send fills in each person's own details.")
     msgs = []
     for to in tos:
-        m = marketing.render_message(b, sample, to)
+        m = marketing.render_message(
+            {**b, "template": _pub_template(b.get("publication_id", ""))}, sample, to)
         m["subject"] = f"[TEST] {m['subject']}"
         m["text_body"] = f"{note}\n\n---\n\n{m['text_body']}"
         m["html_body"] = (
@@ -2606,6 +2618,32 @@ def poll_signals():
         raise HTTPException(502, f"OSHA check failed: {e}")
 
 
+class ITAImport(BaseModel):
+    path: str                     # the unzipped case-detail CSV on disk
+    year: str = ""                # filing year, for the claim and the dedupe key
+    min_cases: int = ita_msd.MIN_CASES
+    max_cases: int = ita_msd.MAX_CASES
+    limit: int = 0                # 0 = every employer in the band
+
+
+@app.post("/api/signals/import-ita")
+def import_ita(body: ITAImport):
+    """OSHA's annual injury-record file → the signals queue.
+
+    Not on the poller: the file is ~500 MB, published once a year, and takes about
+    ten seconds to aggregate. An operator downloads it from
+    osha.gov/Establishment-Specific-Injury-and-Illness-Data, unzips it, and points
+    this at the CSV. Re-running is a no-op — the dedupe key is employer+year.
+    """
+    if not os.path.exists(body.path):
+        raise HTTPException(400, f"No such file: {body.path}")
+    try:
+        return ita_msd.import_employers(open_store(), body.path, body.year,
+                                        body.min_cases, body.max_cases, body.limit)
+    except Exception as e:
+        raise HTTPException(502, f"ITA import failed: {e}")
+
+
 @app.get("/api/routing")
 def routing_board(request: Request):
     """Sources → campaigns: what each place has waiting, and which campaign each
@@ -2626,10 +2664,17 @@ def routing_board(request: Request):
     funnel = store.source_funnel()
     flows: dict[tuple, dict] = {}
     for sig in store.list_signals("new"):
-        if sig.get("kind") != "citation":
-            continue           # only citations are un-promoted leads today
+        if sig.get("kind") not in ("citation", "injury_record"):
+            continue           # the kinds that name a company nobody has contacted yet
         sid = sig.get("source_id", "")
-        text = " ".join([sig.get("company", ""), sig.get("text", ""), sig.get("title", "")])
+        # A signal may declare what it wants routed on. A citation's prose names the
+        # trade ("Houston utility contractor") and routes well on its own text; a
+        # filed injury record does not, and its summary sentence actively misroutes —
+        # the word "musculoskeletal" matched a campaign whose ICP is ergonomics
+        # practitioners rather than injured employers. Where route_text is set, it
+        # carries the employer's facts (industry, occupation) and nothing else.
+        text = sig.get("route_text") or " ".join(
+            [sig.get("company", ""), sig.get("text", ""), sig.get("title", "")])
         # The trigger says which offer can answer this event; the text says which
         # vertical. Routing on the text alone put a fatality against a paperwork pitch.
         sug = routing.suggest(text, cfgs, trigger=(sig.get("platform") or "osha"))
@@ -2641,6 +2686,8 @@ def routing_board(request: Request):
                            "penalty": sig.get("penalty", 0), "location": sig.get("location", ""),
                            "state": sig.get("state", ""), "url": sig.get("url", ""),
                            "text": sig.get("text", ""), "why": sug["why"],
+                           # injury records rank by scale of the problem, not penalty
+                           "cases": sig.get("cases", 0), "days": sig.get("days", 0),
                            "alternatives": [a["campaign"] for a in sug["alternatives"]]})
     out_flows = sorted(flows.values(), key=lambda f: (-len(f["items"]), f["campaign"]))
     by_source: dict[str, int] = {}
@@ -2742,15 +2789,27 @@ def promote_citation(sid: str, r: PromoteCitation):
     if not leads:
         raise HTTPException(400, "Apollo revealed no reachable contact at that company")
     src_id = sig.get("source_id") or store.upsert_source("OSHA citations", "regulator", osha.FEED_URL)
+    # An injury record is not a citation and must not be labelled as one: nobody
+    # here was cited, fined, or found at fault, and the draft is written from this
+    # source_type.
+    kind = sig.get("kind", "citation")
+    topic = "osha-injury-record" if kind == "injury_record" else "osha-citation"
+    stype = "osha_ita" if kind == "injury_record" else "osha"
     fact = Fact(claim=sig.get("text") or sig.get("title", ""),
-                source_url=sig.get("url", ""), source_type="osha",
+                source_url=sig.get("url", ""), source_type=stype,
                 published=(sig.get("created_at") or "")[:10], confidence=0.95)
     research = Research(facts=[fact], summary=sig.get("text") or "")
     made = []
     for ld in leads:
-        store.upsert_lead(ld, cfg["name"], ["osha-citation"], source_id=src_id)
+        store.upsert_lead(ld, cfg["name"], [topic], source_id=src_id)
         key = store._scoped(cfg["name"], store._base_key(ld))
-        store.save_research(key, "osha-citation", research)
+        # Store under the hash the pipeline will look for, not a literal tag.
+        # save_research replaces on _id alone, so research saved under "osha-citation"
+        # was never found by ensure_research (which looks up research_hash), and the
+        # first pipeline run silently overwrote the grounded fact with generic web
+        # research — losing the one thing that made this lead worth having.
+        ld_keyed = ld.model_copy(update={"stored_key": key})
+        store.save_research(key, pipeline.research_hash(ld_keyed, cfg), research)
         made.append({"key": key, "name": ld.full_name, "title": ld.title, "email": ld.email})
     store.set_signal_status(sid, "engaged")
     return {"added": len(made), "credits": credits, "leads": made, "campaign": cfg["name"]}

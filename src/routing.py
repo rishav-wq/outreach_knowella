@@ -47,6 +47,12 @@ _WEIGHTS = {"industry": 3.0, "keyword": 3.0, "product": 1.5, "title": 1.0}
 # the wrong product is a worse email than the reverse.
 _TRIGGER_NEEDS = {
     "osha": ("safety", "ehs", "hse", "incident", "hazard", "injury", "inspection"),
+    # Self-filed injury records. Narrower than a citation on purpose: an employer
+    # with a pile of overexertion cases has an ergonomics problem specifically, not
+    # a generic safety one, and routing it to a paperwork or inspection pitch wastes
+    # the one thing that makes this signal worth having.
+    "osha_ita": ("ergonomic", "ergonomics", "musculoskeletal", "msd", "injury",
+                 "safety", "ehs", "lifting"),
 }
 _TRIGGER_WEIGHT = 6.0
 

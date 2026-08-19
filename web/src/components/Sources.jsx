@@ -12,6 +12,7 @@ import Skeleton from './Skeleton'
 const TYPE_LABEL = {
   linkedin_post: 'LinkedIn', linkedin_group: 'LinkedIn group', community: 'Community',
   publication: 'Publication', event: 'Event', apollo: 'Apollo', import: 'Import',
+  regulator: 'Regulator',
 }
 
 // Reply rate is the only column that compares places of different sizes. A bought

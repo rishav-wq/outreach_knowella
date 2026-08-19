@@ -138,6 +138,7 @@ export default function Marketing() {
     try {
       setShown(await api.renderBlast({ subject: draft.subject, body: draft.body,
                                        preheader: draft.preheader, format: draft.format,
+                                       publication_id: draft.publication_id,
                                        audience: draft.audience }))
     } catch (e) { setMsg({ ok: false, text: String(e.message).slice(0, 240) }) }
     finally { setBusy('') }
@@ -311,6 +312,12 @@ export default function Marketing() {
                 {busy === 'gen' ? <><span className="spinner spinner-dark" /> Writing…</> : '✦ Write with AI'}
               </button>
             </div>}
+            {writing && pubs.find((x) => x.id === draft.publication_id)?.template && (
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                Renders into <b>{pubs.find((x) => x.id === draft.publication_id).name}</b>&apos;s
+                design — header, footer and brand come with it. Write only the copy.
+              </div>
+            )}
             {writing && draft.publication_id && (
               <div className="idea-row">
                 <button className="ghostlink" disabled={busy !== ''} onClick={doSuggest}>

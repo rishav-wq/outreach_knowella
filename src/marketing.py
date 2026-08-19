@@ -317,7 +317,19 @@ def render_message(blast: dict, lead, email: str) -> dict:
     if PM_UNSUB in body:
         foot = ""
 
-    if raw and _IS_DOC.search(body):
+    # A publication can carry a designed shell with a {content} slot. The issue is
+    # written as markdown and dropped into it, so every issue inherits the header,
+    # the footer and the brand without anybody re-pasting a table layout. The shell
+    # is a whole document, so the footer is spliced in rather than appended — and
+    # normally the shell carries its own unsubscribe, in which case ours stands down.
+    shell = (blast.get("template") or "") if not raw else ""
+    if shell and "{content}" in shell:
+        body = fill_assets(shell.replace("{content}", to_html(body))
+                           .replace("{preferences_url}", prefs_link(email)))
+        if PM_UNSUB in body or unsub_link(email) in body:
+            foot = ""
+        html = _splice(body, pre, foot)
+    elif raw and _IS_DOC.search(body):
         # A pasted design is usually a WHOLE document, and appending to it put the
         # footer after </html>, where every client discards it. Worse than losing the
         # link: Postmark only adds its own when the placeholder is absent, so a token
@@ -385,7 +397,8 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
             chunk = people[i:i + CHUNK]
             msgs = []
             for p in chunk:
-                m = render_message(blast, p["lead"], p["email"])
+                m = render_message({**blast, "template": pub.get("template", "")},
+                                   p["lead"], p["email"])
                 # A publication can send under its own name and take its own replies —
                 # "The Safety Brief" and "Freight Paperwork" should not look like the
                 # same mailing list to someone subscribed to one of them.

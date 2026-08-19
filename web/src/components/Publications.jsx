@@ -10,7 +10,7 @@ import Skeleton from './Skeleton'
 // but seeded is not the same as fixed, and until now there was no way to add a
 // fourth or correct a line in an existing one.
 const EMPTY = {
-  name: '', product: '', description: '', voice: '', knowledge: '',
+  name: '', product: '', description: '', voice: '', knowledge: '', template: '',
   from_address: '', reply_to: '',
   // Not edited here, but PUT sends the whole model and `audience` defaults to {} —
   // so it has to be carried through the form or saving a wording change would
@@ -42,7 +42,8 @@ export default function Publications() {
       const body = {
         name: draft.name.trim(), product: draft.product.trim(),
         description: draft.description.trim(), voice: draft.voice.trim(),
-        knowledge: draft.knowledge, from_address: draft.from_address.trim(),
+        knowledge: draft.knowledge, template: draft.template,
+        from_address: draft.from_address.trim(),
         reply_to: draft.reply_to.trim(), audience: draft.audience || {},
       }
       if (editing === 'new') await api.createPublication(body)
@@ -99,6 +100,22 @@ export default function Publications() {
 
           {/* The one field that actually matters. Everything else is presentation. */}
           <label className="pub-lbl">What issues may state as fact
+            {/* The designed shell every issue of this publication renders into.
+                Written once; after that an issue is only its copy. */}
+            <label className="pub-lbl">Template
+              <span className="muted"> — the design each issue renders into. Put{' '}
+                <code>{'{content}'}</code> where the copy goes. Leave empty for plain text.</span>
+            </label>
+            <textarea className="field-input pub-knowledge" rows={6} value={draft.template}
+              placeholder="Paste the designed HTML, with {content} where the issue body belongs"
+              onChange={(e) => setDraft({ ...draft, template: e.target.value })} />
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4, marginBottom: 14 }}>
+              {draft.template
+                ? (draft.template.includes('{content}')
+                    ? `${Math.round(draft.template.length / 1024)}KB · {content} slot found`
+                    : '⚠ No {content} in this template — the issue body has nowhere to go.')
+                : 'No template — issues render as plain paragraphs.'}
+            </div>
             <textarea className="field-input pub-knowledge" rows={12} value={draft.knowledge}
               placeholder={'What this product genuinely does, in plain sentences.\n\nThen the limits, on their own line:\nDO NOT claim: customer names, percentages, ROI figures — none are verified.\nDO NOT pitch features that are not shipped.'}
               onChange={(e) => setDraft({ ...draft, knowledge: e.target.value })} />

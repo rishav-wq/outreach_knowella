@@ -3,7 +3,29 @@
     "allow": [
       "Bash(ls -R \"c:/Users/ASUS/OneDrive/Desktop/customerweb/src/app/core/component/\" | head -80)",
       "Read(//c/Users/ASUS/OneDrive/Desktop/customerweb/src/app/core/component/**)",
-      "Read(//c/Users/ASUS/OneDrive/Desktop/customerweb/src/**)"
+      "Read(//c/Users/ASUS/OneDrive/Desktop/customerweb/src/**)",
+      "WebFetch(domain:eutils.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:stacks.cdc.gov)",
+      "WebFetch(domain:workcomp.virginia.gov)",
+      "WebFetch(domain:iea.cc)",
+      "Bash(curl -sL -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\)\" \"https://www.osha.gov/news/newsreleases\" -o viol_sub1_osha_news.html)",
+      "Bash(cp \"C:/Users/ASUS/.claude/projects/c--Users-ASUS-OneDrive-Desktop-outreach-agent/cfb8499f-17e9-4de1-971a-c38c05741f2e/tool-results/webfetch-1786813642311-q3cl14.pdf\" chswc2025.pdf)",
+      "Bash(pdftotext chswc2025.pdf chswc2025.txt)",
+      "Bash(curl -s --max-time 40 -A \"Mozilla/5.0\" \"https://biia.wa.gov/SDSearch.aspx\")",
+      "Bash(curl -s --max-time 40 -A \"Mozilla/5.0\" \"https://biia.wa.gov/SDSubjectIndex.html\")",
+      "Bash(curl -sL --max-time 60 -A 'Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) Chrome/124 Safari/537.36' https://app.leg.wa.gov/RCW/default.aspx?cite=49.17.520 -o C:/Users/ASUS/AppData/Local/Temp/claude/c--Users-ASUS-OneDrive-Desktop-outreach-agent/cfb8499f-17e9-4de1-971a-c38c05741f2e/scratchpad/rcw520.html)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"pullpush HTTP %{http_code}\\\\n\" \"https://api.pullpush.io/reddit/search/comment/?q=test&size=1\")",
+      "WebFetch(domain:search.marcia.com)",
+      "Bash(export PYTHONIOENCODING=utf-8)",
+      "Bash(curl -s -A \"Mozilla/5.0\" -H \"x-return-format: html\" --max-time 200 \"https://r.jina.ai/https://www.cga.ct.gov/asp/cgasubjectsearch/default.asp\" -o st_cc_ct_subj2.html)",
+      "WebFetch(domain:www.nysenate.gov)",
+      "Bash(curl -s -A \"Mozilla/5.0\" -H \"x-return-format: html\" --max-time 200 \"https://r.jina.ai/https%3A%2F%2Fwww.cga.ct.gov%2Fasp%2Fcgasubjectsearch%2Fdefault.asp%3Fwhich_year1%3D2025%26LeadingChar%3DW\" -o st_cc_ct_W.html -w \"%{http_code} %{size_download}\\\\n\")",
+      "WebFetch(domain:www.health.ny.gov)",
+      "Bash(curl -s -A \"Mozilla/5.0\" --max-time 220 \"https://r.jina.ai/https%3A%2F%2Fwww.cga.ct.gov%2Fasp%2Fmenu%2Fclerkdoclist.asp%3Fhouse%3DH%26doc_type%3Dlob\")",
+      "WebFetch(domain:api.allorigins.win)",
+      "Bash(curl -s -A \"Mozilla/5.0\" --max-time 220 \"https://r.jina.ai/https%3A%2F%2Fwww.cga.ct.gov%2Fsearchresults.asp%3Fq%3D2026%2Bwarehouse%2Bquota%2Bdistribution%2Bcenter\" -o st_cc_ct_cse26.txt -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s -A \"Mozilla/5.0\" --max-time 220 \"https://r.jina.ai/https%3A%2F%2Fwww.cga.ct.gov%2Fasp%2Fcgabillstatus%2Fcgabillstatus.asp%3FselBillType%3DBill%26bill_num%3DSB00092%26which_year%3D2026\" -o st_cc_ct_sb92.txt -w \"%{http_code}\\\\n\")"
     ]
   }
 }
