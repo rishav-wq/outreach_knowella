@@ -486,8 +486,9 @@ Write the issue. Plain paragraphs — your design handles the rest.`
               <div className="muted" style={{ fontSize: 11.5 }}>
                 {writing
                   ? <>Formatting: <code>## heading</code>, <code>**bold**</code>, <code>- bullets</code>,{' '}
-                      <code>[text](url)</code>. Paste plain copy and let{' '}
-                      <b>Format with AI</b> add them. Images and layout come from the design.</>
+                      <code>[text](url)</code>, <code>&gt; callout</code>,{' '}
+                      <code>&gt; NEXT UP: …</code>, <code>:: icon | Title | Subtitle</code>.{' '}
+                      Paste plain copy and let <b>Format with AI</b> add them.</>
                   : <>Inline every style — mail clients strip <code>&lt;style&gt;</code> blocks. Use{' '}
                       <code>{'{{{ pm:unsubscribe }}}'}</code> and <code>{'{preferences_url}'}</code> as
                       hrefs in your own footer, and ours is left off.</>}

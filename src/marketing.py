@@ -55,6 +55,15 @@ _BULLET = re.compile(r"^\s*[-*]\s+")
 # argument already, and real pasted copy arrives with sections ("What it is", "What
 # makes an injury recordable?") that render as ordinary paragraphs without them.
 _HEADING = re.compile(r"^\s*##\s+(.+)$")
+# Three blocks the design already has and markdown could not produce, so they stayed
+# hand-written HTML per issue — which is exactly the work the shell exists to remove.
+# Styling below is lifted verbatim from the template, not reinvented.
+#   > text              the violet callout
+#   > LABEL: text       the same box with a label, in verify teal
+#   :: asset | Title | Subtitle    one row of the icon-card stack
+_CALLOUT = re.compile(r"^\s*>\s+(.+)$")
+_LABELLED = re.compile(r"^([A-Z][A-Z &]{2,20}):\s+(.+)$")
+_CARD = re.compile(r"^\s*::\s*([A-Za-z0-9._-]+)\s*\|\s*([^|]+?)\s*(?:\|\s*(.*))?$")
 
 
 def _inline(t: str) -> str:
@@ -74,16 +83,59 @@ def _inline(t: str) -> str:
 _P = 'style="margin:0 0 18px"'
 
 
-def to_html(body: str) -> str:
-    """Body → paragraphs and lists.
+def _callout(text: str) -> str:
+    """The tinted box from the design. A line that opens with an ALL-CAPS label gets
+    the label treatment and the verify teal — that is the "NEXT UP" panel; anything
+    else is the violet one. Colours and radii are the template's, not new."""
+    m = _LABELLED.match(text.strip())
+    tint, edge = ("rgba(4,180,146,0.08)", "#04B492") if m else ("rgba(110,99,255,0.08)", "#6E63FF")
+    inner = ""
+    if m:
+        inner = (f'<div style="font-size:10px;font-weight:700;letter-spacing:.1em;'
+                 f'text-transform:uppercase;color:{edge};margin-bottom:6px">'
+                 f'{_inline(m.group(1))}</div>'
+                 f'<div style="font-size:15px;line-height:23px;color:#14142B">'
+                 f'{_inline(m.group(2))}</div>')
+    else:
+        inner = (f'<div style="font-size:16px;line-height:24px;font-weight:600;'
+                 f'color:{edge}">{_inline(text)}</div>')
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'border="0" style="background-color:{tint};border-left:4px solid {edge};'
+            f'margin:0 0 18px"><tr><td style="padding:16px">{inner}</td></tr></table>')
 
-    Runs of bullet lines become a list wherever they appear, including directly
-    under the sentence introducing them. Requiring a whole block to be bullets was
-    wrong in the most common case there is — 'here is the check:' followed by the
-    check — and turned every list into a paragraph of literal hyphens, which is
-    what made a short issue read as a wall.
+
+def _card_stack(rows: list) -> str:
+    """The icon rows — RULA / REBA / NIOSH. The icon is a named asset, so a card is
+    one line of copy rather than thirty lines of nested tables per issue."""
+    cells = []
+    for asset, title, sub in rows:
+        cells.append(
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            f'border="0" style="border:1px solid #e8e9f0;border-radius:8px;margin:0 0 10px">'
+            f'<tr><td width="64" valign="middle" style="padding:16px 0 16px 16px">'
+            f'<table role="presentation" width="40" cellpadding="0" cellspacing="0" border="0" '
+            f'style="background-color:#eeedfb;border-radius:8px;width:40px;height:40px">'
+            f'<tr><td align="center" valign="middle" style="width:40px;height:40px">'
+            f'<img src="{{asset:{asset}}}" width="20" height="20" alt="" '
+            f'style="display:block"></td></tr></table></td>'
+            f'<td valign="middle" style="padding:16px 16px 16px 0">'
+            f'<p style="margin:0 0 2px;font-size:14px;line-height:20px;font-weight:600;'
+            f'color:#111827">{_inline(title)}</p>'
+            + (f'<p style="margin:0;font-size:12px;line-height:18px;color:#464E57">'
+               f'{_inline(sub)}</p>' if sub else '')
+            + '</td></tr></table>')
+    return "".join(cells)
+
+
+def to_html(body: str) -> str:
+    """Body → the blocks the design knows how to style.
+
+    Paragraphs, bullets and links were the whole vocabulary while the newsletter was
+    plain text. A designed shell has more: a tinted callout, a labelled callout and a
+    stack of icon cards, all of which were hand-written HTML per issue — which is the
+    work the shell exists to remove.
     """
-    out, run = [], []
+    out, run, cards, para = [], [], [], []
 
     def flush_list():
         if run:
@@ -91,28 +143,41 @@ def to_html(body: str) -> str:
             out.append(f'<ul style="margin:0 0 18px;padding-left:22px">{items}</ul>')
             run.clear()
 
+    def flush_para():
+        if para:
+            out.append(f'<p {_P}>{"<br>".join(para)}</p>')
+            para.clear()
+
+    def flush_cards():
+        if cards:
+            out.append(_card_stack(list(cards)))
+            cards.clear()
+
     for block in body.split("\n\n"):
-        para = []
         for ln in (l for l in block.split("\n") if l.strip()):
-            h = _HEADING.match(ln)
-            if h:
-                flush_list()
-                if para:
-                    out.append(f'<p {_P}>{"<br>".join(para)}</p>')
-                    para = []
+            card = _CARD.match(ln)
+            if card:
+                flush_list(); flush_para()
+                cards.append(card.groups())
+                continue
+            flush_cards()
+            call, h = _CALLOUT.match(ln), _HEADING.match(ln)
+            if call:
+                flush_list(); flush_para()
+                out.append(_callout(call.group(1)))
+            elif h:
+                flush_list(); flush_para()
                 out.append('<h2 style="margin:26px 0 10px;font-size:17px;line-height:24px;'
                            f'font-weight:600;color:#14142B">{_inline(h.group(1))}</h2>')
             elif _BULLET.match(ln):
-                if para:
-                    out.append(f'<p {_P}>{"<br>".join(para)}</p>')
-                    para = []
+                flush_para()
                 run.append(_inline(_BULLET.sub("", ln)))
             else:
                 flush_list()
                 para.append(_inline(ln))
-        if para:
-            out.append(f'<p {_P}>{"<br>".join(para)}</p>')
+        flush_para()
         flush_list()
+    flush_cards()
     return "".join(out)
 
 
@@ -120,7 +185,13 @@ def to_text(body: str) -> str:
     """Body → plain text. Bold markers go (they read as noise unformatted) and a
     markdown link becomes 'text (url)' so the address is still there to copy."""
     t = _MD_LINK.sub(lambda m: f"{m.group(1)} ({m.group(2)})" if m.group(2) else m.group(3), body)
-    t = re.sub('(?m)^[ 	]*##[ 	]+', "", t)   # a heading is still a line of text
+    # The blocks are HTML devices; in plain text they are still their words.
+    t = re.sub("(?m)^[ 	]*##[ 	]+", "", t)          # heading
+    t = re.sub("(?m)^[ 	]*>[ 	]+", "", t)           # callout
+    # A card is its two labels; done in ONE pass because a second, looser rule for the
+    # pipe rewrote any prose that happened to contain one.
+    t = re.sub("(?m)^[ \t]*::[^|]*\\|[ \t]*([^|\n]+?)[ \t]*(?:\\|[ \t]*(.*))?$",
+               lambda m: m.group(1) + (" \u2014 " + m.group(2) if m.group(2) else ""), t)
     return _MD_BOLD.sub(r"\1", t)
 
 
