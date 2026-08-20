@@ -373,10 +373,10 @@ def render_message(blast: dict, lead, email: str) -> dict:
     # The text part carries the same link the HTML does — a plain-text reader must
     # have a working way out, and on our own handling that is our URL, not a
     # placeholder Postmark is no longer substituting.
-    text = ((html_to_text(body) if raw else to_text(body))
-            + FOOTER_TEXT.replace(
-                PM_UNSUB,
-                unsub_link(email) if postmark_send.own_unsubscribe() else PM_UNSUB))
+    # The text part is built AFTER the html below, from whatever the message actually
+    # became — a shell adds a sign-off and a footer that the composer body knows
+    # nothing about, so deriving text from the body alone ended a text-only email
+    # mid-sentence with no sign-off at all.
     # 15px/1.7 over a 560px measure: ~70 characters a line, the range typography
     # research keeps landing on for sustained reading. 14px over 600px ran nearer 85,
     # which is where the eye starts losing its place on the return sweep — a slower
@@ -443,6 +443,16 @@ def render_message(blast: dict, lead, email: str) -> dict:
         html = (pre + f'<div style="font-family:Poppins,Arial,sans-serif;font-size:15px;'
                 f'line-height:1.7;color:#242a32;max-width:560px">'
                 f'{body if raw else to_html(body)}{foot}</div>')
+    tail = FOOTER_TEXT.replace(
+        PM_UNSUB, unsub_link(email) if postmark_send.own_unsubscribe() else PM_UNSUB)
+    if shell and "{content}" in shell:
+        # Mirror the email, sign-off and footer included — but ALWAYS append the
+        # unsubscribe line. Stripping tags leaves the shell's link as the bare word
+        # "Unsubscribe" with no address behind it, and a word is not an opt-out.
+        text = html_to_text(html) + tail
+    else:
+        text = (html_to_text(body) if raw else to_text(body)) + tail
+
     return {
         "to": email,
         "subject": subject,
