@@ -163,17 +163,45 @@ FORMAT_SYSTEM = (
     "dropped ones. If a sentence reads badly, it stays exactly as it is.\n"
     "- Do NOT invent headings that were not already lines in the text. A heading is a "
     "SHORT existing line that introduces what follows — promote it, never write one.\n\n"
-    "The four marks available, and nothing else:\n"
+    "The marks available, and nothing else:\n"
     "  ## Heading      a short existing line that titles the section after it\n"
     "  **bold**        at most one term per section, for a term being named\n"
-    "  - item          consecutive lines that are genuinely a list\n"
-    "  [text](url)     a URL that already appears in the text\n\n"
-    "Blank line between paragraphs. Leave a greeting and a sign-off as plain lines.\n"
+    "  - item          consecutive lines that are genuinely a list AND do not\n"
+    "                  qualify as cards below - check the card rule first\n"
+    "  [text](url)     a URL that already appears in the text\n"
+    "  > text          a pull-quote. Find the ONE sharpest line in the piece - the\n"
+    "                  claim someone would repeat back - and mark it, usually near\n"
+    "                  the top. Expect to use this: almost every issue has such a\n"
+    "                  line. Exactly one, and it must be a line already there.\n"
+    "  > LABEL: text   a line that announces what is coming, e.g. one opening\n"
+    "                  'Next up' or 'Coming up'. Put the lead-in words in caps, a\n"
+    "                  colon, then the rest of the line unchanged.\n"
+    "  :: icon | Name | What it does\n"
+    "                  a card. Where 2-4 consecutive lines each NAME a thing and\n"
+    "                  say what it does, they are cards, not bullets - one card\n"
+    "                  per line. Split each line at its natural break: the thing\n"
+    "                  named is the Name, the rest is What it does. Needs an icon\n"
+    "                  whose name matches the thing, from ICONS below. If even one\n"
+    "                  item in the run has no icon, the whole run stays bullets.\n\n"
+    "Blank line between paragraphs. Leave a greeting and a sign-off as plain lines.\n\n"
+    "EXAMPLE - in:\n"
+    "  Most audits fail on paperwork, not on hazards.\n"
+    "  Two scores do most of the work.\n"
+    "  RULA rates upper limb posture.\n"
+    "  REBA rates the whole body.\n"
+    "  Coming up: what a good baseline actually looks like.\n\n"
+    "EXAMPLE - out, given ICONS: rula, reba:\n"
+    "  > Most audits fail on paperwork, not on hazards.\n"
+    "  Two scores do most of the work.\n"
+    "  :: rula | RULA | rates upper limb posture.\n"
+    "  :: reba | REBA | rates the whole body.\n"
+    "  > COMING UP: what a good baseline actually looks like.\n\n"
+    "Every word survived; only marks were added. Do the same.\n"
     'Return ONLY JSON: {"body": str}'
 )
 
 
-def format_body(body: str, spec_cfg: dict | None = None) -> str:
+def format_body(body: str, spec_cfg: dict | None = None, icons: list[str] | None = None) -> str:
     """Pasted copy → the same copy, marked up.
 
     Deliberately not a rewrite. Formatting that also edits would let a model quietly
@@ -181,8 +209,13 @@ def format_body(body: str, spec_cfg: dict | None = None) -> str:
     so the prompt forbids touching the words, and the caller can diff to confirm.
     """
     spec = llm.ModelSpec.from_config(spec_cfg or {})
+    # The card mark needs an icon that exists; naming one that does not would render
+    # a broken image. The model is given the real list rather than trusted to guess.
+    icon_note = (("\n\nICONS: " + ", ".join(icons)) if icons
+                 else "\n\nICONS: none uploaded - do not use the :: card mark.")
+    sys_msg = FORMAT_SYSTEM + icon_note
     text, _ = llm.complete(
-        [{"role": "system", "content": FORMAT_SYSTEM},
+        [{"role": "system", "content": sys_msg},
          {"role": "user", "content": body}],
         spec, temperature=0.1,
     )

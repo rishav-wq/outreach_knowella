@@ -1882,11 +1882,17 @@ def format_body(r: FormatReq):
     if not body:
         raise HTTPException(400, "nothing to format")
     try:
-        out = newsletter.format_body(body, (_marketing_models() or {}).get("newsletter"))
+        out = newsletter.format_body(body, (_marketing_models() or {}).get("newsletter"),
+                                      icons=[a["name"] for a in open_store().named_assets()])
     except Exception as e:
         raise HTTPException(502, f"couldn't format it: {type(e).__name__}: {e}"[:200])
     strip = lambda t: re.sub(r"[^a-z0-9]+", " ", t.lower()).split()
-    before, after = strip(body), strip(re.sub(r"(?m)^\s*##\s+|\*\*|^\s*[-*]\s+", "", out))
+    # Compare words, not marks: a [text](url) link repeats the URL, and a card mark
+    # carries an icon name that was never prose — counting either as an edit would
+    # report drift on a run that changed nothing.
+    plain = lambda t: re.sub(r"(?m)^\s*##\s+|\*\*|^\s*[-*]\s+|^\s*>\s+|^\s*::[^|]*\|\s*|\s*\|\s*",
+                             " ", re.sub(r"\[([^\]]+)\]\([^)]*\)", r"", t))
+    before, after = strip(plain(body)), strip(plain(out))
     return {"body": out, "changed_words": abs(len(after) - len(before)),
             "same_words": before == after}
 

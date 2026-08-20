@@ -485,10 +485,11 @@ Write the issue. Plain paragraphs — your design handles the rest.`
             <div className="fmt-row">
               <div className="muted" style={{ fontSize: 11.5 }}>
                 {writing
-                  ? <>Formatting: <code>## heading</code>, <code>**bold**</code>, <code>- bullets</code>,{' '}
+                  ? <>Write plain paragraphs — <b>Format with AI</b> adds the headings, callouts
+                      and cards without changing a word. To place them yourself:{' '}
+                      <code>## heading</code>, <code>**bold**</code>, <code>- bullets</code>,{' '}
                       <code>[text](url)</code>, <code>&gt; callout</code>,{' '}
-                      <code>&gt; NEXT UP: …</code>, <code>:: icon | Title | Subtitle</code>.{' '}
-                      Paste plain copy and let <b>Format with AI</b> add them.</>
+                      <code>&gt; NEXT UP: …</code>, <code>:: icon | Title | Subtitle</code>.</>
                   : <>Inline every style — mail clients strip <code>&lt;style&gt;</code> blocks. Use{' '}
                       <code>{'{{{ pm:unsubscribe }}}'}</code> and <code>{'{preferences_url}'}</code> as
                       hrefs in your own footer, and ours is left off.</>}
@@ -503,7 +504,7 @@ Write the issue. Plain paragraphs — your design handles the rest.`
               </label>}
               {writing && (
                 <button className="btn" disabled={!draft.body.trim() || busy !== ''} onClick={doFormat}
-                  title="Add headings, bold and lists to copy written elsewhere — without changing the words">
+                  title="Add headings, callouts and cards to copy written elsewhere — without changing the words">
                   {busy === 'fmt' ? 'Formatting…' : '✦ Format with AI'}
                 </button>
               )}
