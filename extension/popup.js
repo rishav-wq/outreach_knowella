@@ -323,6 +323,21 @@ async function scan() {
   const res = await runAgent('scan')
   if (!res) return
   if (!res.blocks) {
+    // An empty scan is far more often the wrong PAGE than a stale selector. The first
+    // report in the wild was a search results page, and the old message sent the user
+    // hunting a markup change that wasn't there. Name the page instead: only a post
+    // has comments, so anything else is answerable without a debug dump.
+    const u = res.url || ''
+    const where = /\/search\//.test(u) ? 'a search results page'
+      : /\/jobs\//.test(u) ? 'the jobs section'
+      : /\/company\//.test(u) ? 'a company page'
+      : /\/in\//.test(u) ? 'a profile'
+      : /\/(feed\/update|posts|pulse)\/|activity[:\-%]/.test(u) || /\/feed\/?$/.test(u) ? ''
+      : 'not a post'
+    if (where) {
+      msg(`This is ${where}, which has no comments to read. Open the post itself — click through to it, expand its comments, then Scan.`, 'err')
+      return
+    }
     msg('Nothing found. Expand the post’s comments, or open its reactions list ("117 · Like") and scan again — or LinkedIn changed its markup (the extension needs a selector update).', 'err')
     if (res.debug) {
       const list = $('list')
