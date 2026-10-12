@@ -71,6 +71,11 @@ class MongoStore:
         self.db.people.create_index([("email", 1)], unique=True,
                                     partialFilterExpression={"email": {"$exists": True}})
         self.db.people.create_index([("emails", 1)], sparse=True)
+        self.db.people.create_index([("apollo_ids", 1)], sparse=True)
+        self.db.people.create_index([("linkedin_urls", 1)], sparse=True)
+        self.db.people.create_index([("name_keys", 1)], sparse=True)
+        self.db.companies.create_index([("domains", 1)], sparse=True)
+        self.db.companies.create_index([("apollo_org_ids", 1)], sparse=True)
         self.db.people.create_index([("apollo_id", 1)], sparse=True)
         self.db.people.create_index([("linkedin_url", 1)], sparse=True)
         self.db.people.create_index([("name_key", 1)], sparse=True)
@@ -448,22 +453,51 @@ class MongoStore:
         self.db.leads.update_one({"_id": key}, {"$set": {"error": reason}})
 
     # --- people and companies (one record each; see src/crm.py) --------------------
+    # Identity keys are never overwritten. The first value seen stays in the main field;
+    # any other value seen for the same record is added to its plural list (emails,
+    # apollo_ids, linkedin_urls, name_keys / domains, apollo_org_ids), and lookups check
+    # both. Overwriting made a company's Apollo id flip between two values (one company,
+    # two Apollo records), so a later row missed it and created a duplicate.
+    _PERSON_KEYS = (("apollo_id", "apollo_ids"), ("linkedin_url", "linkedin_urls"), ("name_key", "name_keys"))
+    _COMPANY_KEYS = (("domain", "domains"), ("apollo_org_id", "apollo_org_ids"))
+
+    @staticmethod
+    def _either(field: str, plural: str, value: str) -> dict:
+        return {"$or": [{field: value}, {plural: value}]}
+
     def find_person(self, ids: dict) -> dict | None:
         """The existing person for these identity keys, strongest key first. A name at a
         domain is only used for someone with no email: two different people can share a
         name at a company, and their emails tell them apart."""
-        if ids.get("email"):   # their main address, or another one seen for them
-            d = self.db.people.find_one({"$or": [{"email": ids["email"]}, {"emails": ids["email"]}]})
+        if ids.get("email"):
+            d = self.db.people.find_one(self._either("email", "emails", ids["email"]))
             if d:
                 return d
-        for field, key in (("apollo_id", "apollo_id"), ("linkedin_url", "linkedin")):
+        for field, plural, key in (("apollo_id", "apollo_ids", "apollo_id"),
+                                   ("linkedin_url", "linkedin_urls", "linkedin")):
             if ids.get(key):
-                d = self.db.people.find_one({field: ids[key]})
+                d = self.db.people.find_one(self._either(field, plural, ids[key]))
                 if d:
                     return d
         if not ids.get("email") and ids.get("name_key"):
-            return self.db.people.find_one({"name_key": ids["name_key"], "email": {"$exists": False}})
+            return self.db.people.find_one({**self._either("name_key", "name_keys", ids["name_key"]),
+                                            "email": {"$exists": False}})
         return None
+
+    @staticmethod
+    def _keep_keys(existing: dict, fields: dict, keys: tuple) -> tuple[dict, dict]:
+        """Split new values for identity keys: set where the record has none yet, else
+        add to the plural list when different. Returns ($set part, $addToSet part)."""
+        sets, adds = {}, {}
+        for field, plural in keys:
+            v = fields.pop(field, None)
+            if not v:
+                continue
+            if not existing.get(field):
+                sets[field] = v
+            elif existing[field] != v and v not in (existing.get(plural) or []):
+                adds[plural] = v
+        return sets, adds
 
     def _link_company(self, lead: dict, ids: dict, owner: str, owner_email: str, now: str) -> str:
         from pymongo import ReturnDocument
@@ -471,13 +505,15 @@ class MongoStore:
         fields = crm.company_fields(lead)
         existing = None
         if ids.get("domain"):
-            existing = self.db.companies.find_one({"domain": ids["domain"]})
+            existing = self.db.companies.find_one(self._either("domain", "domains", ids["domain"]))
         if existing is None and ids.get("apollo_org_id"):
-            existing = self.db.companies.find_one({"apollo_org_id": ids["apollo_org_id"]})
+            existing = self.db.companies.find_one(self._either("apollo_org_id", "apollo_org_ids", ids["apollo_org_id"]))
         if existing is not None:
-            if existing.get("domain"):
-                fields.pop("domain", None)          # a company's domain is its identity: never moved
-            self.db.companies.update_one({"_id": existing["_id"]}, {"$set": {**fields, "updated_at": now}})
+            sets, adds = self._keep_keys(existing, fields, self._COMPANY_KEYS)
+            upd: dict = {"$set": {**fields, **sets, "updated_at": now}}
+            if adds:
+                upd["$addToSet"] = adds
+            self.db.companies.update_one({"_id": existing["_id"]}, upd)
             return existing["_id"]
         if not ids.get("domain") and not ids.get("apollo_org_id"):
             return ""
@@ -518,12 +554,15 @@ class MongoStore:
         existing = self.find_person(ids)
         created = False
         if existing is not None:
-            upd: dict = {"$set": {**fields, "updated_at": now}}
+            sets, adds = self._keep_keys(existing, fields, self._PERSON_KEYS)
             if ids["email"] and ids["email"] != existing.get("email"):
-                if existing.get("email"):
-                    upd["$addToSet"] = {"emails": ids["email"]}     # same person, another address
-                else:
-                    upd["$set"]["email"] = ids["email"]
+                if not existing.get("email"):
+                    sets["email"] = ids["email"]
+                elif ids["email"] not in (existing.get("emails") or []):
+                    adds["emails"] = ids["email"]                # same person, another address
+            upd: dict = {"$set": {**fields, **sets, "updated_at": now}}
+            if adds:
+                upd["$addToSet"] = adds
             self.db.people.update_one({"_id": existing["_id"]}, upd)
             pid = existing["_id"]
         else:

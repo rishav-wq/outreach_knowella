@@ -38,6 +38,12 @@ def _rows(store, only_unlinked: bool):
                 yield got[k]
 
 
+def _first(*vals):
+    """The first value that isn't None. (Not `a or b`: record number 0 is falsy, and
+    `or` treated the very first person or company as "not found".)"""
+    return next((v for v in vals if v is not None), None)
+
+
 def plan(rows) -> dict:
     """What linking these rows would produce, computed in memory."""
     email, apollo, li, name, has_email = {}, {}, {}, {}, {}
@@ -50,9 +56,9 @@ def plan(rows) -> dict:
         if not (ids["email"] or ids["apollo_id"] or ids["linkedin"] or ids["name_key"]):
             st["rows_without_identity"] += 1
             continue
-        pid = (email.get(ids["email"]) if ids["email"] else None) \
-            or (apollo.get(ids["apollo_id"]) if ids["apollo_id"] else None) \
-            or (li.get(ids["linkedin"]) if ids["linkedin"] else None)
+        pid = _first(email.get(ids["email"]) if ids["email"] else None,
+                     apollo.get(ids["apollo_id"]) if ids["apollo_id"] else None,
+                     li.get(ids["linkedin"]) if ids["linkedin"] else None)
         if pid is None and not ids["email"] and ids["name_key"]:
             cand = name.get(ids["name_key"])
             if cand is not None and not has_email.get(cand):
@@ -73,8 +79,8 @@ def plan(rows) -> dict:
             li.setdefault(ids["linkedin"], pid)
         if ids["name_key"]:
             name.setdefault(ids["name_key"], pid)
-        cid = (dom.get(ids["domain"]) if ids["domain"] else None) \
-            or (org.get(ids["apollo_org_id"]) if ids["apollo_org_id"] else None)
+        cid = _first(dom.get(ids["domain"]) if ids["domain"] else None,
+                     org.get(ids["apollo_org_id"]) if ids["apollo_org_id"] else None)
         if cid is None and (ids["domain"] or ids["apollo_org_id"]):
             cid = st["companies"]
             st["companies"] += 1
