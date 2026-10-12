@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, auth, config, crm, enroll, marketing, pipeline, tagging, unsubscribe
+from . import access, auth, config, crm, enroll, marketing, pipeline, reply_sync, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
@@ -140,6 +140,7 @@ def _load(name: str) -> dict:
     _migrate_leads_once(store)
     _backfill_sources_once(store)
     signals.start_poller(open_store, extra=[osha.poll])
+    reply_sync.start(open_store)
     cfg = store.get_campaign(name)
     if cfg is None:
         raise HTTPException(404, f"campaign '{name}' not found")
@@ -1369,7 +1370,7 @@ def _classify_inbound(store, cfg: dict, inbound: list[dict], lead_email: str, le
         if lead_key:
             store.set_status(lead_key, "suppressed")
     if lead_key and conv_label != "ooo":   # an OOO auto-reply is not a real reply
-        store.mark_replied(lead_key, conv_label)
+        reply_sync.record_reply(store, lead_key, conv_label)
     return conv_label
 
 
@@ -1398,12 +1399,16 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
         who = directory.get(lead_email, {})
         label = _classify_inbound(store, cfg, inbound, lead_email, who.get("key") or "")
         # Apollo's messages API returns ONLY outbound sends (live-verified 2026-07-30:
-        # 234/234 type=outreach_automatic_email) — a reply exists solely as replied=True
-        # on our own message. So replies are counted from that flag; without the reply
-        # text they can't be sentiment-classified, so they land as 'other' in outcomes.
-        out_replied = any(m.get("replied") for m in msgs if not apollo_send.is_inbound(m))
-        if out_replied and not inbound and who.get("key") and not label:
-            store.mark_replied(who["key"], "other")
+        # 234/234 type=outreach_automatic_email): a reply exists solely as replied=True
+        # on our own message, with Apollo's own reply_class beside it. That class is the
+        # label (src/reply_sync.py), and recording it never downgrades a known one.
+        replied_msg = next((m for m in msgs if not apollo_send.is_inbound(m) and m.get("replied")), None)
+        out_replied = replied_msg is not None
+        if out_replied and not inbound and not label:
+            rc = replied_msg.get("reply_class") or ""
+            label = reply_sync.label_for(rc)
+            if who.get("key") and label != "ooo":       # an out-of-office is not a reply
+                reply_sync.record_reply(store, who["key"], label, rc)
         # bounce handling: a bounced send marks the address undeliverable (blocks any
         # future send via the verification gate) and flags the lead
         bounced = any(m.get("bounce") for m in msgs if not apollo_send.is_inbound(m))
@@ -1596,7 +1601,7 @@ def ab(campaign: str):
             for m in apollo_send.list_replies(sid):
                 who = directory.get((m.get("from_email") or m.get("from_address") or "").lower())
                 if who:
-                    store.mark_replied(who["key"])
+                    reply_sync.record_reply(store, who["key"], "other")
         except Exception:
             pass
     stats = store.ab_stats(cfg["name"])
@@ -3785,6 +3790,23 @@ def segment_put(sid: str, w: SegmentWrite):
     store.add_segment_event(sid, user.get("id", ""), user.get("email", ""), plan["action"],
                             {k: v for k, v in plan["set"].items() if k in ("status", "mtgs", "note")})
     return {"doc": tr.public_segment(new), "action": plan["action"]}
+
+
+# --- reply sync (src/reply_sync.py): Apollo's reply classes, deliveries, bounces ------
+@app.get("/api/replies/sync")
+def reply_sync_status():
+    state = open_store().get_setting(reply_sync.SETTING) or {}
+    return {"last": state.get("last") or {}, "every_hours": reply_sync.SYNC_HOURS,
+            "running": reply_sync._lock.locked()}
+
+
+@app.post("/api/replies/sync")
+def reply_sync_now():
+    """Start a sync now (admins), in the background: it can take a few minutes."""
+    if reply_sync._lock.locked():
+        return {"started": False, "message": "a sync is already running"}
+    threading.Thread(target=lambda: reply_sync.run(open_store()), daemon=True, name="reply-sync-now").start()
+    return {"started": True}
 
 
 # --- the All leads and Companies pages (src/crm_api.py) ----------------------

@@ -197,6 +197,8 @@ def derived_lead_stage(facts: dict) -> str:
         return "Interested"
     if "not_interested" in labels:
         return "Not interested"
+    if "wrong_person" in labels:
+        return "Wrong person"
     if facts.get("replied") or labels:
         return "Replied"
     if facts.get("sent"):

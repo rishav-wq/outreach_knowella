@@ -303,6 +303,49 @@ function Customers() {
   )
 }
 
+// The Apollo reply sync (admins): every few hours it reads every message of every
+// campaign's sequence, so replies count with Apollo's own class and stages move.
+function ReplySync() {
+  const [st, setSt] = useState(null)
+  const [msg, setMsg] = useState('')
+  const load = () => api.getReplySync().then(setSt).catch(() => setSt({}))
+  useEffect(() => { load() }, [])
+  const now = async () => {
+    setMsg('')
+    try {
+      const r = await api.runReplySync()
+      setMsg(r.started ? 'Started. It takes a few minutes; refresh this page to see the result.' : (r.message || 'Not started.'))
+      setTimeout(load, 4000)
+    } catch (e) { setMsg(api.errorText(e)) }
+  }
+  if (!st) return null
+  const l = st.last || {}
+  const when = l.at ? new Date(l.at).toLocaleString() : ''
+  const replies = ['interested', 'not_interested', 'wrong_person', 'opt_out', 'other']
+    .map((k) => [k, l[`reply_${k}`] || 0]).filter(([, n]) => n)
+  return (
+    <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="drawer-label">Replies from Apollo</div>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+        Every {st.every_hours} hours the app reads every message of every campaign’s Apollo sequence: which step went out
+        when, who replied and how Apollo classed the reply (interested, not interested, wrong person…), and bounces.
+        Lead stages and campaign outcomes follow from it. Apollo doesn’t share the reply text itself.
+      </div>
+      {l.at ? (
+        <div style={{ fontSize: 13, marginBottom: 10 }}>
+          Last run {when}: {l.messages || 0} messages across {l.sequences || 0} sequence{l.sequences === 1 ? '' : 's'}
+          {l.new_replies ? `, ${l.new_replies} new repl${l.new_replies === 1 ? 'y' : 'ies'}` : ''}
+          {replies.length ? ` (${replies.map(([k, n]) => `${n} ${k.replace('_', ' ')}`).join(', ')})` : ''}
+          {l.bounced ? `, ${l.bounced} bounced` : ''}.
+          {l.stopped && <div className="pub-warn">Stopped early: {l.stopped}.</div>}
+        </div>
+      ) : <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{st.running ? 'Running now…' : 'Not run yet.'}</div>}
+      <button className="btn" onClick={now} disabled={st.running}>{st.running ? 'Running…' : 'Sync now'}</button>
+      {msg && <div className="banner" style={{ marginTop: 10, marginBottom: 0 }}>{msg}</div>}
+    </motion.section>
+  )
+}
+
 export default function Settings({ campaign }) {
   const me = useMe()
   // The sending side belongs to a campaign: shown to sales and admins who have one.
@@ -367,6 +410,7 @@ export default function Settings({ campaign }) {
       <LinkedInCapture />
       <Suppression />
       <Customers />
+      {isAdmin(me) && <ReplySync />}
     </div>
   )
 }

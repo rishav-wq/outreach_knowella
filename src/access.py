@@ -183,6 +183,8 @@ POLICY: dict[tuple[str, str], object] = {
     ("GET", "/api/companies/{cid}"): SALES,
     ("PATCH", "/api/companies/{cid}"): SALES,
     ("POST", "/api/companies/{cid}/notes"): SALES,
+    ("GET", "/api/replies/sync"): ADMIN,             # the Apollo reply sync: status
+    ("POST", "/api/replies/sync"): ADMIN,            # ...and a run now (Apollo calls)
     ("GET", "/api/customers"): SALES,                # existing customers: everyone in sales sees the list
     ("POST", "/api/customers"): ADMIN,
     ("DELETE", "/api/customers/{domain}"): ADMIN,

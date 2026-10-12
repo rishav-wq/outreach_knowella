@@ -87,6 +87,7 @@ class MongoStore:
         self.db.companies.create_index([("owner", 1)])
         self.db.leads.create_index([("person_id", 1)], sparse=True)
         self.db.leads.create_index([("company_id", 1)], sparse=True)
+        self.db.messages.create_index([("enrollment", 1)])
         self.db.activities.create_index([("person_id", 1), ("at", -1)])
         self.db.activities.create_index([("company_id", 1), ("at", -1)])
 

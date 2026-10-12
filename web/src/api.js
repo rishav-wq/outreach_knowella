@@ -87,6 +87,10 @@ export const listCustomers = () => apiGet('/api/customers')
 export const addCustomers = (domains, name = '') => apiSend('/api/customers', 'POST', { domains, name })
 export const removeCustomer = (domain) => apiSend(`/api/customers/${encodeURIComponent(domain)}`, 'DELETE', {})
 
+// the Apollo reply sync (admins): its last run, and a run now
+export const getReplySync = () => apiGet('/api/replies/sync')
+export const runReplySync = () => apiSend('/api/replies/sync', 'POST', {})
+
 export const getCampaigns = () => apiGet('/api/campaigns')
 export const createCampaign = (payload) => apiSend('/api/campaigns', 'POST', payload)
 export const getStatus = (c, light = false) => apiGet(`/api/status?campaign=${encodeURIComponent(c)}${light ? '&light=1' : ''}`)

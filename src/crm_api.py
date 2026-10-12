@@ -198,9 +198,21 @@ def _timeline(store, person_ids: list[str], company_id: str, enrollments: list[d
                     "by": (a.get("by") or {}).get("label", ""), "by_id": (a.get("by") or {}).get("id", ""),
                     "person_id": a.get("person_id", ""), "campaign": a.get("campaign", ""),
                     "pinned": bool(a.get("pinned")), "meta": a.get("meta") or {}})
+    # every step Apollo delivered (src/reply_sync.py); before a sync has seen a lead's
+    # messages, just the first email from the send record
+    msgs: dict[str, list[dict]] = {}
+    for m in store.db.messages.find({"enrollment": {"$in": [e["_id"] for e in enrollments]}},
+                                    {"enrollment": 1, "step": 1, "status": 1, "delivered_at": 1, "bounce": 1}):
+        msgs.setdefault(m["enrollment"], []).append(m)
     for e in enrollments:
         k, camp, pid = e["_id"], e.get("campaign", ""), e.get("person_id", "")
-        if k in facts.sent:
+        delivered = [m for m in msgs.get(k, []) if m.get("delivered_at")]
+        for m in delivered:
+            step = f"Email {m['step']}" if m.get("step") else "Email"
+            out.append({"id": f"msg:{m['_id']}", "type": "email_sent", "at": m["delivered_at"], "campaign": camp,
+                        "person_id": pid, "body": f"{step} delivered · {camp}" + (" · bounced" if m.get("bounce") else ""),
+                        "by": "", "derived": True})
+        if not delivered and k in facts.sent:
             out.append({"id": f"sent:{k}", "type": "email_sent", "at": _iso(facts.sent[k]), "campaign": camp,
                         "person_id": pid, "body": f"First email sent · {camp}", "by": "", "derived": True})
         if k in facts.replies:
