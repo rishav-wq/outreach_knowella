@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
+import { useMe, isAdmin, canSales, canMarketing } from '../me'
 
 // Operational settings only. Campaign choices (offer, audience filters, voice,
 // sending) are edited in the same dialog as creation — the ⋮ button next to the
@@ -191,6 +192,7 @@ function LinkedInCapture() {
 // Global do-not-contact list (compliance): emails + whole domains, enforced at
 // pull, pipeline, and send. Shared across all campaigns.
 function Suppression() {
+  const admin = isAdmin(useMe())   // anyone can add a do-not-contact; only admins lift one
   const [items, setItems] = useState(null)
   const [val, setVal] = useState('')
   const [err, setErr] = useState('')
@@ -231,7 +233,7 @@ function Suppression() {
               <li key={it.value}>
                 <code>{it.value}</code>
                 {it.reason && <span className="muted"> · {it.reason}</span>}
-                <button className="icon-btn" title="Remove" onClick={() => remove(it.value)}><Icon name="x" size={13} /></button>
+                {admin && <button className="icon-btn" title="Remove" onClick={() => remove(it.value)}><Icon name="x" size={13} /></button>}
               </li>
             ))}
           </ul>
@@ -241,15 +243,29 @@ function Suppression() {
 }
 
 export default function Settings({ campaign }) {
+  const me = useMe()
+  // The sending side belongs to a campaign: shown to sales and admins who have one.
+  const salesSide = canSales(me) && !!campaign
   const [status, setStatus] = useState(null)
   const [boxes, setBoxes] = useState([])
   const [mailboxId, setMailboxId] = useState('')
 
   useEffect(() => {
+    if (!salesSide) return
     setStatus(null)
     api.getStatus(campaign).then((s) => { setStatus(s); setMailboxId(s.mailbox_id || '') }).catch(() => setStatus({}))
     api.getMailboxes().then((d) => setBoxes(d.mailboxes || [])).catch(() => {})
-  }, [campaign])
+  }, [campaign, salesSide])
+
+  if (!salesSide) {
+    return (
+      <div className="settings">
+        {canMarketing(me) && <MarketingSending />}
+        <LinkedInCapture />
+        <Suppression />
+      </div>
+    )
+  }
 
   if (!status) {
     return (
@@ -273,7 +289,9 @@ export default function Settings({ campaign }) {
           <div className="set-conn-sub">
             {connected
               ? <>Approved leads send through your Apollo sequence from <code>{curBox ? curBox.email : (mailboxId ? `${mailboxId.slice(0, 8)}…` : '—')}</code></>
-              : <>Set <code>APOLLO_API_KEY</code> plus a sequence and mailbox (⋮ next to the campaign → Send). Reviewing and approving work without it.</>}
+              : isAdmin(me)
+                ? <>Set <code>APOLLO_API_KEY</code> plus a sequence and mailbox (⋮ next to the campaign → Send). Reviewing and approving work without it.</>
+                : <>An admin connects this campaign’s mailbox and Apollo sequence. Reviewing and approving work without it.</>}
           </div>
         </div>
       </motion.section>
@@ -283,7 +301,7 @@ export default function Settings({ campaign }) {
       </div>
 
       <SendingHealth campaign={campaign} />
-      <MarketingSending />
+      {canMarketing(me) && <MarketingSending />}
       <LinkedInCapture />
       <Suppression />
     </div>

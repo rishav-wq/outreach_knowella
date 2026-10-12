@@ -7,6 +7,25 @@ services:
       dockerfile: Dockerfile
     env_file: ../.env          # MONGO_URI/MONGO_DB, APOLLO/GOOGLE/TAVILY/CLERK keys
     restart: unless-stopped
+    # Cap the app below the VM's RAM. In Oct 2026 it grew until the 2 GB VM was
+    # thrashing and stopped answering, with nothing to restart it. With a cap the
+    # kernel kills the app instead, and `restart` brings it straight back.
+    # 1200m fits an e2-small (2 GB, with Caddy and the OS); use ~3g on an e2-medium.
+    mem_limit: ${APP_MEM_LIMIT:-1200m}
+    # Marks the container unhealthy when the API stops answering (visible in
+    # `docker ps`). Docker Compose does not restart on unhealthy by itself; the
+    # memory cap above is what turns a hang into a restart.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     expose:
       - "7860"
     # Campaigns are written as config/*.yaml at runtime. Without this volume a
@@ -21,6 +40,11 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "80:80"
       - "443:443"

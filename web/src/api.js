@@ -9,9 +9,25 @@ import { getAuthToken } from './auth'
 // web/.env.production (same-origin, since FastAPI serves this app in prod).
 const BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8010'
 const u = (p) => `${BASE}${p}`
+// Errors carry the HTTP status, for callers that treat some codes differently
+// (a 409 version clash, a 404 "nothing uploaded yet").
 const json = (r) => {
-  if (!r.ok) return r.text().then((t) => { throw new Error(t || r.statusText) })
+  if (!r.ok) {
+    return r.text().then((t) => {
+      const e = new Error(t || r.statusText)
+      e.status = r.status
+      throw e
+    })
+  }
   return r.json()
+}
+// The server's own words from an error: FastAPI's {"detail": "..."} or
+// {"detail": {"message": "..."}}, else the raw text.
+export const errorText = (e) => {
+  try {
+    const d = JSON.parse(e.message).detail
+    return typeof d === 'string' ? d : (d?.message || e.message)
+  } catch { return String(e?.message || e) }
 }
 
 async function authHeaders(extra = {}) {
@@ -26,6 +42,29 @@ const apiSend = (p, method, body) =>
     .then(json)
 const apiForm = (p, fd) =>
   authHeaders().then((h) => fetch(u(p), { method: 'POST', headers: h, body: fd })).then(json)
+
+// who is signed in, and the people who use the app (admins)
+export const getMe = () => apiGet('/api/me')
+export const listUsers = () => apiGet('/api/users')
+export const updateUser = (id, patch) => apiSend(`/api/users/${encodeURIComponent(id)}`, 'PATCH', patch)
+export const getCampaignOwners = () => apiGet('/api/campaigns/owners')
+export const setCampaignOwner = (campaign, owner) => apiSend('/api/campaign/owner', 'POST', { campaign, owner })
+// training: the playbook (adapted for the sandboxed frame), saved progress, the manager view
+export const getTrainingPage = () => apiGet('/api/training/page')
+export const saveTrainingState = (key, value, version) =>
+  apiSend(`/api/training/state/${encodeURIComponent(key)}`, 'PUT', { value, version })
+export const uploadPlaybook = (file) => {
+  const fd = new FormData(); fd.append('file', file)
+  return apiForm('/api/training/content', fd)
+}
+export const listPlaybookVersions = () => apiGet('/api/training/content')
+export const getTrainingTeam = () => apiGet('/api/training/team')
+export const getTrainingEvents = (uid) => apiGet(`/api/training/team/${encodeURIComponent(uid)}/events`)
+export const setSignoff = (user, item, value) => apiSend('/api/training/signoff', 'PUT', { user, item, value })
+// the Target board's shared rows (industry x persona)
+export const getSegments = () => apiGet('/api/segments')
+export const getSegment = (id) => apiGet(`/api/segments/${encodeURIComponent(id)}`)
+export const putSegment = (id, body) => apiSend(`/api/segments/${encodeURIComponent(id)}`, 'PUT', body)
 
 export const getCampaigns = () => apiGet('/api/campaigns')
 export const createCampaign = (payload) => apiSend('/api/campaigns', 'POST', payload)

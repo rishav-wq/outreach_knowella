@@ -21,3 +21,7 @@ out/
 .vscode/
 .idea/
 .DS_Store
+
+# Internal BDR training playbook (pricing, contract terms): never commit, this repo is public.
+# The app stores it in the database (Training > Upload new version).
+Knowella_BDR_Training_Playbook*.html

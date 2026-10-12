@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
+import { useMe, isAdmin } from '../me'
 
 // The attribution spine. Every lead carries the place it came from — a LinkedIn
 // group, a community, a publication, an Apollo search — and this page shows what
@@ -21,6 +22,7 @@ const TYPE_LABEL = {
 const rate = (s) => (s.sent > 0 ? (s.replied / s.sent) * 100 : null)
 
 export default function Sources() {
+  const admin = isAdmin(useMe())   // deleting a source unlinks it from every lead: admins only
   const [rows, setRows] = useState(null)
   const [notesFor, setNotesFor] = useState(null)   // source id being annotated
   const [draft, setDraft] = useState('')
@@ -110,7 +112,7 @@ export default function Sources() {
                     {rate(s) === null ? '—' : `${rate(s).toFixed(2)}%`}
                   </td>
                   <td>{s.meetings > 0 ? <span className="badge s-approved">{s.meetings}</span> : <span className="muted">0</span>}</td>
-                  <td><button className="icon-btn" title="Delete source" onClick={() => remove(s)}><Icon name="trash" size={13} /></button></td>
+                  <td>{admin && <button className="icon-btn" title="Delete source" onClick={() => remove(s)}><Icon name="trash" size={13} /></button>}</td>
                 </tr>
               ))}
             </tbody>

@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import { stagger, tap } from './anim'
+import { useMe, isAdmin } from '../me'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
@@ -12,6 +13,7 @@ import { avatarTint, initials } from './avatar'
 // Where leads come in and live. Apollo is the primary source (pulled directly by
 // the campaign's ICP); CSV import stays for any hand-built or external list.
 export default function Leads({ campaign, onNavigate }) {
+  const admin = isAdmin(useMe())   // Apollo pulls spend the shared credits: admins run them
   const [leads, setLeads] = useState(null)
   const [q, setQ] = useState('')
   const [dateFilter, setDateFilter] = useState('all')   // all | today | 7d | 30d — by pull date
@@ -90,6 +92,7 @@ export default function Leads({ campaign, onNavigate }) {
 
   const sourceActions = (
     <div className="import-controls">
+      {admin && <>
       <select className="src-select" value={limit} onChange={(e) => setLimit(Number(e.target.value))} title="How many leads to pull from Apollo" disabled={!!busy}>
         <option value={5}>5 leads</option>
         <option value={10}>10 leads</option>
@@ -102,6 +105,7 @@ export default function Leads({ campaign, onNavigate }) {
       <motion.button className="btn primary" {...tap} disabled={!!busy} onClick={pullApollo}>
         {busy === 'apollo' ? <><span className="spinner" /> Pulling…</> : <><Icon name="download" size={15} /> Pull from Apollo</>}
       </motion.button>
+      </>}
       <motion.label className={`btn ${busy === 'csv' ? 'is-busy' : ''}`} {...tap}>
         {busy === 'csv' ? <><span className="spinner spinner-dark" /> Importing…</> : <><Icon name="upload" size={15} /> Import CSV</>}
         <input type="file" accept=".csv" hidden disabled={!!busy} onChange={onUpload} />
@@ -132,7 +136,9 @@ export default function Leads({ campaign, onNavigate }) {
         <motion.div className="empty" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <div className="empty-icon"><Icon name="download" size={24} /></div>
           <h3>Bring in your first leads</h3>
-          <p className="muted">Pull directly from Apollo using this campaign&apos;s ICP — titles, industries, size, and geographies from the config. Or import a CSV for any other list. Missing domains and emails are enriched automatically.</p>
+          <p className="muted">{admin
+            ? <>Pull directly from Apollo using this campaign&apos;s ICP — titles, industries, size, and geographies from the config. Or import a CSV for any other list. Missing domains and emails are enriched automatically.</>
+            : <>Import a CSV of the people you want to reach. Missing domains and emails are enriched automatically. Pulls from Apollo spend the team&apos;s shared credits, so an admin runs those for you.</>}</p>
           <div className="empty-actions">{sourceActions}</div>
         </motion.div>
       </div>

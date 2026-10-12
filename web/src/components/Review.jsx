@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import Kanban from './Kanban'
+import { useMe, isAdmin } from '../me'
 
 // The hero: a focused, one-lead-at-a-time review of AI drafts and their
 // verified evidence — the mechanic that separates this product from the
@@ -51,6 +52,7 @@ function FollowupCard({ campaign, leadKey, fu, onSaved }) {
 }
 
 export default function Review({ campaign }) {
+  const admin = isAdmin(useMe())   // which mailboxes a campaign sends from is an admin's call
   const [items, setItems] = useState(null)
   const [i, setI] = useState(0)
   const [view, setView] = useState('queue')       // 'queue' | 'board'
@@ -273,7 +275,12 @@ export default function Review({ campaign }) {
           <button className={view === 'queue' ? 'on' : ''} onClick={() => setView('queue')}><Icon name="list" size={14} /> Queue</button>
           <button className={view === 'board' ? 'on' : ''} onClick={() => setView('board')}><Icon name="columns" size={14} /> Board</button>
         </div>
-        {boxes.length > 0 && (
+        {boxes.length > 0 && !admin && mailboxIds.length > 0 && (
+          <span className="guard-note" title="Which mailboxes this campaign sends from. An admin sets this.">
+            from {mailboxIds.length === 1 ? emailOf(mailboxIds[0]) : `${mailboxIds.length} mailboxes`}
+          </span>
+        )}
+        {boxes.length > 0 && admin && (
           <div className="mbox-select">
             <button className="src-select mbox-btn" onClick={() => setMboxOpen((o) => !o)}
               title="Which Apollo mailboxes this campaign sends from — sends rotate across them">

@@ -501,10 +501,14 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
         people = pending[:limit] if limit and limit > 0 else pending
         total = len(people)
         remaining_after = len(pending) - total
+        # heartbeat: proof a live worker owns this blast. The worker is a thread in
+        # the app process, so a restart mid-send used to leave the blast 'sending'
+        # forever — undeletable and unsendable. See api._blast_stalled.
         store.update_blast(bid, {"status": "sending",
                                  "stats.recipients": len(already) + total,
                                  "audience_size": len(everyone),
-                                 "progress": {"done": 0, "total": total}})
+                                 "progress": {"done": 0, "total": total},
+                                 "heartbeat": datetime.now(timezone.utc).isoformat()})
         done = 0
         for i in range(0, total, CHUNK):
             chunk = people[i:i + CHUNK]
@@ -529,7 +533,8 @@ def run_blast(store, bid: str, limit: int = 0) -> None:
                 if not ok:
                     log.warning("[blast %s] %s rejected: %s", bid, p["email"], res.get("Message"))
             done += len(chunk)
-            store.update_blast(bid, {"progress": {"done": done, "total": total}})
+            store.update_blast(bid, {"progress": {"done": done, "total": total},
+                                     "heartbeat": datetime.now(timezone.utc).isoformat()})
         # 'partial' is a real state, not a failure: the batch went, more are waiting.
         # Calling it 'sent' would hide that two hundred people never got it.
         store.update_blast(bid, {

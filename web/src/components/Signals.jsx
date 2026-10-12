@@ -4,6 +4,7 @@ import * as api from '../api'
 import Icon from './Icon'
 import Skeleton from './Skeleton'
 import SourceFlow from './SourceFlow'
+import { useMe, isAdmin, canSales, canMarketing } from '../me'
 
 // The listening post — three registers, in the order they deserve attention.
 //
@@ -30,6 +31,8 @@ const ago = (iso) => {
 }
 
 export default function Signals() {
+  const me = useMe()
+  const sales = canSales(me)        // routing and contact lookups belong to sales
   const [data, setData] = useState(null)
   const [backlog, setBacklog] = useState([])
   const [view, setView] = useState('queue')
@@ -43,7 +46,7 @@ export default function Signals() {
     // and shipping them to the browser just to filter them out wastes the payload.
     api.listSignals('new').then(setData).catch(() => setData({ signals: [], counts: {} })),
     api.listBacklog().then(setBacklog).catch(() => setBacklog([])),
-    api.getRouting().then(setRoute).catch(() => setRoute(null)),
+    sales ? api.getRouting().then(setRoute).catch(() => setRoute(null)) : null,
   ])
   useEffect(() => { load() }, [])
 
@@ -116,8 +119,8 @@ export default function Signals() {
 
       <div className="seg sig-seg" role="tablist">
         {[['queue', `Queue${actionable ? ` (${actionable})` : ''}`],
-          ['routing', `Routing${route?.flows?.length ? ` (${route.campaigns.reduce((a, c) => a + c.ready, 0)})` : ''}`],
-          ['backlog', `Backlog${backlog.length ? ` (${backlog.length})` : ''}`]].map(([k, label]) => (
+          sales && ['routing', `Routing${route?.flows?.length ? ` (${route.campaigns.reduce((a, c) => a + c.ready, 0)})` : ''}`],
+          ['backlog', `Backlog${backlog.length ? ` (${backlog.length})` : ''}`]].filter(Boolean).map(([k, label]) => (
           <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{label}</button>
         ))}
       </div>
@@ -129,7 +132,7 @@ export default function Signals() {
               inboundReady={data.inbound_ready} onClearTalk={clearTalk}
               onReload={load} onNote={setNote} />
           )}
-          {view === 'routing' && (
+          {view === 'routing' && sales && (
             <RoutingView cited={citedRouted} route={route} flow={flow}
               setFlow={setFlow} onReload={load} onNote={setNote} />
           )}
@@ -143,6 +146,7 @@ export default function Signals() {
 // --- queue -------------------------------------------------------------------
 
 function Queue({ people, cited, talk, busy, inboundReady, onClearTalk, onReload, onNote }) {
+  const admin = isAdmin(useMe())
   const [adding, setAdding] = useState(false)
   const [allTalk, setAllTalk] = useState(false)
 
@@ -200,7 +204,7 @@ function Queue({ people, cited, talk, busy, inboundReady, onClearTalk, onReload,
         <section className="sig-sect">
           <h4 className="sig-h sig-h-quiet">
             Being talked about <span className="sig-h-n">{talk.length}</span>
-            <button className="btn ghost sig-h-act" onClick={onClearTalk} disabled={!!busy}>Clear all</button>
+            {admin && <button className="btn ghost sig-h-act" onClick={onClearTalk} disabled={!!busy}>Clear all</button>}
           </h4>
           <p className="sig-h-sub">
             Pages mentioning our category. Nobody to email — this is awareness, and post material.
@@ -422,6 +426,7 @@ function CitationTable({ rows, hideHeading, onReload, onNote }) {
 }
 
 function CitationActions({ s, onReload, onNote }) {
+  const me = useMe()
   const [cands, setCands] = useState(null)
   const [busy, setBusy] = useState('')
   const [campaigns, setCampaigns] = useState([])
@@ -466,6 +471,13 @@ function CitationActions({ s, onReload, onNote }) {
   }
 
   if (done) return <div className="pin-done">✓ Added {done.added} to <b>{done.campaign}</b></div>
+  if (!canSales(me)) {
+    return (
+      <div className="cit-act">
+        <a className="btn" href={s.url} target="_blank" rel="noreferrer">Read the release ↗</a>
+      </div>
+    )
+  }
   if (cands === null) {
     return (
       <div className="cit-act">
@@ -499,10 +511,16 @@ function CitationActions({ s, onReload, onNote }) {
           <div key={o.id} className="cit-org">
             <div className="cit-org-h">
               <b>{o.name}</b> <span className="sig-dom">{o.domain}</span>
-              <button className="btn primary" disabled={!!busy || !campaign || !sel.length}
-                onClick={() => add(o)}>
-                {busy === o.id ? 'Adding…' : `Add ${sel.length}`}
-              </button>
+              {isAdmin(me) ? (
+                <button className="btn primary" disabled={!!busy || !campaign || !sel.length}
+                  onClick={() => add(o)}>
+                  {busy === o.id ? 'Adding…' : `Add ${sel.length}`}
+                </button>
+              ) : (
+                <span className="cit-free" title="Adding reveals contacts with the team's shared Apollo credits">
+                  An admin adds them (it spends credits)
+                </span>
+              )}
             </div>
             <ul className="cit-people">
               {o.contacts.map((p) => (
@@ -584,6 +602,7 @@ function AddByHand({ onDone, onCancel }) {
 const STAGES = ['idea', 'drafted', 'published']
 
 function Backlog({ rows, onReload }) {
+  const mkt = canMarketing(useMe())   // the backlog is marketing's to prune
   const [q, setQ] = useState('')
   const add = async () => { if (!q.trim()) return; await api.addBacklog({ question: q.trim() }); setQ(''); onReload() }
 
@@ -618,9 +637,11 @@ function Backlog({ rows, onReload }) {
                     onClick={() => api.setBacklogStatus(b.id, st).then(onReload)}>{st}</button>
                 ))}
               </div>
-              <button className="icon-btn" title="Delete" onClick={() => api.deleteBacklog(b.id).then(onReload)}>
-                <Icon name="trash" size={13} />
-              </button>
+              {mkt && (
+                <button className="icon-btn" title="Delete" onClick={() => api.deleteBacklog(b.id).then(onReload)}>
+                  <Icon name="trash" size={13} />
+                </button>
+              )}
             </div>
           ))}
         </div>

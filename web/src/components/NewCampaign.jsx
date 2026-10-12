@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import * as api from '../api'
 import Icon from './Icon'
+import { useMe, isAdmin } from '../me'
 
 // Simple, filter-driven campaign creation: name your offer (pre-filled with
 // Knowella's — you always sell the same thing), pick your Apollo audience
@@ -49,6 +50,10 @@ const sequenceOf = (f) => ({
 
 export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
   const isEdit = !!edit
+  // Sending (mailboxes, the Apollo sequence) and Apollo pulls are wired by an admin:
+  // they use the company's mailboxes and its shared credits. The server ignores a
+  // non-admin's sending choices anyway, so they aren't offered.
+  const admin = isAdmin(useMe())
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -72,7 +77,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     titles: [], industries: [], geographies: ['United States'], sizes: [], exclude: [], codes: [], lookalike_seeds: [], schools: [],
     seniorities: ['Director', 'VP', 'C-suite', 'Head', 'Owner'],   // decision-makers by default
     verified_only: true,
-    exclude_titles: [], hiring_titles: [], pull_limit: 25,
+    exclude_titles: [], hiring_titles: [], pull_limit: admin ? 25 : 0,
     // Send — seq_steps[0] is the first email; entries after it are follow-ups
     sequence_id: '', mailbox_ids: [], daily_cap: 50, control_pct: 20,
     use_ai: true, use_mailbox_signature: true, cross_campaign_dedup: false,
@@ -109,9 +114,10 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   useEffect(() => {
+    if (!admin) return
     api.getMailboxes().then((d) => setMailboxes(d.mailboxes || [])).catch(() => {})
     api.getSequences().then((d) => setSequences(d.sequences || [])).catch(() => {})
-  }, [])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live audience size: the same total_entries Apollo's own People search shows
   // for these filters, so the count can be verified against their UI. Searching
@@ -207,7 +213,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
       }
       // "＋ create new sequence": build a ready 3-step sequence in Apollo first
       let sequenceId = f.sequence_id
-      if (sequenceId === '__new__') {
+      if (admin && sequenceId === '__new__') {
         setStatus('Creating the Apollo sequence…')
         const seq = await api.createSequence(f.name,
           f.seq_steps.slice(1).map((s) => Math.max(1, Number(s.wait_days) || 3)))
@@ -232,7 +238,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         })
         slug = r.created
       }
-      const n = Number(f.pull_limit)
+      const n = admin ? Number(f.pull_limit) : 0
       if (n > 0) {
         setStatus(`Pulling ${n} leads from Apollo…`)
         try { await api.pullApollo(slug, n) } catch { /* campaign saved; leads can be pulled later */ }
@@ -282,7 +288,9 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     if (step === 1) return (
       <>
         <div className="wizard-note">
-          Pick your <b>Apollo filters</b> below — click to select, or type to add your own. On create, we pull the matching companies + contacts straight from Apollo.
+          Pick your <b>Apollo filters</b> below — click to select, or type to add your own.{admin
+            ? ' On create, we pull the matching companies + contacts straight from Apollo.'
+            : ' They’re saved with the campaign. Pulling from Apollo spends the team’s shared credits, so an admin runs the pull; you can also import a CSV on the Leads page.'}
         </div>
         {field('Job titles', <SearchSelect presets={TITLE_PRESETS} value={f.titles} onChange={(v) => setKey('titles', v)} placeholder="Search titles, or type any + Enter" />, 'The roles you’re targeting — any title works, suggestions are shortcuts.')}
         {field('Seniority', <ChipSelect presets={SENIORITY_LEVELS.map(([l]) => l)} value={f.seniorities} onChange={(v) => setKey('seniorities', v)} allowCustom={false} />, 'Keeps the list to decision-makers — cuts juniors and assistants.')}
@@ -329,7 +337,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         <div className="field-hint" style={{ marginTop: -14, marginBottom: 18 }}>
           Live from Apollo and free to check — the same total a People search with these filters shows in Apollo itself, so you can verify it there. Only revealing contacts costs credits.
         </div>
-        {field('How many leads to pull now',
+        {admin && field('How many leads to pull now',
           <select className="field-input" value={f.pull_limit} onChange={set('pull_limit')}>
             <option value={25}>25 leads</option>
             <option value={50}>50 leads</option>
@@ -344,7 +352,13 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     )
     return (
       <>
-        {field('Send from mailboxes', mailboxes.length
+        {!admin && (
+          <div className="wizard-note">
+            An admin connects the sending side: which mailboxes this campaign sends from and its Apollo sequence.
+            Write the emails below; nothing sends until a draft is approved and sending is wired.
+          </div>
+        )}
+        {admin && field('Send from mailboxes', mailboxes.length
           ? <div className="chip-row">
               {mailboxes.map((b) => {
                 const on = f.mailbox_ids.includes(b.id)
@@ -406,7 +420,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             ))}
           </div>
         ), 'One email per step — anyone who replies stops getting the rest. Templates steer structure and voice; facts always come from each lead’s own research. Follow-ups generate 42% of replies, 4-7 touches is the sweet spot.')}
-        {field('Apollo sequence', sequences.length
+        {admin && field('Apollo sequence', sequences.length
           ? <select className="field-input" value={f.sequence_id} onChange={set('sequence_id')}>
               <option value="">Set later</option>
               <option value="__new__">＋ Create a new {f.seq_steps.length}-email sequence from the plan above (named after this campaign)</option>
@@ -414,8 +428,8 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             </select>
           : input('sequence_id', { placeholder: 'leave empty to set later' }),
           `Where approved leads are added. “＋ Create” builds it in Apollo to match your ${f.seq_steps.length}-email plan above (stop-on-reply, per-campaign stats) — you flip its Activate toggle in Apollo once before the first send. An existing sequence only sends as many steps as it was created with, so prefer “＋ Create” when the plan changes.`)}
-        {field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), 'Not enforced by the app — Apollo paces delivery at its own per-mailbox daily limit, so approved leads always queue and Apollo drips them safely. Left here for reference.')}
-        {field('Signature', (
+        {admin && field('Daily send cap', input('daily_cap', { type: 'number', min: 0 }), 'Not enforced by the app — Apollo paces delivery at its own per-mailbox daily limit, so approved leads always queue and Apollo drips them safely. Left here for reference.')}
+        {admin && field('Signature', (
           <label className="use-ai-toggle">
             <input type="checkbox" checked={f.use_mailbox_signature}
               onChange={(e) => setKey('use_mailbox_signature', e.target.checked)} />
@@ -427,7 +441,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
             </span>
           </label>
         ), 'On by default so no email is ever double-signed. Leave on when your mailbox already appends a signature (Apollo, Gmail…) — the app then adds only the unsubscribe link, which is always included.')}
-        {field('Cross-campaign dedup', (
+        {admin && field('Cross-campaign dedup', (
           <label className="use-ai-toggle">
             <input type="checkbox" checked={f.cross_campaign_dedup}
               onChange={(e) => setKey('cross_campaign_dedup', e.target.checked)} />

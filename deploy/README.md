@@ -22,8 +22,11 @@ git clone https://github.com/rishav-wq/outreach_knowella.git /opt/outreach-agent
 cd /opt/outreach-agent
 # create .env by hand (it is gitignored) — copy values from your local .env:
 #   MONGO_URI, MONGO_DB, APOLLO_API_KEY, GOOGLE_API_KEY, TAVILY_API_KEY,
-#   CLERK_SECRET_KEY, CLERK_PUBLISHABLE_KEY, ALLOWED_EMAIL_DOMAINS
+#   CLERK_SECRET_KEY, CLERK_PUBLISHABLE_KEY, ALLOWED_EMAIL_DOMAINS, ADMIN_EMAILS
 ```
+`ADMIN_EMAILS` (comma-separated) names the admins. Everyone else who signs in starts
+as Sales and sees only the campaigns they own; admins change roles and hand out
+campaigns on the Team page. Without it nobody is an admin (the app shows a warning).
 
 ## 3. DNS + start
 Point an A record (e.g. `outreach.knowella.com`) at the VM's external IP, then:
@@ -49,6 +52,11 @@ Restore: `docker run --rm -i mongo:6 mongorestore --uri "$MONGO_URI" --archive -
 cd /opt/outreach-agent && git pull && \
   DOMAIN=outreach.knowella.com docker compose -f deploy/docker-compose.yml up -d --build
 ```
+
+## The training playbook
+The BDR playbook is internal (pricing, contract terms), so it is never in this repo.
+An admin uploads the HTML file on the Team page; it is stored in the database and
+shown to everyone under Training.
 
 ## Notes
 - The VM can also reach Mongo over its internal IP if both are in the same VPC —

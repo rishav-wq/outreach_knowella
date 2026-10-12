@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import * as api from './api'
 import Icon from './components/Icon'
@@ -15,13 +15,18 @@ import Publications from './components/Publications'
 import Inbox from './components/Inbox'
 import Settings from './components/Settings'
 import NewCampaign from './components/NewCampaign'
+import Training from './components/Training'
+import Team from './components/Team'
 import { UserMenu } from './auth'
+import { MeContext, isAdmin, canSales, canMarketing } from './me'
 import { pageTransition } from './components/anim'
 
 // TWO MODES, one shell — like the product's workspace switcher. Sales is
 // campaign-scoped (picker + the numbered lifecycle); Marketing is Library-scoped
 // (blasts + audiences). Library & Settings are shared: the Library is the bridge
 // between the engines (sales exhaust → marketing fuel → warm clicks → sales).
+// What each role sees follows src/access.py: admins get both modes and the Team
+// page, sales only the sales mode, marketing only the marketing mode.
 const SALES_NAV = [
   { id: 'Overview', slug: 'overview', icon: 'dashboard', step: '01' },
   { id: 'Leads', slug: 'leads', icon: 'users', step: '02' },
@@ -34,10 +39,12 @@ const MKT_NAV = [
   { id: 'Audiences', slug: 'audiences', icon: 'users' },
 ]
 const SHARED_NAV = [
+  { id: 'Training', slug: 'training', icon: 'board', shared: true },
   { id: 'Signals', slug: 'signals', icon: 'inbox', shared: true },
   { id: 'Library', slug: 'library', icon: 'list', shared: true },
   { id: 'Sources', slug: 'sources', icon: 'download', shared: true },
   { id: 'Settings', slug: 'settings', icon: 'gear', shared: true },
+  { id: 'Team', slug: 'team', icon: 'users', shared: true },
 ]
 const NAV = [...SALES_NAV, ...MKT_NAV, ...SHARED_NAV]
 const MKT_IDS = new Set(MKT_NAV.map((n) => n.id))
@@ -49,7 +56,20 @@ const slugToId = (slug) => {
 const idToSlug = (id) => (NAV.find((n) => n.id === id) || NAV[0]).slug
 const tabFromHash = () => slugToId((window.location.hash.split('/')[2] || '').toLowerCase())
 
+const allowedTab = (me, id) => {
+  if (SALES_IDS.has(id) || id === 'Library') return canSales(me)
+  if (MKT_IDS.has(id)) return canMarketing(me)
+  if (id === 'Team') return isAdmin(me)
+  return true
+}
+const homeTab = (me, campaigns) => {
+  if (me.role === 'marketing') return 'Blasts'
+  if (me.role === 'sales' && !(campaigns || []).length) return 'Training'   // a new BDR starts here
+  return 'Overview'
+}
+
 export default function App({ onHome }) {
+  const [me, setMe] = useState(null)               // the signed-in person, from /api/me
   const [campaigns, setCampaigns] = useState(null) // null = still loading
   const [campaign, setCampaign] = useState('')
   const [tab, setTabState] = useState(tabFromHash)
@@ -58,6 +78,7 @@ export default function App({ onHome }) {
   const [sendFrom, setSendFrom] = useState('')     // which mailbox this campaign sends from
   const [error, setError] = useState('')
   const [wizard, setWizard] = useState(false)
+  const routed = useRef(false)
   const reduce = useReducedMotion()
   const counts = status.counts || {}
   const queued = counts.queued || 0
@@ -77,13 +98,33 @@ export default function App({ onHome }) {
   const switchMode = (m) => { setMode(m); setTab(m === 'marketing' ? 'Blasts' : 'Overview') }
 
   useEffect(() => {
-    api.getCampaigns()
+    api.getMe()
+      .then((m) => {
+        setMe(m)
+        if (m.role === 'marketing') setMode('marketing')
+        else if (m.role === 'sales') setMode('sales')
+        return api.getCampaigns()
+      })
       .then((cs) => {
         setCampaigns(cs)
         setCampaign(cs.includes('mycampaign') ? 'mycampaign' : cs[0] || '')
       })
-      .catch(() => setError('Cannot reach the backend. Start it with `uvicorn src.api:app` and reload this page.'))
+      .catch((e) => setError(e.status
+        ? api.errorText(e)
+        : 'Cannot reach the backend. Start it with `uvicorn src.api:app` and reload this page.'))
   }, [])
+
+  // Land on the role's home the first time (a new BDR starts on Training), and never
+  // stay on a page this role can't use (an old bookmark, a typed URL).
+  useEffect(() => {
+    if (!me || campaigns === null) return
+    if (!routed.current) {
+      routed.current = true
+      const fresh = tab === 'Overview' && !(campaigns || []).length
+      if (!allowedTab(me, tab) || fresh) { setTab(homeTab(me, campaigns)); return }
+    }
+    if (!allowedTab(me, tab)) setTab(homeTab(me, campaigns))
+  }, [me, campaigns, tab])
 
   useEffect(() => {
     if (!campaign) return
@@ -104,23 +145,39 @@ export default function App({ onHome }) {
 
   const body = () => {
     if (error) return <div className="banner error">{error}</div>
-    if (campaigns === null) return null
-    if (!campaign) return <p className="muted">No campaigns yet. Click <b>New campaign</b> to create your first one.</p>
-    if (tab === 'Overview') return <Dashboard campaign={campaign} onNavigate={setTab} />
-    if (tab === 'Leads') return <Leads campaign={campaign} onNavigate={setTab} />
-    if (tab === 'Review') return <Review campaign={campaign} />
-    if (tab === 'Inbox') return <Inbox campaign={campaign} />
-    if (tab === 'Library') return <LeadsLibrary onPromoted={() => api.getStatus(campaign).then(setStatus).catch(() => {})} />
+    if (!me || campaigns === null || !allowedTab(me, tab)) return null
+    // pages that don't belong to a campaign
+    if (tab === 'Training') return <Training onNavigate={setTab} />
+    if (tab === 'Team') return <Team />
+    if (tab === 'Library') return <LeadsLibrary onPromoted={() => campaign && api.getStatus(campaign).then(setStatus).catch(() => {})} />
     if (tab === 'Blasts') return <Marketing />
     if (tab === 'Publications') return <Publications />
     if (tab === 'Audiences') return <Audiences />
     if (tab === 'Sources') return <Sources />
     if (tab === 'Signals') return <Signals />
     if (tab === 'Settings') return <Settings campaign={campaign} />
+    // a campaign's own pages
+    if (!campaign) {
+      return (
+        <div className="empty">
+          <h3>No campaigns yet</h3>
+          <p className="muted">Click <b>New campaign</b> to create your first one.
+            {me.role === 'sales' && ' Or ask an admin to give you an existing one.'}</p>
+        </div>
+      )
+    }
+    if (tab === 'Overview') return <Dashboard campaign={campaign} onNavigate={setTab} />
+    if (tab === 'Leads') return <Leads campaign={campaign} onNavigate={setTab} />
+    if (tab === 'Review') return <Review campaign={campaign} />
+    if (tab === 'Inbox') return <Inbox campaign={campaign} />
     return null
   }
 
+  const both = isAdmin(me)                         // only admins switch between the two engines
+  const navItems = [...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...SHARED_NAV].filter((n) => allowedTab(me, n.id))
+
   return (
+    <MeContext.Provider value={me}>
     <div className="layout">
       {/* full-width header, the product's anatomy: logo in the bar, sidebar below */}
       <header className="topbar">
@@ -133,7 +190,7 @@ export default function App({ onHome }) {
         </button>
         <div className="page-title">{tab}</div>
         {/* the instrument register: live send state, always in view */}
-        {campaign && (
+        {campaign && mode === 'sales' && (
           <div className="register">
             {sendFrom && <span className="reg-item" title="This campaign sends from">{sendFrom}</span>}
             {status.guardrails && (
@@ -164,12 +221,14 @@ export default function App({ onHome }) {
       <div className="shell">
       <aside className="sidebar">
         {/* the engine switcher — the product's workspace-switch pattern */}
-        <div className="mode-seg" role="tablist" aria-label="Engine">
-          <button role="tab" aria-selected={mode === 'sales'} className={mode === 'sales' ? 'on' : ''} onClick={() => switchMode('sales')}>Sales</button>
-          <button role="tab" aria-selected={mode === 'marketing'} className={mode === 'marketing' ? 'on' : ''} onClick={() => switchMode('marketing')}>Marketing</button>
-        </div>
+        {both && (
+          <div className="mode-seg" role="tablist" aria-label="Engine">
+            <button role="tab" aria-selected={mode === 'sales'} className={mode === 'sales' ? 'on' : ''} onClick={() => switchMode('sales')}>Sales</button>
+            <button role="tab" aria-selected={mode === 'marketing'} className={mode === 'marketing' ? 'on' : ''} onClick={() => switchMode('marketing')}>Marketing</button>
+          </div>
+        )}
 
-        {mode === 'sales' && (
+        {mode === 'sales' && canSales(me) && (
         <div className="side-campaign">
           <label htmlFor="campaign-select">Campaign</label>
           {campaigns?.length > 0 && (
@@ -189,8 +248,9 @@ export default function App({ onHome }) {
         </div>
         )}
 
+        {me && (
         <nav className="nav">
-          {[...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...SHARED_NAV].map((n) => {
+          {navItems.map((n) => {
             // live register per lifecycle stage: what's waiting at each step
             const total = Object.values(counts).reduce((a, b) => a + b, 0)
             const navCount = n.id === 'Review' ? queued
@@ -208,19 +268,28 @@ export default function App({ onHome }) {
             )
           })}
         </nav>
+        )}
 
         <div className="sidebar-foot">
           <div className="foot-status">
             <span className={`dot ${error ? 'd-error' : 'd-ok'}`} />
-            {error ? 'backend offline' : campaign || 'no campaign'}
+            {error ? 'backend offline' : mode === 'sales' ? (campaign || 'no campaign') : (me?.email || '')}
           </div>
         </div>
       </aside>
 
       <div className="main">
-        <div className="content">
+        <div className={`content ${tab === 'Training' && !error ? 'content-frame' : ''}`}>
           <AnimatePresence mode="wait">
-            <motion.div key={tab + campaign} {...(reduce ? {} : pageTransition)}>
+            {/* campaign pages remount on a campaign switch; the rest (Training's frame
+                above all) don't reload when the picker changes */}
+            <motion.div key={SALES_IDS.has(tab) ? tab + campaign : tab} className="page-body" {...(reduce ? {} : pageTransition)}>
+              {me && !me.admins_configured && (
+                <div className="banner error">
+                  No admins are set up on the server, so nobody can reach the existing campaigns or set roles.
+                  Add <code>ADMIN_EMAILS</code> (comma-separated) to the server’s <code>.env</code> and restart the app.
+                </div>
+              )}
               {body()}
             </motion.div>
           </AnimatePresence>
@@ -257,5 +326,6 @@ export default function App({ onHome }) {
         )}
       </AnimatePresence>
     </div>
+    </MeContext.Provider>
   )
 }

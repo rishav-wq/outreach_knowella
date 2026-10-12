@@ -26,6 +26,34 @@ class MongoStore:
         except Exception as e:
             raise RuntimeError(f"Could not connect to MongoDB: {e}") from e
         self.db = self.client[db_name]
+        try:
+            self.ensure_indexes()
+        except Exception as e:   # never block the app on an index build; say so loudly
+            print(f"[indexes] WARNING: could not ensure indexes: {e}")
+
+    def ensure_indexes(self) -> None:
+        """The indexes the hot queries need. Until 12 Oct 2026 the database had none
+        (`leads` had only `_id`), so every lookup by campaign, status or email scanned
+        the whole collection. Idempotent: create_index is a no-op when it exists."""
+        self.db.leads.create_index([("campaign", 1), ("status", 1)])
+        self.db.leads.create_index([("status", 1)])
+        self.db.leads.create_index([("lead.email", 1)])
+        self.db.leads.create_index([("source_id", 1)], sparse=True)
+        self.db.sends.create_index([("created_at", 1)])
+        self.db.blast_recipients.create_index([("blast", 1)])
+        self.db.blast_recipients.create_index([("email", 1)])
+        self.db.llm_calls.create_index([("key", 1)])
+        self.db.signals.create_index([("dedupe", 1)])
+        self.db.signals.create_index([("status", 1), ("created_at", -1)])
+        self.db.subscribers.create_index([("status", 1)])
+        self.db.capture_tokens.create_index([("hash", 1)])
+        self.db.training_state.create_index([("user", 1)])
+        self.db.training_state.create_index([("key", 1)])
+        self.db.training_events.create_index([("user", 1), ("at", -1)])
+        self.db.training_content.create_index([("uploaded_at", -1)])
+        self.db.training_signoffs.create_index([("user", 1)])
+        self.db.segments.create_index([("org", 1)])
+        self.db.segment_events.create_index([("segment", 1), ("at", -1)])
 
     # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
     # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.
@@ -39,7 +67,156 @@ class MongoStore:
         return d["cfg"] if d else None
 
     def save_campaign(self, slug: str, cfg: dict) -> None:
-        self.db.campaigns.replace_one({"_id": slug}, {"_id": slug, "cfg": cfg}, upsert=True)
+        # $set, not replace: the campaign doc also carries its owner (and replacing it
+        # on every settings save would silently make the campaign ownerless).
+        self.db.campaigns.update_one({"_id": slug}, {"$set": {"cfg": cfg}}, upsert=True)
+
+    # --- campaign ownership (who may work in it; see access.campaign_visible) --------
+    def campaign_owner(self, slug: str) -> str:
+        d = self.db.campaigns.find_one({"_id": slug}, {"owner": 1})
+        return (d or {}).get("owner") or ""
+
+    def set_campaign_owner(self, slug: str, uid: str, email: str = "") -> None:
+        self.db.campaigns.update_one({"_id": slug}, {"$set": {"owner": uid, "owner_email": email}})
+
+    def campaign_owners(self) -> dict:
+        """{slug: owner user id ('' when unowned)} for every campaign."""
+        return {d["_id"]: d.get("owner") or "" for d in self.db.campaigns.find({}, {"owner": 1})}
+
+    # --- training: the playbook file (versions) and each user's saved progress --------
+    def save_training_content(self, doc: dict) -> str:
+        cid = uuid.uuid4().hex[:12]
+        self.db.training_content.insert_one({**doc, "_id": cid})
+        return cid
+
+    def latest_training_content(self, with_html: bool = True) -> dict | None:
+        proj = None if with_html else {"html": 0}
+        return self.db.training_content.find_one({}, proj, sort=[("uploaded_at", -1)])
+
+    def list_training_content(self) -> list[dict]:
+        return list(self.db.training_content.find({}, {"html": 0}).sort("uploaded_at", -1))
+
+    def training_state(self, uid: str) -> dict:
+        """{key: {"value", "version"}} for one user."""
+        return {d["key"]: {"value": d.get("value"), "version": d.get("version", 0)}
+                for d in self.db.training_state.find({"user": uid})}
+
+    def save_training_state(self, uid: str, email: str, key: str, value: str,
+                            expected_version: int) -> int | None:
+        """Write one key if it's still at expected_version. Returns the new version, or
+        None when someone (another tab or device) saved since, so nothing is overwritten
+        silently."""
+        from pymongo.errors import DuplicateKeyError
+        _id = f"{uid}:{key}"
+        now = datetime.now(timezone.utc).isoformat()
+        if expected_version == 0:
+            try:
+                self.db.training_state.insert_one({"_id": _id, "user": uid, "email": email, "key": key,
+                                                   "value": value, "version": 1, "updated_at": now})
+                return 1
+            except DuplicateKeyError:
+                return None
+        r = self.db.training_state.find_one_and_update(
+            {"_id": _id, "version": expected_version},
+            {"$set": {"value": value, "email": email, "updated_at": now}, "$inc": {"version": 1}},
+            return_document=True)
+        return r["version"] if r else None
+
+    def all_training_state(self, key: str) -> dict:
+        """{user id: {"value", "updated_at"}} for one key across everyone (manager view)."""
+        return {d["user"]: {"value": d.get("value"), "updated_at": d.get("updated_at", "")}
+                for d in self.db.training_state.find({"key": key})}
+
+    def add_training_events(self, uid: str, email: str, events: list[dict]) -> None:
+        if events:
+            now = datetime.now(timezone.utc).isoformat()
+            self.db.training_events.insert_many([{**e, "user": uid, "email": email, "at": now} for e in events])
+
+    def training_events_for(self, uid: str, limit: int = 300) -> list[dict]:
+        return list(self.db.training_events.find({"user": uid}, {"_id": 0}).sort("at", -1).limit(limit))
+
+    # Manager sign-offs live apart from the person's own progress, so a manager ticking
+    # one never changes the version of an open playbook (which would make the person's
+    # next save look like a clash with another tab).
+    def set_signoff(self, uid: str, item: str, value: bool, by: str) -> None:
+        self.db.training_signoffs.update_one(
+            {"_id": f"{uid}:{item}"},
+            {"$set": {"user": uid, "item": item, "value": bool(value), "by": by,
+                      "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+
+    def signoffs_for(self, uid: str) -> dict:
+        """{item: True} for the sign-offs this person has."""
+        return {d["item"]: True for d in self.db.training_signoffs.find({"user": uid, "value": True})}
+
+    def all_signoffs(self) -> dict:
+        """{user id: {item: True}} across everyone (manager view)."""
+        out: dict = {}
+        for d in self.db.training_signoffs.find({"value": True}):
+            out.setdefault(d["user"], {})[d["item"]] = True
+        return out
+
+    # --- the Target board: one shared row per industry × persona pair ------------------
+    def list_segments(self, org: str) -> list[dict]:
+        return list(self.db.segments.find({"org": org}))
+
+    def get_segment(self, sid: str) -> dict | None:
+        return self.db.segments.find_one({"_id": sid})
+
+    def apply_segment_change(self, sid: str, org: str, plan: dict) -> dict | None:
+        """Apply a planned change only if the row is still in the state the plan was made
+        against. Returns the new row, or None when someone else changed it first (so two
+        people claiming at once can't both win)."""
+        from pymongo.errors import DuplicateKeyError
+        exp = plan["expect"]
+        q = {"_id": sid, "status": exp.get("status"), "owner": exp.get("owner")}
+        upd: dict = {"$set": {**plan["set"], "org": org,
+                              "updated_at": datetime.now(timezone.utc).isoformat()}}
+        if plan.get("unset"):
+            upd["$unset"] = plan["unset"]
+        try:
+            return self.db.segments.find_one_and_update(q, upd, upsert=True, return_document=True)
+        except DuplicateKeyError:    # the row exists in a different state than expected
+            return None
+
+    def add_segment_event(self, sid: str, uid: str, email: str, action: str, detail: dict) -> None:
+        self.db.segment_events.insert_one({"segment": sid, "user": uid, "email": email, "action": action,
+                                           "detail": detail, "at": datetime.now(timezone.utc).isoformat()})
+
+    # --- users: everyone who has signed in, with their role ---------------------------
+    def get_user(self, uid: str) -> dict | None:
+        return self.db.users.find_one({"_id": uid}) if uid else None
+
+    def ensure_user(self, uid: str, email: str, name: str, role: str, active: bool = True) -> dict:
+        """First sign-in creates the user with `role` (and `active`); afterwards the stored
+        values win. Email and name follow Clerk, so a renamed account shows its current name."""
+        from pymongo.errors import DuplicateKeyError
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            self.db.users.update_one(
+                {"_id": uid},
+                {"$setOnInsert": {"role": role, "active": bool(active), "created_at": now},
+                 "$set": {"email": (email or "").strip().lower(), "name": name or ""}},
+                upsert=True)
+        except DuplicateKeyError:   # two first requests at once; the other one created it
+            pass
+        return self.db.users.find_one({"_id": uid})
+
+    def list_users(self) -> list[dict]:
+        return list(self.db.users.find({}).sort("created_at", 1))
+
+    def update_user(self, uid: str, fields: dict) -> dict | None:
+        clean = {k: v for k, v in fields.items() if k in ("role", "active")}
+        if clean:
+            clean["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self.db.users.update_one({"_id": uid}, {"$set": clean})
+        return self.get_user(uid)
+
+    def touch_user(self, uid: str) -> None:
+        """Record last activity, at most once a minute per user (it runs on every request)."""
+        now = datetime.now(timezone.utc)
+        cutoff = (now.replace(microsecond=0)).isoformat()[:16]   # minute resolution
+        self.db.users.update_one({"_id": uid, "last_seen_min": {"$ne": cutoff}},
+                                 {"$set": {"last_seen": now.isoformat(), "last_seen_min": cutoff}})
 
     def delete_campaign(self, slug: str) -> None:
         self.db.campaigns.delete_one({"_id": slug})
@@ -179,12 +356,15 @@ class MongoStore:
         lead.stored_key = key
         return lead
 
-    def leads(self, campaign: str, status: str | None = None) -> list[Lead]:
+    def leads(self, campaign: str, status: str | None = None,
+              include_raw: bool = True) -> list[Lead]:
+        """include_raw=False leaves out the raw Apollo payload (tens of KB a person)
+        for callers that only show or check name, title, company and email."""
         q = {"campaign": campaign}
         if status:
             q["status"] = status
         out = []
-        for d in self.db.leads.find(q):
+        for d in self.db.leads.find(q, None if include_raw else {"lead.raw": 0}):
             lead = Lead.model_validate(d["lead"])
             lead.stored_key = d["_id"]
             out.append(lead)
@@ -423,6 +603,15 @@ class MongoStore:
         return self.db.leads.update_many({"campaign": old}, {"$set": {"campaign": new}}).modified_count
 
     # --- marketing: audiences resolved live from the Library, blasts via Postmark ---
+    # Projections for the audience pass. A full lead document carries the raw Apollo
+    # payload, tens of KB a person. Loading and validating every one of them on each
+    # filter change (the composer re-asks 350 ms after every click, and the Audiences
+    # page asks once per saved audience) is what ran the 2 GB production VM out of
+    # memory in October 2026. Nothing an audience renders reads it: merge fields use
+    # name, company, title and email only (personalize._placeholder_map).
+    _AUD_COUNT_PROJ = {"campaign": 1, "status": 1, "topics": 1, "lead.email": 1}
+    _AUD_FULL_PROJ = {"lead.raw": 0}
+
     def audience_leads(self, flt: dict) -> list[dict]:
         """Resolve an audience filter against the WHOLE Library, deduped by email.
 
@@ -431,29 +620,61 @@ class MongoStore:
         it in. exclude_sent drops anyone the sales engine has already emailed in ANY
         campaign (the 'never pitched' audience); engagement narrows to people who
         opened/clicked a previous blast — the warm slice.
-        Returns [{email, key, lead}] — lead is the full Lead for merge rendering."""
+        Returns [{email, key, lead}] — lead is the Lead for merge rendering (without
+        its raw source payload)."""
+        return list(self._iter_audience(flt, with_lead=True))
+
+    def audience_count(self, flt: dict) -> int:
+        """How many people audience_leads would return, without building any of them."""
+        return sum(1 for _ in self._iter_audience(flt, with_lead=False))
+
+    def audience_sample(self, flt: dict, n: int) -> list[dict]:
+        """The first n people audience_leads would return (same order), stopping early."""
+        out: list[dict] = []
+        if n <= 0:
+            return out
+        for p in self._iter_audience(flt, with_lead=True):
+            out.append(p)
+            if len(out) >= n:
+                break
+        return out
+
+    def _iter_audience(self, flt: dict, with_lead: bool):
+        """Yield {email, key, lead} per person an audience reaches, in send order.
+
+        The ONE implementation behind the count, the preview and the send, so a screen
+        can never show a number the send disagrees with. lead is a Lead when
+        with_lead, else None (the count path never builds one)."""
         # subscribers_only is a different question from every other filter: not
         # "who in the Library matches" but "who actually asked for this". It is the
         # only audience a newsletter may legally and safely go to, so it short-
         # circuits the Library entirely rather than narrowing it.
         if flt.get("subscribers_only"):
-            out: dict[str, dict] = {}
             sup = self.suppressed_set()
             # An issue reaches a subscriber when what they asked for overlaps what
             # this publication covers. No topics chosen means everything — the honest
             # reading of somebody who subscribed without ticking a box.
             want = set(flt.get("publication_topics") or [])
+            subs = []
             for d in self.list_subscribers("confirmed"):
-                email = d["_id"]
-                if self._is_sup(email, sup):
+                if self._is_sup(d["_id"], sup):
                     continue
                 mine = set(d.get("topics") or [])
                 if want and mine and not (want & mine):
                     continue
-                lead = self.lead_by_email(email) or Lead(
-                    first_name=(d.get("name") or "").split(" ")[0], email=email)
-                out[email] = {"email": email, "key": f"sub::{email}", "lead": lead}
-            return list(out.values())
+                subs.append(d)
+            # One Library lookup for all of them. lead_by_email per subscriber was a
+            # case-insensitive regex, i.e. a full collection scan per person.
+            lead_docs = self._leads_by_emails([d["_id"] for d in subs]) if with_lead else {}
+            for d in subs:
+                email = d["_id"]
+                lead = None
+                if with_lead:
+                    ld = lead_docs.get(email)
+                    lead = (Lead.model_validate(ld) if ld is not None else
+                            Lead(first_name=(d.get("name") or "").split(" ")[0], email=email))
+                yield {"email": email, "key": f"sub::{email}", "lead": lead}
+            return
 
         topics = set(flt.get("topics") or [])
         # Campaign is the coarsest cut there is, and it was the one filter missing:
@@ -465,7 +686,6 @@ class MongoStore:
         want_eng = flt.get("engagement") or ""
         engaged = self.engagement_by_email() if want_eng else {}
         sup = self.suppressed_set()
-        rows = list(self.db.leads.find({"campaign": {"$in": list(campaigns)}} if campaigns else {}))
         # Deliberately queried across EVERY campaign, not just the selected ones.
         # "Skip anyone sales already emailed" means anyone, anywhere — narrowing it
         # to the chosen campaigns would let a freight blast land on someone a
@@ -476,11 +696,15 @@ class MongoStore:
             sent_emails = {((d.get("lead") or {}).get("email") or "").strip().lower()
                            for d in self.db.leads.find({"status": "sent"}, {"lead.email": 1})}
             sent_emails.discard("")
-        out: dict[str, dict] = {}
-        for d in rows:
-            lead = Lead.model_validate(d["lead"])
-            email = (lead.email or "").strip().lower()
-            if not email or email in out or email in sent_emails:
+        q = {"campaign": {"$in": list(campaigns)}} if campaigns else {}
+        proj = self._AUD_FULL_PROJ if with_lead else self._AUD_COUNT_PROJ
+        seen: set[str] = set()
+        # Natural order, as before the indexes existed: when one person sits in two
+        # campaigns, the row a send uses must not change because a query plan did.
+        for d in self.db.leads.find(q, proj).hint([("$natural", 1)]):
+            L = d.get("lead") or {}
+            email = (L.get("email") or "").strip().lower()
+            if not email or email in seen or email in sent_emails:
                 continue
             if topics and not (topics & set(d.get("topics") or [])):
                 continue
@@ -490,8 +714,27 @@ class MongoStore:
                 continue
             if self._is_sup(email, sup):
                 continue
-            out[email] = {"email": email, "key": d["_id"], "lead": lead}
-        return list(out.values())
+            seen.add(email)
+            yield {"email": email, "key": d["_id"],
+                   "lead": Lead.model_validate(L) if with_lead else None}
+
+    def _leads_by_emails(self, emails: list[str]) -> dict:
+        """{lowercased email: lead dict without raw} for the first Library row per
+        address in natural order — lead_by_email for many addresses at once, in two
+        projected queries instead of one collection scan each."""
+        want = {(e or "").lower() for e in emails if e}
+        if not want:
+            return {}
+        first: dict[str, str] = {}
+        for d in self.db.leads.find({}, {"lead.email": 1}).hint([("$natural", 1)]):
+            e = ((d.get("lead") or {}).get("email") or "").lower()
+            if e in want and e not in first:
+                first[e] = d["_id"]
+        if not first:
+            return {}
+        by_id = {d["_id"]: d.get("lead") or {} for d in
+                 self.db.leads.find({"_id": {"$in": list(first.values())}}, self._AUD_FULL_PROJ)}
+        return {e: by_id[i] for e, i in first.items() if i in by_id}
 
     def lead_by_email(self, email: str) -> Lead | None:
         """A subscriber who is also in the Library gets their real merge fields —
@@ -907,13 +1150,19 @@ class MongoStore:
     # --- capture tokens: one per person, revocable independently ---------------
     # A single shared token meant generating one for a teammate silently broke
     # everyone else's extension. Each token is stored only as its SHA-256.
-    def create_capture_token(self, label: str, token_hash: str) -> str:
+    def create_capture_token(self, label: str, token_hash: str,
+                             owner: str = "", owner_email: str = "") -> str:
         import uuid
         tid = uuid.uuid4().hex[:10]
         self.db.capture_tokens.insert_one({
             "_id": tid, "label": label, "hash": token_hash,
+            # the person it acts as: captures land only in campaigns they may see
+            "owner": owner, "owner_email": owner_email,
             "created_at": datetime.now(timezone.utc).isoformat()})
         return tid
+
+    def get_capture_token(self, tid: str) -> dict | None:
+        return self.db.capture_tokens.find_one({"_id": tid})
 
     def list_capture_tokens(self) -> list[dict]:
         return list(self.db.capture_tokens.find({}).sort("created_at", -1))

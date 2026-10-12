@@ -1819,3 +1819,55 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   border: 1px solid #ecd9b4; border-radius: var(--radius-sm);
   padding: 8px 11px; margin-top: 14px;
 }
+/* Training: Sid's playbook in its sandboxed frame. The frame fills the page card
+   edge to edge; a thin bar above it says whether progress is saved. */
+.content-frame { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.content-frame > .page-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.training { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.training-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.training-save { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-weight: 500; }
+.training-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--verify); }
+.training-save.s-saving .training-dot { background: var(--signal); }
+.training-save.s-retry .training-dot, .training-save.s-failed .training-dot { background: var(--caution); }
+.training-save.s-clash .training-dot { background: var(--alert); }
+.training-note { color: var(--text-2); }
+.training-note .linklike { display: inline; margin: 0 0 0 6px; color: var(--signal); font-size: inherit; }
+.training-ver { margin-left: auto; color: var(--faint); }
+.training-frame {
+  flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: #fff;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+/* Team (admins): the ramp, roles, campaign owners, the playbook file. */
+.team { max-width: 1180px; }
+.team .set-card + .set-card { margin-top: 18px; }
+.team-lede { font-size: 12.5px; margin: -6px 0 14px; line-height: 1.55; max-width: 760px; }
+.team-name { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+.team-email { font-size: 12px; }
+.team-off td { opacity: 0.55; }
+.team-select { width: auto; min-width: 150px; padding-top: 6px; padding-bottom: 6px; }
+.team-ramp td { vertical-align: top; }
+.team-bar { width: 110px; height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.team-bar i { display: block; height: 100%; background: var(--signal); border-radius: 99px; }
+.team-num { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.team-quiz { display: flex; flex-wrap: wrap; gap: 4px; max-width: 290px; }
+.team-q { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: var(--bg); color: var(--faint); border: 1px solid var(--line); white-space: nowrap; }
+.team-q.pass { background: var(--verify-tint); color: #0b6b58; border-color: #c6e3d2; }
+.team-q.low { background: var(--caution-tint); color: #a34a05; border-color: #ecd9b4; }
+.team-sign { display: flex; flex-direction: column; gap: 3px; }
+.team-sign label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.team .linklike { display: inline; margin: 0; color: var(--signal); font-size: 12.5px; }
+.team-detail td { background: var(--bg); }
+.team-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.team-events { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; font-size: 12.5px; }
+.team-events li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.team-events li > .muted:first-child { display: inline-block; min-width: 52px; }
+.team-log { border-collapse: collapse; font-size: 12px; width: 100%; }
+.team-log th, .team-log td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.team-log th { color: var(--muted); font-weight: 500; }
+.team-pb { font-size: 13px; }
+.team-versions { margin-top: 12px; font-size: 12.5px; }
+.team-versions summary { cursor: pointer; color: var(--signal); }
+@media (max-width: 900px) { .team-detail-grid { grid-template-columns: 1fr; } }

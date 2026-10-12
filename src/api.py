@@ -9,6 +9,7 @@ import glob
 import hashlib
 import hmac
 import html
+import json
 import logging
 import os
 import secrets
@@ -21,12 +22,13 @@ import time
 
 import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, config, marketing, pipeline, tagging, unsubscribe
+from . import access, auth, config, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
@@ -60,6 +62,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Lets code with no Request in hand (_load and friends) ask who is signed in.
+app.add_middleware(access.ScopeMiddleware)
 
 CONFIG_DIR = "config"   # legacy seed source (committed campaigns + the CLI); runtime campaigns now live in Mongo
 _runs: dict = {}  # campaign -> {running, error, summary, started_at}
@@ -139,6 +143,7 @@ def _load(name: str) -> dict:
     cfg = store.get_campaign(name)
     if cfg is None:
         raise HTTPException(404, f"campaign '{name}' not found")
+    _require_campaign(name, store)   # same 404 when it exists but isn't yours
     missing = [k for k in REQUIRED_KEYS if k not in cfg]
     if missing:
         raise HTTPException(500, f"campaign '{name}' is missing required keys: {missing}")
@@ -148,9 +153,159 @@ def _load(name: str) -> dict:
     return cfg
 
 
+def _require_campaign(name: str, store=None) -> None:
+    """404 unless the signed-in user may work in this campaign: admins in all of them,
+    sales users in the ones they own. Same answer as a campaign that doesn't exist, so
+    nobody learns what other people are working on. Internal code (a background run,
+    with no request) is trusted."""
+    user = access.current_user()
+    if user is None:
+        return
+    store = store or open_store()
+    if not access.campaign_visible(user, store.campaign_owner(name)):
+        raise HTTPException(404, f"campaign '{name}' not found")
+
+
+def _visible_campaigns(store) -> list[str]:
+    """The campaign names the signed-in user may see (all of them for internal code)."""
+    user = access.current_user()
+    if user is None or access.is_admin(user):
+        return store.campaign_names()
+    if user.get("role") != "sales":
+        return []
+    uid = user.get("id")
+    return sorted(n for n, owner in store.campaign_owners().items() if owner and owner == uid)
+
+
+def _refuse_reused_name(store, slug: str) -> None:
+    """A deleted campaign's leads (drafts, research, replies) stay in the database under
+    its name, and recreating the name reattaches them: the way an admin recovers a lost
+    campaign. For anyone else that would hand them someone else's leads, so the name is
+    refused while leads still carry it."""
+    user = access.current_user()
+    if user is None or access.is_admin(user):
+        return
+    if store.db.leads.find_one({"campaign": slug}, {"_id": 1}):
+        raise HTTPException(409, f"the name '{slug}' belonged to an earlier campaign; pick another name")
+
+
+def _scoped_inbox() -> bool:
+    """Non-admins see only their own campaign's threads in a sequence (two campaigns can
+    share one Apollo sequence, and its message list holds both campaigns' leads)."""
+    user = access.current_user()
+    return user is not None and not access.is_admin(user)
+
+
+def _require_keys(store, campaign: str, keys: list[str]) -> None:
+    """For non-admins: every lead key must be a lead OF this campaign (whose access was
+    already checked). Without this, a campaign you own plus a lead key from someone
+    else's would read or change their lead. Admins keep the old behaviour."""
+    user = access.current_user()
+    if user is None or access.is_admin(user):
+        return
+    want = {k for k in keys if k}
+    if not want:
+        return
+    n = store.db.leads.count_documents({"_id": {"$in": list(want)}, "campaign": campaign})
+    if n != len(want):
+        raise HTTPException(404, "lead not found")
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# --- who am I, and the users screen ---------------------------------------------
+@app.get("/api/me")
+def me():
+    """The signed-in user and what their role lets the UI show."""
+    u = access.require_user()
+    return {"id": u.get("id"), "email": u.get("email", ""), "name": u.get("name", ""),
+            "role": u.get("role"), "pinned_admin": bool(u.get("pinned_admin")),
+            "admins_configured": bool(access.admin_emails()) or not auth.enabled()}
+
+
+def _user_out(d: dict, admins: set) -> dict:
+    return {"id": d["_id"], "email": d.get("email", ""), "name": d.get("name", ""),
+            "role": d.get("role", "sales"), "active": d.get("active", True),
+            "pinned_admin": (d.get("email") or "").lower() in admins,
+            "created_at": d.get("created_at", ""), "last_seen": d.get("last_seen", "")}
+
+
+@app.get("/api/users")
+def list_users():
+    admins = access.admin_emails()
+    return [_user_out(d, admins) for d in open_store().list_users()]
+
+
+class UserPatch(BaseModel):
+    role: str | None = None
+    active: bool | None = None
+
+
+@app.patch("/api/users/{uid}")
+def update_user(uid: str, p: UserPatch):
+    """Change someone's role or switch their access off. Admins named in ADMIN_EMAILS
+    can't be demoted or deactivated here (that's what stops the last admin locking
+    everyone out), and nobody can switch off their own account."""
+    store = open_store()
+    target = store.get_user(uid)
+    if not target:
+        raise HTTPException(404, "user not found")
+    me_ = access.require_user()
+    pinned = (target.get("email") or "").lower() in access.admin_emails()
+    patch: dict = {}
+    if p.role is not None:
+        if p.role not in access.ROLES:
+            raise HTTPException(400, f"role must be one of {', '.join(access.ROLES)}")
+        if pinned and p.role != "admin":
+            raise HTTPException(400, "this admin is set by ADMIN_EMAILS on the server; change it there")
+        patch["role"] = p.role
+    if p.active is not None:
+        if not p.active and pinned:
+            raise HTTPException(400, "this admin is set by ADMIN_EMAILS on the server; change it there")
+        if not p.active and uid == me_.get("id"):
+            raise HTTPException(400, "you can't switch off your own account")
+        patch["active"] = p.active
+    if not patch:
+        raise HTTPException(400, "nothing to change")
+    return _user_out(store.update_user(uid, patch), access.admin_emails())
+
+
+@app.get("/api/campaigns/owners")
+def campaign_owners_list():
+    """Every campaign and who owns it: the Team page's assignment table (admins)."""
+    store = open_store()
+    users = {u["_id"]: u for u in store.list_users()}
+    out = []
+    for name, owner in sorted(store.campaign_owners().items()):
+        u = users.get(owner) or {}
+        out.append({"campaign": name, "owner": owner, "owner_name": u.get("name", ""),
+                    "owner_email": u.get("email", "")})
+    return out
+
+
+class OwnerSet(BaseModel):
+    campaign: str
+    owner: str = ""      # a user id, or "" to leave it with the admins only
+
+
+@app.post("/api/campaign/owner")
+def assign_campaign_owner(r: OwnerSet):
+    """Give a campaign to a sales person (or take it back). Its leads, drafts and replies
+    go with it: the owner sees the campaign, nobody else in sales does."""
+    store = open_store()
+    if r.campaign not in store.campaign_names():
+        raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    email = ""
+    if r.owner:
+        u = store.get_user(r.owner)
+        if not u or not u.get("active", True) or u.get("role") not in ("sales", "admin"):
+            raise HTTPException(400, "a campaign's owner must be an active sales person or admin")
+        email = u.get("email", "")
+    store.set_campaign_owner(r.campaign, r.owner, email)
+    return {"campaign": r.campaign, "owner": r.owner, "owner_email": email}
 
 
 # Knowella pinwheel mark (verbatim from web/src/components/Logo.jsx) for the
@@ -331,23 +486,55 @@ def list_subscribers(status: str = ""):
                             for d in store.list_subscribers(status)[:500]]}
 
 
+def _unsubscribe_everywhere(store, email: str, reason: str) -> None:
+    """Every exit route lands here, so none of them can half-leave: the global
+    do-not-contact list, Postmark's stream, the Apollo follow-ups already scheduled,
+    and the newsletter audience."""
+    store.suppress(email, reason=reason)
+    postmark_send.suppress(email)   # keep Postmark's stream in step with ours
+    _stop_sequenced(store, email)
+    store.drop_subscriber(email)    # suppression alone would leave them in the audience
+
+
 @app.get("/api/unsubscribe")
 def unsubscribe_link(t: str = ""):
-    """Public one-click unsubscribe (linked from every email footer). Verifies the
-    token, adds the address to the global do-not-contact list, and shows a branded
-    confirmation page. No auth (see auth._OPEN_API_PATHS)."""
+    """The footer link. Shows a confirm button and changes NOTHING by itself.
+
+    Corporate mail gateways (Safe Links, Proofpoint, Mimecast) fetch every link in
+    every inbound email. When this GET unsubscribed on its own, those scanners did
+    the unsubscribing: 30 of 146 link unsubscribes landed within 10 seconds of
+    delivery (some at 2s), each one cancelling that person's follow-ups. Scanners
+    fetch pages; they don't press buttons. The button POSTs to /api/unsubscribe/confirm.
+    No auth (see access.POLICY)."""
     email = unsubscribe.email_from_token(t)
-    if email:
-        store = open_store()
-        store.suppress(email, reason="unsubscribed via email link")
-        postmark_send.suppress(email)   # keep Postmark's stream in step with ours
-        _stop_sequenced(store, email)
-        store.drop_subscriber(email)   # suppression alone would leave them in the audience
-        # Owning this page is the reason for owning the flow: the opt-out is already
-        # recorded above, so what follows is an offer, not a hurdle. Nobody has to do
-        # anything more to stay unsubscribed.
-        return HTMLResponse(_unsubscribed_then_offer(email))
-    return HTMLResponse(_unsubscribe_page(False))
+    if not email:
+        return HTMLResponse(_unsubscribe_page(False))
+    inner = (f'<div class="mark">{_CHECK}</div>'
+             f'<h1>Unsubscribe?</h1>'
+             f'<p>Press the button and nothing more will be sent to <b>{html.escape(email)}</b>.</p>'
+             f'<form method=post action="/api/unsubscribe/confirm">'
+             f'<input type=hidden name=t value="{html.escape(t)}">'
+             f'<div class=row><button class="btn save" type=submit>Unsubscribe</button></div></form>'
+             f'<p style="font-size:12px;margin-top:18px">This one extra step stops automated '
+             f'email security scanners from unsubscribing you by accident.</p>')
+    return HTMLResponse(_public_page("Unsubscribe", inner))
+
+
+@app.post("/api/unsubscribe/confirm")
+async def unsubscribe_confirm(request: Request):
+    """The human half of the footer link: the confirm button on the page above."""
+    form = await request.form()
+    email = unsubscribe.email_from_token(form.get("t") or "")
+    if not email:
+        return HTMLResponse(_unsubscribe_page(False), status_code=400)
+    # Database and Apollo calls block. Off the event loop, so one slow call here
+    # can't stall every other request on the server.
+    await run_in_threadpool(
+        lambda: _unsubscribe_everywhere(open_store(), email, "unsubscribed via email link"))
+    # Owning this page is the reason for owning the flow: the opt-out is already
+    # recorded above, so what follows is an offer, not a hurdle. Nobody has to do
+    # anything more to stay unsubscribed.
+    return HTMLResponse(_unsubscribed_then_offer(email))
 
 
 def _join(names: list[str]) -> str:
@@ -468,14 +655,20 @@ async def preferences_save(request: Request):
     email = unsubscribe.email_from_token(form.get("t") or "")
     if not email:
         return HTMLResponse(_unsubscribe_page(False), status_code=400)
+    # The rest is blocking database and Apollo work: run it off the event loop.
+    return await run_in_threadpool(_preferences_apply, email, bool(form.get("all")),
+                                   bool(form.get("resub")), form.getlist("topic"))
+
+
+def _preferences_apply(email: str, everything: bool, resub: bool, topics: list) -> HTMLResponse:
     store = open_store()
-    if form.get("all"):
-        store.suppress(email, reason="unsubscribed via preferences")
-        postmark_send.suppress(email)   # keep Postmark's stream in step with ours
-        store.drop_subscriber(email)
+    if everything:
+        # Same as every other exit, including stopping already-scheduled Apollo
+        # follow-ups (this route used to skip that, so leaving here still got mail).
+        _unsubscribe_everywhere(store, email, "unsubscribed via preferences")
         return HTMLResponse(_unsubscribe_page(True))
-    picked = topiclib.clean(form.getlist("topic"))
-    if form.get("resub"):
+    picked = topiclib.clean(topics)
+    if resub:
         # Coming back from the unsubscribe page. They are suppressed right now, so
         # this is a fresh opt-in and has to be an explicit one: no topics ticked
         # means they clicked through without choosing, and the honest reading of
@@ -491,7 +684,7 @@ async def preferences_save(request: Request):
 
 
 @app.post("/api/unsubscribe")
-async def unsubscribe_one_click(t: str = ""):
+def unsubscribe_one_click(t: str = ""):   # plain def: FastAPI runs it in the threadpool
     """RFC 8058 one-click. Gmail and Yahoo POST here with List-Unsubscribe=One-Click
     in the body and expect a 2xx and nothing else — no page, no confirmation, no
     redirect. A GET-only endpoint fails this silently, and a failed one-click reads
@@ -502,11 +695,7 @@ async def unsubscribe_one_click(t: str = ""):
     email = unsubscribe.email_from_token(t)
     if not email:
         raise HTTPException(400, "bad token")
-    store = open_store()
-    store.suppress(email, reason="unsubscribed (one-click)")
-    store.drop_subscriber(email)
-    _stop_sequenced(store, email)
-    postmark_send.suppress(email)
+    _unsubscribe_everywhere(open_store(), email, "unsubscribed (one-click)")
     return {"ok": True}
 
 
@@ -514,7 +703,7 @@ async def unsubscribe_one_click(t: str = ""):
 def campaigns():
     store = open_store()
     _seed_campaigns_once(store)
-    return store.campaign_names()
+    return _visible_campaigns(store)    # admins: all; sales: their own; marketing: none
 
 
 class CampaignCreate(BaseModel):
@@ -540,6 +729,8 @@ def create_campaign(c: CampaignCreate):
     store = open_store()
     if store.campaign_exists(slug):
         raise HTTPException(409, f"campaign '{slug}' already exists")
+    _refuse_reused_name(store, slug)
+    user = access.current_user()
     cfg = {
         "name": slug,
         "icp": c.icp,
@@ -548,7 +739,10 @@ def create_campaign(c: CampaignCreate):
         "voice": c.voice,
         "research": c.research,
         "verify": c.verify,
-        "sending": c.sending,
+        # Which mailbox and sequence a campaign sends through is an admin's call (a
+        # campaign could otherwise send as anyone's mailbox). A sales user's campaign
+        # starts unwired; an admin connects it.
+        "sending": c.sending if (user is None or access.is_admin(user)) else {},
     }
     if c.apollo:  # only write the pull-filter block when the wizard supplied one
         cfg["apollo"] = c.apollo
@@ -566,6 +760,8 @@ def create_campaign(c: CampaignCreate):
         "opt_out_line": 'If this isn\'t relevant, reply "no thanks" and I won\'t email again.',
     }
     store.save_campaign(slug, cfg)
+    if user is not None:   # the creator owns it (and, for a sales user, is the only one who sees it)
+        store.set_campaign_owner(slug, user.get("id", ""), user.get("email", ""))
     return {"created": slug}
 
 
@@ -603,6 +799,7 @@ def rename_campaign(r: CampaignRename):
     cfg = store.get_campaign(r.campaign)
     if cfg is None:
         raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    _require_campaign(r.campaign, store)
     slug = _slug(r.new_name)
     if not slug:
         raise HTTPException(400, "campaign name must contain letters or numbers")
@@ -610,8 +807,12 @@ def rename_campaign(r: CampaignRename):
         return {"renamed": slug, "leads_moved": 0}
     if store.campaign_exists(slug):
         raise HTTPException(409, f"campaign '{slug}' already exists")
+    _refuse_reused_name(store, slug)
     cfg["name"] = slug
+    owner = store.db.campaigns.find_one({"_id": r.campaign}, {"owner": 1, "owner_email": 1}) or {}
     store.save_campaign(slug, cfg)
+    if owner.get("owner"):   # the owner moves with the name
+        store.set_campaign_owner(slug, owner["owner"], owner.get("owner_email", ""))
     moved = store.rename_campaign(r.campaign, slug)   # re-keys the leads
     store.delete_campaign(r.campaign)
     _runs.pop(r.campaign, None)
@@ -625,13 +826,17 @@ def update_campaign(u: CampaignUpdate):
     cfg = store.get_campaign(u.campaign)
     if cfg is None:
         raise HTTPException(404, f"campaign '{u.campaign}' not found")
+    _require_campaign(u.campaign, store)
     for k in ("icp", "apollo", "offer", "voice", "research", "experiment", "verify", "sequence"):
         v = getattr(u, k)
         if v is not None:
             cfg[k] = v
     if u.knowledge is not None:
         cfg["knowledge"] = u.knowledge
-    if u.sending is not None:
+    user = access.current_user()
+    # Sending (mailbox, sequence) is set by an admin; a sales user's save keeps it as is
+    # rather than failing, because the campaign form always sends the whole thing.
+    if u.sending is not None and (user is None or access.is_admin(user)):
         cfg.setdefault("sending", {}).update(u.sending)
     store.save_campaign(u.campaign, cfg)
     return cfg
@@ -649,6 +854,7 @@ def delete_campaign(r: CampaignDelete):
     store = open_store()
     if not store.campaign_exists(r.campaign):
         raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    _require_campaign(r.campaign, store)
     store.delete_campaign(r.campaign)
     _runs.pop(r.campaign, None)
     return {"deleted": r.campaign}
@@ -738,18 +944,30 @@ def _stop_sequenced(store, value: str) -> int:
     if not v:
         return 0
     is_domain = "@" not in v
-    by_campaign: dict[str, list[str]] = {}
-    for d in store.db.leads.find({}):
+    # Narrowed in Mongo and projected. This runs on every bounce, spam complaint and
+    # unsubscribe, and it used to load every full lead (raw Apollo payload included)
+    # to find one address — part of what ran production out of memory in Oct 2026.
+    # The regex only narrows; the exact check below is the original rule, unchanged.
+    pat = ("@" if is_domain else r"^\s*") + re.escape(v) + r"\s*$"
+    rows = []
+    for d in store.db.leads.find({"lead.email": {"$regex": pat, "$options": "i"}},
+                                 {"campaign": 1, "lead.email": 1}):
         email = ((d.get("lead") or {}).get("email") or "").strip().lower()
-        if not email:
-            continue
-        if not (email.rsplit("@", 1)[-1] == v if is_domain else email == v):
-            continue
-        send = store.db.sends.find_one({"_id": d["_id"]})
-        cid = (send or {}).get("platform_id")
+        if email and (email.rsplit("@", 1)[-1] == v if is_domain else email == v):
+            rows.append(d)
+    if not rows:
+        return 0
+    ids = [d["_id"] for d in rows]
+    platform_ids = {s["_id"]: s.get("platform_id")
+                    for s in store.db.sends.find({"_id": {"$in": ids}}, {"platform_id": 1})}
+    by_campaign: dict[str, list[str]] = {}
+    for d in rows:
+        cid = platform_ids.get(d["_id"])
         if cid:
             by_campaign.setdefault(d.get("campaign") or "", []).append(cid)
-        store.set_status(d["_id"], "suppressed")
+    # what set_status(key, "suppressed") does per lead, in one write
+    store.db.leads.update_many({"_id": {"$in": ids}},
+                               {"$set": {"status": "suppressed"}, "$unset": {"error": ""}})
     stopped = 0
     for camp, cids in by_campaign.items():
         try:
@@ -765,6 +983,10 @@ def suppression_add(r: SuppressReq):
     v = (r.value or "").strip()
     if not v or (" " in v) or ("." not in v):
         raise HTTPException(400, "enter an email address or a domain like acme.com")
+    if "@" not in v and not access.is_admin(access.current_user() or access.LOCAL_ADMIN):
+        # A domain stops every lead there in every campaign, and lifting it doesn't
+        # restart their sequences: too much for one click by anyone.
+        raise HTTPException(403, "only an admin can block a whole domain; add the person's email address")
     store = open_store()
     store.suppress(v, r.reason or "added manually")
     stopped = _stop_sequenced(store, v)
@@ -940,8 +1162,9 @@ def board(campaign: str):
     cfg = _load(campaign)
     store = open_store()
     cards = store.lead_summaries(cfg["name"])
+    decisions = store.get_reviews([c["key"] for c in cards])   # one query, not one per card
     for c in cards:
-        c["decision"] = store.get_review(c["key"]) or ""
+        c["decision"] = decisions.get(c["key"]) or ""
     return cards
 
 
@@ -950,6 +1173,7 @@ def lead_detail(campaign: str, key: str):
     """Full detail for the slideout: email, facts, sending info, decision."""
     cfg = _load(campaign)
     store = open_store()
+    _require_keys(store, cfg["name"], [key])
     lead = store.get_lead(key)
     if not lead:
         raise HTTPException(404, "lead not found")
@@ -983,7 +1207,7 @@ def review(campaign: str):
     verbatim = pipeline._is_verbatim(cfg)   # AI off + template: shown as-is, no A/B badge
     # batched lookups: per-lead queries over a remote Mongo made a 483-deep queue
     # cost ~2,000 sequential round trips
-    leads = store.leads(cfg["name"], "queued")
+    leads = store.leads(cfg["name"], "queued", include_raw=False)   # nothing here reads raw
     keys = [l.key for l in leads]
     outboxes = store.get_outboxes(keys)
     decisions = store.get_reviews(keys)
@@ -1151,6 +1375,7 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
     raw = apollo_send.list_messages(sid)
     store = open_store()
     directory = _lead_directory(store, cfg["name"])
+    scoped = _scoped_inbox()
     convs: dict = {}
     for m in raw:
         cid = m.get("conversation_id") or m.get("provider_thread_id") or m.get("id")
@@ -1191,6 +1416,8 @@ def _conversations(sid: str, cfg: dict) -> list[dict]:
         snippet = _msg_text(last)
         if not snippet and ob and not apollo_send.is_inbound(last) and not _msg_sent(last):
             snippet = (ob.get("body") if out_steps <= 1 else ob.get(f"body_{out_steps}", "")) or ""
+        if scoped and not who.get("key"):
+            continue        # not this campaign's lead (a shared sequence): not theirs to see
         items.append({
             "bounced": bounced,
             "meeting": who.get("key") in met,
@@ -1288,6 +1515,8 @@ def inbox_thread(campaign: str, thread_id: str):
     store = open_store()
     lead_email = next((x["to"] for x in msgs if x["direction"] == "out" and x.get("to")), "")
     key = _lead_directory(store, cfg["name"]).get(lead_email.lower(), {}).get("key", "") if lead_email else ""
+    if _scoped_inbox() and not key:
+        raise HTTPException(404, "conversation not found")    # another campaign's thread
     _fill_scheduled(store, key, msgs)
     # Apollo's API never returns the reply message itself — only replied=True on our
     # send. Surface the reply honestly as a marker instead of showing nothing.
@@ -1342,6 +1571,7 @@ def lead_meeting(m: MeetingReq):
     """Mark (or unmark) a meeting booked with this lead — the end-goal metric."""
     _load(m.campaign)
     store = open_store()
+    _require_keys(store, m.campaign, [m.key])
     if m.booked:
         store.mark_meeting(m.key)
     else:
@@ -1386,6 +1616,7 @@ class Decision(BaseModel):
 def decide(d: Decision):
     _load(d.campaign)
     store = open_store()
+    _require_keys(store, d.campaign, [d.key])
     val = "approved" if d.decision.lower().startswith("a") else "rejected"
     store.set_review(d.key, val)
     return {"key": d.key, "decision": val}
@@ -1403,10 +1634,14 @@ def approve_all(r: ApproveAllReq):
     cfg = _load(r.campaign)
     store = open_store()
     n = 0
-    for lead in store.leads(cfg["name"], "queued"):
-        if store.get_review(lead.key) == "rejected":
+    leads = store.leads(cfg["name"], "queued", include_raw=False)
+    keys = [l.key for l in leads]
+    decisions = store.get_reviews(keys)      # batched: two queries instead of two per lead
+    has_draft = set(store.get_outboxes(keys))
+    for lead in leads:
+        if decisions.get(lead.key) == "rejected":
             continue
-        if not lead.email or not store.get_outbox(lead.key):
+        if not lead.email or lead.key not in has_draft:
             continue
         store.set_review(lead.key, "approved")
         n += 1
@@ -1425,6 +1660,7 @@ def exclude_lead(r: ExcludeReq):
     library for future marketing. Not the same as reject, which keeps it in-campaign."""
     _load(r.campaign)
     store = open_store()
+    _require_keys(store, r.campaign, [r.key])
     if not store.get_lead(r.key):
         raise HTTPException(404, "lead not found")
     store.exclude_lead(r.key)
@@ -1441,7 +1677,9 @@ def bulk_exclude(r: BulkLeadReq):
     """Bulk 'not a fit': remove the selected leads from the campaign (drafts cleared,
     dropped from the pipeline) but KEEP them in the marketing library for reuse."""
     _load(r.campaign)
-    n = open_store().exclude_leads(r.keys)
+    store = open_store()
+    _require_keys(store, r.campaign, r.keys)
+    n = store.exclude_leads(r.keys)
     return {"excluded": n}
 
 
@@ -1450,7 +1688,9 @@ def bulk_delete(r: BulkLeadReq):
     """Permanently delete the selected leads and all their data — gone everywhere,
     library included. For junk pulls we'll never use, even for marketing. Irreversible."""
     _load(r.campaign)
-    n = open_store().delete_leads(r.keys)
+    store = open_store()
+    _require_keys(store, r.campaign, r.keys)
+    n = store.delete_leads(r.keys)
     return {"deleted": n}
 
 
@@ -1474,6 +1714,10 @@ def all_leads():
         return _topic_cache[campaign]
 
     rows = store.all_leads()
+    user = access.current_user()
+    if user is not None and not access.is_admin(user):   # sales: the leads of their own campaigns
+        mine = set(_visible_campaigns(store))
+        rows = [r for r in rows if r.get("campaign") in mine]
     engaged = store.engagement_by_email()   # marketing intent: opened/clicked any blast
     for row in rows:
         row["function"] = tagging.function_of(row.get("title", ""))
@@ -1504,6 +1748,14 @@ def promote_leads(r: PromoteReq):
     review) takes over from there. Dedup is upsert_lead's job; suppressed skipped."""
     cfg = _load(r.campaign)
     store = open_store()
+    user = access.current_user()
+    if user is not None and not access.is_admin(user):
+        # the people being copied must come from campaigns this user may see
+        mine = _visible_campaigns(store)
+        want = {k for k in r.keys[:500] if k}
+        if want and store.db.leads.count_documents(
+                {"_id": {"$in": list(want)}, "campaign": {"$in": mine}}) != len(want):
+            raise HTTPException(404, "lead not found")
     topics = tagging.topics_of(cfg)
     added = skipped = 0
     for key in r.keys[:500]:
@@ -1527,7 +1779,7 @@ def list_audiences():
     out = []
     for a in store.list_audiences():
         out.append({"id": a["_id"], "name": a.get("name", ""), "filter": a.get("filter") or {},
-                    "count": len(store.audience_leads(a.get("filter") or {}))})
+                    "count": store.audience_count(a.get("filter") or {})})
     return out
 
 
@@ -1563,6 +1815,7 @@ def set_lead_email(r: LeadEmail):
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise HTTPException(400, "that doesn't look like a valid email address")
     store = open_store()
+    _require_keys(store, r.campaign, [r.key])
     lead = store.get_lead(r.key)
     if not lead:
         raise HTTPException(404, "lead not found")
@@ -1581,7 +1834,9 @@ class EditReq(BaseModel):
 @app.post("/api/review/edit")
 def edit(e: EditReq):
     _load(e.campaign)
-    open_store().update_outbox(e.key, e.subject, e.body)  # marks edited=True; preserved on re-runs
+    store = open_store()
+    _require_keys(store, e.campaign, [e.key])
+    store.update_outbox(e.key, e.subject, e.body)  # marks edited=True; preserved on re-runs
     return {"ok": True, "key": e.key}
 
 
@@ -1598,7 +1853,9 @@ def edit_followup(e: FollowupEditReq):
     if e.step not in (2, 3):
         raise HTTPException(400, "step must be 2 or 3")
     _load(e.campaign)
-    open_store().update_followup(e.key, e.step, e.subject, e.body)
+    store = open_store()
+    _require_keys(store, e.campaign, [e.key])
+    store.update_followup(e.key, e.step, e.subject, e.body)
     return {"ok": True}
 
 
@@ -1615,6 +1872,7 @@ def refine(r: RefineReq):
     if not (r.instruction or "").strip():
         raise HTTPException(400, "instruction is empty")
     store = open_store()
+    _require_keys(store, r.campaign, [r.key])
     lead = store.get_lead(r.key)
     if not lead:
         raise HTTPException(404, "lead not found")
@@ -1653,9 +1911,15 @@ def refine(r: RefineReq):
 
 @app.post("/api/pull")
 async def pull(campaign: str = Form(...), file: UploadFile = File(...), source: str = Form("csv")):
+    data = await file.read()
+    # Parsing, a domain lookup per company and a write per lead all block: run them
+    # off the event loop so an import can't freeze every other request.
+    return await run_in_threadpool(_pull_csv, campaign, data, source)
+
+
+def _pull_csv(campaign: str, data: bytes, source: str) -> dict:
     cfg = _load(campaign)
     store = open_store()
-    data = await file.read()
     tmp = os.path.join(tempfile.mkdtemp(), "upload.csv")
     with open(tmp, "wb") as f:
         f.write(data)
@@ -1790,11 +2054,40 @@ class BlastBody(BaseModel):
     preheader: str = ""        # the grey line the inbox shows after the subject
 
 
+_BLAST_STALL_SECS = 15 * 60   # a live worker stamps a heartbeat every batch of 100 (seconds apart)
+_STALLED_MSG = ("Interrupted: the server restarted while this was sending. Send it again "
+                "to continue; people already sent are skipped.")
+
+
+def _blast_stalled(b: dict) -> bool:
+    """A blast marked 'sending' that no live worker owns.
+
+    The sender is a thread in the app process, so a restart, deploy or crash mid-send
+    killed it and left the blast 'sending' for good: the UI polled it forever, delete
+    refused it and send said 'already sending'. The worker now stamps a heartbeat on
+    every batch; none for 15 minutes means nobody is sending it. A blast with no
+    heartbeat at all predates this and its worker died with the old process."""
+    if b.get("status") != "sending":
+        return False
+    hb = b.get("heartbeat")
+    if not hb:
+        return True
+    try:
+        seen = datetime.fromisoformat(hb)
+    except (TypeError, ValueError):
+        return True
+    return (datetime.now(timezone.utc) - seen).total_seconds() > _BLAST_STALL_SECS
+
+
 def _blast_out(b: dict) -> dict:
+    stalled = _blast_stalled(b)
     return {"id": b["_id"], "name": b.get("name", ""), "subject": b.get("subject", ""),
             "body": b.get("body", ""), "audience": b.get("audience") or {},
-            "status": b.get("status", "draft"), "stats": b.get("stats") or {},
-            "progress": b.get("progress") or {}, "error": b.get("error", ""),
+            # shown as the paused state the UI already handles (Inspect + the reason)
+            "status": "paused" if stalled else b.get("status", "draft"),
+            "stats": b.get("stats") or {},
+            "progress": b.get("progress") or {},
+            "error": _STALLED_MSG if stalled else b.get("error", ""),
             "publication_id": b.get("publication_id", ""), "issue_no": b.get("issue_no", 0),
             "format": b.get("format") or "markdown", "preheader": b.get("preheader", ""),
             "remaining": b.get("remaining", 0), "audience_size": b.get("audience_size", 0),
@@ -1969,11 +2262,16 @@ async def upload_asset(file: UploadFile = File(...), name: str = Form("")):
     if len(raw) > _MAX_ASSET:
         raise HTTPException(400, f"{len(raw) // 1024}KB is too big for an email image — "
                                  "keep it under 5MB, and under 200KB if you can.")
-    store = open_store()
-    h = store.put_asset(raw, ctype)
     slug = re.sub(r"[^a-z0-9._-]+", "-", (name or "").strip().lower()).strip("-")
-    if slug:
-        store.name_asset(slug, h)
+
+    def _save() -> str:   # database writes block: off the event loop
+        store = open_store()
+        h = store.put_asset(raw, ctype)
+        if slug:
+            store.name_asset(slug, h)
+        return h
+
+    h = await run_in_threadpool(_save)
     return {"url": f"{unsubscribe._base_url()}/api/asset/{h}", "bytes": len(raw),
             "type": ctype, "name": slug, "ref": f"{{asset:{slug}}}" if slug else ""}
 
@@ -2010,7 +2308,7 @@ def render_preview(r: RenderReq):
     """
     store = open_store()
     try:
-        people = store.audience_leads(r.audience.model_dump())[:1]
+        people = store.audience_sample(r.audience.model_dump(), 1)
     except Exception:
         people = []
     lead = people[0]["lead"] if people else Lead(
@@ -2031,10 +2329,13 @@ def render_preview(r: RenderReq):
 def marketing_preview(f: AudienceFilter):
     """Who a filter reaches, RIGHT NOW: count + a peek — resolved live, suppression
     and emailless already excluded, deduped by email across campaigns."""
-    people = open_store().audience_leads(f.model_dump())
-    return {"count": len(people),
+    store = open_store()
+    flt = f.model_dump()
+    # Count without building anyone; build only the eight shown. The composer calls
+    # this 350 ms after every filter change.
+    return {"count": store.audience_count(flt),
             "sample": [{"name": p["lead"].full_name, "company": p["lead"].company,
-                        "email": p["email"]} for p in people[:8]]}
+                        "email": p["email"]} for p in store.audience_sample(flt, 8)]}
 
 
 # --- publications: what a blast is an issue OF --------------------------------
@@ -2170,7 +2471,7 @@ def generate_issue(r: GenerateIssue):
     # Describe the audience concretely so it writes to these people, not to "leaders".
     hint = ""
     try:
-        people = store.audience_leads(r.audience.model_dump())[:6]
+        people = store.audience_sample(r.audience.model_dump(), 6)
         titles = sorted({(p["lead"].title or "").strip() for p in people if (p["lead"].title or "").strip()})
         firms = sorted({(p["lead"].company or "").strip() for p in people if (p["lead"].company or "").strip()})
         if titles or firms:
@@ -2271,7 +2572,7 @@ def update_blast(bid: str, body: BlastBody):
 def delete_blast(bid: str):
     store = open_store()
     b = store.get_blast(bid)
-    if b and b.get("status") == "sending":
+    if b and b.get("status") == "sending" and not _blast_stalled(b):
         raise HTTPException(400, "can't delete a blast mid-send")
     store.delete_blast(bid)
     return {"ok": True}
@@ -2306,7 +2607,8 @@ def test_blast(bid: str, r: BlastTest):
     if blocked:
         raise HTTPException(400, "on the do-not-contact list, so not even a test: "
                                  + ", ".join(blocked[:5]))
-    people = store.audience_leads(b.get("audience") or {})
+    audience_n = store.audience_count(b.get("audience") or {})
+    people = store.audience_sample(b.get("audience") or {}, 1)
     sample = people[0]["lead"] if people else Lead(first_name="Maria", last_name="Chen",
                                                   title="VP Operations", company="Meridian Logistics")
     # The envelope goes to you; the CONTENT is rendered as a real person from the
@@ -2316,7 +2618,7 @@ def test_blast(bid: str, r: BlastTest):
     name = f"{sample.first_name or ''} {sample.last_name or ''}".strip()
     whose = name or (people[0]["email"] if people else "a sample lead")
     note = (f"TEST — written out as {whose}"
-            + (f", one of {len(people)} people in this audience" if people else
+            + (f", one of {audience_n} people in this audience" if people else
                " (your audience is empty, so this is invented sample data)")
             + ". A real send fills in each person's own details.")
     msgs = []
@@ -2340,7 +2642,7 @@ def test_blast(bid: str, r: BlastTest):
         raise HTTPException(502, f"Postmark rejected all of them — {bad[0]}")
     return {"ok": True, "sent": len(tos) - len(bad), "failed": bad,
             "rendered_for": people[0]["email"] if people else "(sample lead)",
-            "audience_count": len(people)}
+            "audience_count": audience_n}
 
 
 class SendBlast(BaseModel):
@@ -2360,13 +2662,25 @@ def send_blast(bid: str, r: SendBlast | None = None):
     b = store.get_blast(bid)
     if not b:
         raise HTTPException(404, "blast not found")
-    if b.get("status") == "sending":
+    # A stalled 'sending' (its worker died in a restart) resumes; run_blast skips
+    # everyone already recorded as sent. The one gap: a batch Postmark accepted in the
+    # instant before the crash, before it was recorded, can go to those people twice.
+    if b.get("status") == "sending" and not _blast_stalled(b):
         return {"started": False, "reason": "already sending"}
     if not postmark_send.has_key():
         raise HTTPException(400, "Postmark isn't configured — set POSTMARK_SERVER_TOKEN and MARKETING_FROM")
     if not postmark_send.from_address():
         raise HTTPException(400, "MARKETING_FROM isn't set — every send would be rejected by Postmark")
     limit = max(0, (r.limit if r else 0))
+    # Claim the blast atomically, conditional on exactly the state read above. Two
+    # quick clicks (or two tabs) used to start two workers that mailed the same people
+    # twice; only one of these updates can match.
+    claimed = store.db.blasts.update_one(
+        {"_id": bid, "status": b.get("status"), "heartbeat": b.get("heartbeat")},
+        {"$set": {"status": "sending", "error": "",
+                  "heartbeat": datetime.now(timezone.utc).isoformat()}})
+    if claimed.modified_count == 0:
+        return {"started": False, "reason": "already sending"}
     th = threading.Thread(target=marketing.run_blast, args=(store, bid, limit), daemon=True)
     th.start()
     return {"started": True, "limit": limit}
@@ -2394,6 +2708,11 @@ async def postmark_events(request: Request):
         ev = await request.json()
     except Exception:
         raise HTTPException(400, "invalid JSON")
+    # Every event writes to the database and some call Apollo: off the event loop.
+    return await run_in_threadpool(_postmark_event, ev)
+
+
+def _postmark_event(ev: dict) -> dict:
     store = open_store()
     kind = (ev.get("RecordType") or "").lower()
     email = (ev.get("Recipient") or ev.get("Email") or "").strip().lower()
@@ -2422,11 +2741,17 @@ async def postmark_events(request: Request):
 
 @app.get("/api/capture_token")
 def capture_token_status():
+    """Your own extension tokens; admins see everyone's, with whose each one is. It used
+    to list (and let anyone revoke) every token in the company."""
     store = open_store()
+    user = access.require_user()
+    admin = access.is_admin(user)
     tokens = [{"id": t["_id"], "label": t.get("label", ""),
+               "owner_email": t.get("owner_email", ""),
                "created_at": t.get("created_at", ""), "last_used_at": t.get("last_used_at", "")}
-              for t in store.list_capture_tokens()]
-    legacy = bool(store.get_setting(_CAPTURE_TOKEN_KEY))
+              for t in store.list_capture_tokens()
+              if admin or (t.get("owner") and t.get("owner") == user.get("id"))]
+    legacy = admin and bool(store.get_setting(_CAPTURE_TOKEN_KEY))
     return {"tokens": tokens, "legacy": legacy, "exists": bool(tokens) or legacy}
 
 
@@ -2440,14 +2765,21 @@ def create_capture_token(r: TokenCreate = TokenCreate()):
     independent of everyone else's — issuing or revoking one never disturbs the
     others, which the previous single shared token did."""
     token = "olc_" + secrets.token_urlsafe(32)   # olc = outreach linkedin capture
+    user = access.require_user()
     tid = open_store().create_capture_token(
-        (r.label or "").strip() or "unnamed", hashlib.sha256(token.encode()).hexdigest())
+        (r.label or "").strip() or "unnamed", hashlib.sha256(token.encode()).hexdigest(),
+        owner=user.get("id", ""), owner_email=user.get("email", ""))
     return {"token": token, "id": tid}
 
 
 @app.delete("/api/capture_token/{tid}")
 def revoke_one_capture_token(tid: str):
-    open_store().revoke_capture_token(tid)
+    store = open_store()
+    user = access.require_user()
+    t = store.get_capture_token(tid)
+    if not t or not (access.is_admin(user) or (t.get("owner") and t.get("owner") == user.get("id"))):
+        raise HTTPException(404, "token not found")
+    store.revoke_capture_token(tid)
     return {"ok": True}
 
 
@@ -2462,7 +2794,7 @@ def revoke_legacy_capture_token():
 def linkedin_campaigns(request: Request):
     """Campaign names for the extension's target-campaign dropdown (names only)."""
     _capture_auth(request)
-    return {"campaigns": open_store().campaign_names()}
+    return {"campaigns": _visible_campaigns(open_store())}   # the token owner's campaigns
 
 
 # --- ICP fit for captured commenters ------------------------------------------
@@ -2580,6 +2912,10 @@ async def signals_inbound(request: Request):
         ev = await request.json()
     except Exception:
         raise HTTPException(400, "invalid JSON")
+    return await run_in_threadpool(_signals_inbound, ev)   # parsing + writes block
+
+
+def _signals_inbound(ev: dict) -> dict:
     frm = ev.get("From") or (ev.get("FromFull") or {}).get("Email") or ""
     sigs = signals.parse_inbound(frm, ev.get("Subject") or "",
                                  ev.get("TextBody") or "", ev.get("HtmlBody") or "")
@@ -2710,7 +3046,7 @@ def routing_board(request: Request):
     whichever campaign sorted first."""
     _capture_auth(request)
     store = open_store()
-    names = [c["_id"] for c in store.db.campaigns.find({}, {"_id": 1})]
+    names = _visible_campaigns(store)   # route only into campaigns this user may see
     cfgs = {}
     for n in names:
         try:
@@ -2792,6 +3128,8 @@ def resolve_citation(sid: str, campaign: str = ""):
     offered EHS managers — people whose campaign then writes to them about BOLs.
     """
     store = open_store()
+    if campaign:
+        _require_campaign(campaign, store)   # its targeting decides who is previewed
     sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
     if not sig:
         raise HTTPException(404, "signal not found")
@@ -3042,6 +3380,8 @@ def toggle_lookalike(r: LookalikeReq):
     cfg = store.get_campaign(r.campaign)
     if cfg is None:
         raise HTTPException(404, f"campaign '{r.campaign}' not found")
+    _require_campaign(r.campaign, store)
+    _require_keys(store, r.campaign, [r.key])
     lead = store.get_lead(r.key)
     if not lead:
         raise HTTPException(404, "lead not found")
@@ -3143,6 +3483,10 @@ def _run_in_progress(campaign: str) -> bool:
 
 @app.post("/api/run")
 def run(req: RunReq):
+    store = open_store()
+    if not store.campaign_exists(req.campaign):
+        raise HTTPException(404, f"campaign '{req.campaign}' not found")
+    _require_campaign(req.campaign, store)
     if _run_in_progress(req.campaign):
         return {"started": False, "reason": "already running"}
     th = threading.Thread(target=_do_run, args=(req.campaign, req.send, req.limit), daemon=True)
@@ -3155,7 +3499,242 @@ def run(req: RunReq):
 
 @app.get("/api/run/status")
 def run_status(campaign: str):
+    _require_campaign(campaign)
     return _runs.get(campaign, {"running": False, "error": None, "summary": {}})
+
+
+# --- Training: the BDR playbook, per-user progress, the manager view ----------------
+# See src/training.py for the design (sandboxed frame, KNStore, the board stand-in).
+from . import training as tr   # noqa: E402
+
+MAIN_PROGRESS_KEY = "knowella_bdr_training_v1"   # modules, quizzes, checklist, activity log
+
+
+def _content_or_404(store, with_html: bool = True) -> dict:
+    c = store.latest_training_content(with_html=with_html)
+    if not c:
+        raise HTTPException(404, "no playbook has been uploaded yet — an admin uploads it on the Team page")
+    return c
+
+
+@app.get("/api/training/page")
+def training_page():
+    """The playbook, adapted for the sandboxed frame, with this user's saved progress in it."""
+    store = open_store()
+    user = access.require_user()
+    content = _content_or_404(store)
+    saved = store.training_state(user["id"])
+    allowed = set(content.get("state_keys") or [])
+    state = {k: v["value"] for k, v in saved.items() if k in allowed and v.get("value") is not None}
+    ids = content.get("signoff_ids") or []
+    if MAIN_PROGRESS_KEY in allowed:
+        merged = tr.apply_signoffs(state.get(MAIN_PROGRESS_KEY), store.signoffs_for(user["id"]), ids)
+        if merged is not None:
+            state[MAIN_PROGRESS_KEY] = merged
+    return {"html": tr.adapt(content["html"], state, {"id": user["id"], "name": user.get("name", "")}, ids),
+            "versions": {k: v["version"] for k, v in saved.items() if k in allowed},
+            "content": {"id": content["_id"], "uploaded_at": content.get("uploaded_at", ""),
+                        "sha256": content.get("sha256", ""), "state_keys": sorted(allowed),
+                        "has_board": bool(content.get("has_board"))}}
+
+
+class TrainingSave(BaseModel):
+    value: str
+    version: int = 0
+
+
+@app.put("/api/training/state/{key}")
+def training_save(key: str, r: TrainingSave):
+    """Save one progress key for the signed-in user, if it hasn't changed elsewhere since."""
+    store = open_store()
+    user = access.require_user()
+    content = _content_or_404(store, with_html=False)
+    if key not in set(content.get("state_keys") or []):
+        raise HTTPException(400, "not a progress key the playbook uses")
+    if len(r.value.encode("utf-8")) > tr.MAX_VALUE_BYTES:
+        raise HTTPException(413, "that's more than 256 KB of progress for one key")
+    value = r.value
+    old = (store.training_state(user["id"]).get(key) or {}).get("value")
+    if key == MAIN_PROGRESS_KEY:     # sign-off items only ever come from the manager
+        if not tr.is_progress_object(value):
+            raise HTTPException(400, "progress must be the playbook's own JSON")
+        value = tr.apply_signoffs(value, store.signoffs_for(user["id"]), content.get("signoff_ids") or [])
+    v = store.save_training_state(user["id"], user.get("email", ""), key, value, r.version)
+    if v is None:
+        cur = (store.training_state(user["id"]).get(key) or {}).get("version", 0)
+        raise HTTPException(409, {"message": "Your progress changed in another tab or device. "
+                                             "Reload the Training page to continue.", "version": cur})
+    if key == MAIN_PROGRESS_KEY:
+        store.add_training_events(user["id"], user.get("email", ""),
+                                  tr.training_events(old, value)[:tr.MAX_EVENTS_PER_SAVE])
+    return {"version": v, "value_changed": value != r.value}
+
+
+@app.post("/api/training/content")
+async def training_upload(file: UploadFile = File(...)):
+    """An admin uploads a new playbook version. Everyone's progress carries over: it's
+    keyed by the file's own storage keys, not by the version."""
+    raw = await file.read()
+    try:
+        html = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "the file isn't UTF-8 text")
+    try:
+        info = tr.inspect_html(html)
+    except tr.PlaybookError as e:
+        raise HTTPException(400, str(e))
+    if MAIN_PROGRESS_KEY not in info["keys"]:
+        raise HTTPException(400, f"this version doesn't save progress under \"{MAIN_PROGRESS_KEY}\", so "
+                                 "everyone's progress would start again from zero. The app needs a change "
+                                 "to carry progress across; upload the previous version meanwhile.")
+    user = access.require_user()
+
+    def _save():
+        return open_store().save_training_content({
+            **info, "html": html, "filename": file.filename or "",
+            "uploaded_by": user.get("email", ""), "uploaded_at": datetime.now(timezone.utc).isoformat()})
+    cid = await run_in_threadpool(_save)
+    return {"id": cid, "modules": len(info["modules"]), "state_keys": info["state_keys"],
+            "signoff_ids": info["signoff_ids"], "has_board": info["has_board"], "bytes": info["bytes"],
+            "swaps_missing": info["swaps_missing"]}
+
+
+@app.get("/api/training/content")
+def training_versions():
+    return [{"id": d["_id"], "filename": d.get("filename", ""), "uploaded_by": d.get("uploaded_by", ""),
+             "uploaded_at": d.get("uploaded_at", ""), "bytes": d.get("bytes", 0),
+             "modules": len(d.get("modules") or []), "has_board": d.get("has_board", False),
+             "swaps_missing": d.get("swaps_missing") or []}
+            for d in open_store().list_training_content()]
+
+
+def _progress(raw: str | None) -> dict:
+    try:
+        d = json.loads(raw) if raw else {}
+        return d if isinstance(d, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+@app.get("/api/training/team")
+def training_team():
+    """Every user's ramp: modules done, best live quiz scores, checklist, the last 14
+    days of their activity log, and when they were last active. Plus the playbook's own
+    labels (track names, module titles, sign-off items) for showing them."""
+    store = open_store()
+    content = store.latest_training_content(with_html=False) or {}
+    modules = set(content.get("modules") or [])
+    signoffs = content.get("signoff_ids") or []
+    states = store.all_training_state(MAIN_PROGRESS_KEY)
+    signed = store.all_signoffs()
+    out = []
+    for u in store.list_users():
+        s = states.get(u["_id"]) or {}
+        p = _progress(tr.apply_signoffs(s.get("value"), signed.get(u["_id"]) or {}, signoffs))
+        done = sorted(m for m, v in (p.get("done") or {}).items() if v and (m in modules or not modules))
+        log = p.get("log") or {}
+        out.append({"id": u["_id"], "email": u.get("email", ""), "name": u.get("name", ""),
+                    "role": u.get("role", ""), "active": u.get("active", True),
+                    "modules_done": len(done), "modules_total": len(modules),
+                    "quiz_best": p.get("quiz") or {},
+                    "quiz_attempts": {q: len(h or []) for q, h in (p.get("qhist") or {}).items()},
+                    "cert": p.get("cert") or {}, "signoff_ids": signoffs,
+                    "log": {d: log[d] for d in sorted(log)[-14:]},
+                    "last_saved": s.get("updated_at", ""), "last_seen": u.get("last_seen", "")})
+    return {"people": out, "modules_total": len(modules), "signoff_ids": signoffs,
+            "tracks": content.get("tracks") or [], "module_titles": content.get("module_titles") or {},
+            "signoff_labels": content.get("signoff_labels") or {},
+            "cert_labels": content.get("cert_labels") or {}}
+
+
+@app.get("/api/training/team/{uid}/events")
+def training_user_events(uid: str):
+    return open_store().training_events_for(uid)
+
+
+class Signoff(BaseModel):
+    user: str
+    item: str
+    value: bool
+
+
+@app.put("/api/training/signoff")
+def training_signoff(r: Signoff):
+    """A manager ticks (or unticks) a sign-off item on someone's certification checklist.
+    Kept apart from the person's own progress, so it never clashes with their open page;
+    they see it on their next load."""
+    store = open_store()
+    content = _content_or_404(store, with_html=False)
+    if r.item not in (content.get("signoff_ids") or []):
+        raise HTTPException(400, "not a manager sign-off item in the current playbook")
+    target = store.get_user(r.user)
+    if not target:
+        raise HTTPException(404, "user not found")
+    me_ = access.require_user()
+    store.set_signoff(r.user, r.item, r.value, me_.get("email", ""))
+    store.add_training_events(r.user, target.get("email", ""),
+                              [{"type": "signoff", "ref": r.item, "value": r.value, "by": me_.get("email", "")}])
+    return {"ok": True, "signoffs": store.signoffs_for(r.user)}
+
+
+# --- the Target board's shared table ---------------------------------------------
+def _segments_snapshot(store) -> dict:
+    docs, owners = {}, set()
+    for d in store.list_segments(tr.ORG):
+        docs[d["_id"]] = tr.public_segment(d)
+        if d.get("owner"):
+            owners.add(d["owner"])
+    names = {}
+    for uid in owners:
+        u = store.get_user(uid) or {}
+        names[uid] = u.get("name") or (u.get("email") or "").split("@")[0] or "A teammate"
+    return {"docs": docs, "names": names}
+
+
+@app.get("/api/segments")
+def segments_list():
+    """Every pair someone has touched on the Target board, plus the owners' names."""
+    return _segments_snapshot(open_store())
+
+
+@app.get("/api/segments/{sid}")
+def segment_get(sid: str):
+    if not tr.SEGMENT_ID_RE.match(sid):
+        raise HTTPException(400, "not a board id")
+    d = open_store().get_segment(sid)
+    return {"doc": tr.public_segment(d) if d else None}
+
+
+class SegmentWrite(BaseModel):
+    status: str = "grey"
+    mtgs: int | None = None
+    note: str | None = None
+    owner: str | None = None    # who the page expects to hold it; never written as-is
+
+
+@app.put("/api/segments/{sid}")
+def segment_put(sid: str, w: SegmentWrite):
+    """One change to the board. The server decides what it means and whether it's allowed
+    (claim, release, productive, exhausted, reopen, +1 meeting, note), conditional on the
+    row not having changed underneath, so two people claiming at once can't both win."""
+    if not tr.SEGMENT_ID_RE.match(sid):
+        raise HTTPException(400, "not a board id")
+    store = open_store()
+    user = access.require_user()
+    cur = store.get_segment(sid)
+    try:
+        plan = tr.plan_change(cur, w.model_dump(), user)
+    except tr.BoardRefused as e:
+        raise HTTPException(403 if e.code == "not-owner" else 409 if e.code == "already-claimed" else 400,
+                            {"code": e.code, "message": str(e)})
+    if plan["action"] == "none":
+        return {"doc": tr.public_segment(cur or {}), "action": "none"}
+    new = store.apply_segment_change(sid, tr.ORG, plan)
+    if new is None:
+        raise HTTPException(409, {"code": "already-claimed", "message": "someone else changed it first"})
+    store.add_segment_event(sid, user.get("id", ""), user.get("email", ""), plan["action"],
+                            {k: v for k, v in plan["set"].items() if k in ("status", "mtgs", "note")})
+    return {"doc": tr.public_segment(new), "action": plan["action"]}
 
 
 # --- serve the built frontend (single-container deploy) ----------------------
@@ -3169,10 +3748,21 @@ if os.path.isdir(_WEB_DIST):
 
     @app.get("/{full_path:path}")
     def spa(full_path: str):
-        """Serve a static file if it exists, else index.html (SPA + /sign-in fallback)."""
+        """Serve a static file if it exists, else index.html (SPA + /sign-in fallback).
+
+        Only files INSIDE web/dist. The path comes straight from the URL, and an encoded
+        "../" or a leading "//" arrives here decoded, so until 12 Oct 2026 a crafted path
+        could read files outside the folder. The path is resolved first and must stay
+        under the folder."""
         if full_path.startswith("api/"):
             raise HTTPException(404, "not found")
-        candidate = os.path.join(_WEB_DIST, full_path)
-        if full_path and os.path.isfile(candidate):
-            return FileResponse(candidate)
-        return FileResponse(os.path.join(_WEB_DIST, "index.html"))
+        base = os.path.realpath(_WEB_DIST)
+        if full_path:
+            candidate = os.path.realpath(os.path.join(base, full_path))
+            try:
+                inside = os.path.commonpath([base, candidate]) == base and candidate != base
+            except ValueError:          # a different drive (Windows): never inside
+                inside = False
+            if inside and os.path.isfile(candidate):
+                return FileResponse(candidate)
+        return FileResponse(os.path.join(base, "index.html"))
