@@ -13,9 +13,20 @@ import re
 import uuid
 from datetime import datetime, timezone
 
+from bson import ObjectId
 from pymongo import MongoClient
 
 from .models import Draft, GateResult, Lead, Research
+
+
+def _current_actor() -> dict:
+    """Who is adding something: the signed-in user of the request being served, or the
+    system for background work and the CLI. Recorded as a person's "sourced by"."""
+    from . import access   # lazy: the store must not depend on the web layer at import
+    u = access.current_user()
+    if not u:
+        return {"id": "", "email": "", "label": "system"}
+    return {"id": u.get("id", ""), "email": u.get("email", ""), "label": u.get("name") or u.get("email", "")}
 
 
 class MongoStore:
@@ -54,6 +65,25 @@ class MongoStore:
         self.db.training_signoffs.create_index([("user", 1)])
         self.db.segments.create_index([("org", 1)])
         self.db.segment_events.create_index([("segment", 1), ("at", -1)])
+        # people and companies (src/crm.py). Email and domain are unique, so two imports
+        # of the same person at the same moment end up as one record. The fields are left
+        # out of a document when empty, which is what the partial filter relies on.
+        self.db.people.create_index([("email", 1)], unique=True,
+                                    partialFilterExpression={"email": {"$exists": True}})
+        self.db.people.create_index([("emails", 1)], sparse=True)
+        self.db.people.create_index([("apollo_id", 1)], sparse=True)
+        self.db.people.create_index([("linkedin_url", 1)], sparse=True)
+        self.db.people.create_index([("name_key", 1)], sparse=True)
+        self.db.people.create_index([("owner", 1)])
+        self.db.people.create_index([("company_id", 1)])
+        self.db.companies.create_index([("domain", 1)], unique=True,
+                                       partialFilterExpression={"domain": {"$exists": True}})
+        self.db.companies.create_index([("apollo_org_id", 1)], sparse=True)
+        self.db.companies.create_index([("owner", 1)])
+        self.db.leads.create_index([("person_id", 1)], sparse=True)
+        self.db.leads.create_index([("company_id", 1)], sparse=True)
+        self.db.activities.create_index([("person_id", 1), ("at", -1)])
+        self.db.activities.create_index([("company_id", 1), ("at", -1)])
 
     # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
     # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.
@@ -249,7 +279,16 @@ class MongoStore:
                "topics": topics or [], "pulled_at": datetime.now(timezone.utc)}
         if source_id:      # which LinkedIn group / publication / community produced them
             doc["source_id"] = source_id
-        self.db.leads.update_one({"_id": sid}, {"$setOnInsert": doc}, upsert=True)
+        r = self.db.leads.update_one({"_id": sid}, {"$setOnInsert": doc}, upsert=True)
+        # Every lead row is also a person (and usually a company). A failure here must not
+        # lose the import, so it's logged; `python -m src.backfill_people --apply` links
+        # anything left unlinked.
+        try:
+            self.link_person(doc["lead"], sid, campaign, by=_current_actor(),
+                             enrolled=r.upserted_id is not None)
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("uvicorn.error").error("[crm] couldn't link %s to a person: %s", sid, e)
 
     def migrate_lead_keys(self) -> int:
         """One-time: re-key legacy leads (_id = base email) to campaign-scoped ids
@@ -407,6 +446,116 @@ class MongoStore:
     def save_lead_error(self, key: str, reason: str) -> None:
         """Persist WHY a lead errored, so mass failures are diagnosable after the fact."""
         self.db.leads.update_one({"_id": key}, {"$set": {"error": reason}})
+
+    # --- people and companies (one record each; see src/crm.py) --------------------
+    def find_person(self, ids: dict) -> dict | None:
+        """The existing person for these identity keys, strongest key first. A name at a
+        domain is only used for someone with no email: two different people can share a
+        name at a company, and their emails tell them apart."""
+        if ids.get("email"):   # their main address, or another one seen for them
+            d = self.db.people.find_one({"$or": [{"email": ids["email"]}, {"emails": ids["email"]}]})
+            if d:
+                return d
+        for field, key in (("apollo_id", "apollo_id"), ("linkedin_url", "linkedin")):
+            if ids.get(key):
+                d = self.db.people.find_one({field: ids[key]})
+                if d:
+                    return d
+        if not ids.get("email") and ids.get("name_key"):
+            return self.db.people.find_one({"name_key": ids["name_key"], "email": {"$exists": False}})
+        return None
+
+    def _link_company(self, lead: dict, ids: dict, owner: str, owner_email: str, now: str) -> str:
+        from pymongo import ReturnDocument
+        from . import crm
+        fields = crm.company_fields(lead)
+        existing = None
+        if ids.get("domain"):
+            existing = self.db.companies.find_one({"domain": ids["domain"]})
+        if existing is None and ids.get("apollo_org_id"):
+            existing = self.db.companies.find_one({"apollo_org_id": ids["apollo_org_id"]})
+        if existing is not None:
+            if existing.get("domain"):
+                fields.pop("domain", None)          # a company's domain is its identity: never moved
+            self.db.companies.update_one({"_id": existing["_id"]}, {"$set": {**fields, "updated_at": now}})
+            return existing["_id"]
+        if not ids.get("domain") and not ids.get("apollo_org_id"):
+            return ""
+        doc = {"_id": crm.new_id(), **fields, "owner": owner, "owner_email": owner_email,
+               "stage": "", "created_at": now, "updated_at": now}
+        if ids.get("domain"):
+            got = self.db.companies.find_one_and_update(
+                {"domain": ids["domain"]}, {"$setOnInsert": doc}, upsert=True,
+                return_document=ReturnDocument.AFTER)
+            return got["_id"]
+        self.db.companies.insert_one(doc)
+        return doc["_id"]
+
+    def link_person(self, lead: dict, enrollment_id: str, campaign: str, by: dict | None = None,
+                    enrolled: bool = True, at: str | None = None) -> str:
+        """Find or create the person (and company) behind one lead row, and point the row
+        at them. Idempotent: linking the same row again changes nothing but the
+        refreshed Apollo fields. Returns the person id ('' when the row has nothing to
+        identify a person by).
+
+        A new person is owned by the owner of the campaign they arrived through (the one
+        who works that campaign); an existing person keeps their owner, stage, notes and
+        interests. `at` backdates the timeline entries (the backfill uses the pull date)."""
+        from pymongo import ReturnDocument
+        from . import crm
+        ids = crm.identity(lead)
+        if not (ids["email"] or ids["apollo_id"] or ids["linkedin"] or ids["name_key"]):
+            return ""
+        now = crm.now_iso()
+        when = now if at is None else at       # "" = date unknown (rows pulled before dates were kept)
+        by = by or {"id": "", "email": "", "label": "system"}
+        camp = self.db.campaigns.find_one({"_id": campaign}, {"owner": 1, "owner_email": 1}) or {}
+        owner, owner_email = camp.get("owner") or "", camp.get("owner_email") or ""
+        company_id = self._link_company(lead, ids, owner, owner_email, now)
+        fields = crm.person_fields(lead)
+        if company_id:
+            fields["company_id"] = company_id
+        existing = self.find_person(ids)
+        created = False
+        if existing is not None:
+            upd: dict = {"$set": {**fields, "updated_at": now}}
+            if ids["email"] and ids["email"] != existing.get("email"):
+                if existing.get("email"):
+                    upd["$addToSet"] = {"emails": ids["email"]}     # same person, another address
+                else:
+                    upd["$set"]["email"] = ids["email"]
+            self.db.people.update_one({"_id": existing["_id"]}, upd)
+            pid = existing["_id"]
+        else:
+            doc = {"_id": crm.new_id(), **fields,
+                   "source": {"type": crm.source_type(lead.get("source", "")), "campaign": campaign},
+                   "sourced_by": {**by, "at": when},
+                   "owner": owner, "owner_email": owner_email, "stage": "", "interests": [],
+                   "phones": [], "created_at": when, "updated_at": now}
+            if ids["email"]:
+                doc["email"] = ids["email"]
+                got = self.db.people.find_one_and_update(
+                    {"email": ids["email"]}, {"$setOnInsert": doc}, upsert=True,
+                    return_document=ReturnDocument.AFTER)
+                pid = got["_id"]
+                created = pid == doc["_id"]
+            else:
+                self.db.people.insert_one(doc)
+                pid, created = doc["_id"], True
+        prev = self.db.leads.find_one_and_update(
+            {"_id": enrollment_id}, {"$set": {"person_id": pid, "company_id": company_id}},
+            projection={"person_id": 1})
+        newly_linked = bool(prev) and prev.get("person_id") != pid
+        events = []
+        if created:
+            events.append({"type": "created", "body": f"Added from {crm.source_type(lead.get('source', '')) or 'an import'}"})
+        if enrolled and newly_linked:
+            events.append({"type": "enrolled", "body": f"Added to campaign {campaign}"})
+        for e in events:   # ObjectId ids: time-ordered, so same-instant events keep their order
+            self.db.activities.insert_one({"_id": ObjectId(), "person_id": pid, "company_id": company_id,
+                                           "campaign": campaign, "enrollment": enrollment_id,
+                                           "by": by, "at": when, **e})
+        return pid
 
     # --- research (cached by input_hash) ------------------------------------
     def get_research(self, key: str, input_hash: str) -> Research | None:
