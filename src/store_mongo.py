@@ -90,6 +90,7 @@ class MongoStore:
         self.db.messages.create_index([("enrollment", 1)])
         self.db.activities.create_index([("person_id", 1), ("at", -1)])
         self.db.activities.create_index([("company_id", 1), ("at", -1)])
+        self.db.credit_usage.create_index([("day", 1)])     # Apollo pull allowance (src/credits.py)
 
     # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
     # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.

@@ -50,10 +50,12 @@ const sequenceOf = (f) => ({
 
 export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
   const isEdit = !!edit
-  // Sending (mailboxes, the Apollo sequence) and Apollo pulls are wired by an admin:
-  // they use the company's mailboxes and its shared credits. The server ignores a
-  // non-admin's sending choices anyway, so they aren't offered.
+  // Sending (mailboxes, the Apollo sequence) is wired by an admin: it uses the company's
+  // mailboxes, and the server ignores a non-admin's sending choices anyway, so they
+  // aren't offered. Apollo pulls: admins without a limit, sales users within their
+  // daily allowance (src/credits.py).
   const admin = isAdmin(useMe())
+  const [allow, setAllow] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -114,7 +116,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   useEffect(() => {
-    if (!admin) return
+    if (!admin) { api.getPullAllowance().then(setAllow).catch(() => {}); return }
     api.getMailboxes().then((d) => setMailboxes(d.mailboxes || [])).catch(() => {})
     api.getSequences().then((d) => setSequences(d.sequences || [])).catch(() => {})
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -238,7 +240,7 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         })
         slug = r.created
       }
-      const n = admin ? Number(f.pull_limit) : 0
+      const n = admin || allow?.left ? Number(f.pull_limit) : 0
       if (n > 0) {
         setStatus(`Pulling ${n} leads from Apollo…`)
         try { await api.pullApollo(slug, n) } catch { /* campaign saved; leads can be pulled later */ }
@@ -288,9 +290,11 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
     if (step === 1) return (
       <>
         <div className="wizard-note">
-          Pick your <b>Apollo filters</b> below — click to select, or type to add your own.{admin
+          Pick your <b>Apollo filters</b> below — click to select, or type to add your own.{admin || allow?.left
             ? ' On create, we pull the matching companies + contacts straight from Apollo.'
-            : ' They’re saved with the campaign. Pulling from Apollo spends the team’s shared credits, so an admin runs the pull; you can also import a CSV on the Leads page.'}
+            : allow && allow.per_day === 0
+              ? ' They’re saved with the campaign. Apollo pulls are switched off for sales users, so an admin runs the pull; you can also import a CSV on the Leads page.'
+              : ' They’re saved with the campaign. You can pull from Apollo or import a CSV on the Leads page.'}
         </div>
         {field('Job titles', <SearchSelect presets={TITLE_PRESETS} value={f.titles} onChange={(v) => setKey('titles', v)} placeholder="Search titles, or type any + Enter" />, 'The roles you’re targeting — any title works, suggestions are shortcuts.')}
         {field('Seniority', <ChipSelect presets={SENIORITY_LEVELS.map(([l]) => l)} value={f.seniorities} onChange={(v) => setKey('seniorities', v)} allowCustom={false} />, 'Keeps the list to decision-makers — cuts juniors and assistants.')}
@@ -337,17 +341,17 @@ export default function NewCampaign({ onClose, onCreated, onDeleted, edit }) {
         <div className="field-hint" style={{ marginTop: -14, marginBottom: 18 }}>
           Live from Apollo and free to check — the same total a People search with these filters shows in Apollo itself, so you can verify it there. Only revealing contacts costs credits.
         </div>
-        {admin && field('How many leads to pull now',
+        {(admin || allow?.left > 0) && field('How many leads to pull now',
           <select className="field-input" value={f.pull_limit} onChange={set('pull_limit')}>
-            <option value={25}>25 leads</option>
-            <option value={50}>50 leads</option>
-            <option value={100}>100 leads</option>
-            <option value={250}>250 leads</option>
-            <option value={500}>500 leads</option>
-            <option value={1000}>1000 leads</option>
+            {(admin ? [25, 50, 100, 250, 500, 1000]
+              : [...[5, 10, 25, 50, 100].filter((n) => n < allow.left), allow.left]).map((n) => (
+              <option key={n} value={n}>{n} leads{!admin && n === allow.left ? ' (all you have left today)' : ''}</option>
+            ))}
             <option value={0}>Don’t pull yet</option>
           </select>,
-          'Pulls a batch of the matches above; each revealed lead costs ~1 Apollo credit. Start small — repeat pulls skip contacts you already have, so you can always pull the next batch later.')}
+          admin
+            ? 'Pulls a batch of the matches above; each revealed lead costs ~1 Apollo credit. Start small — repeat pulls skip contacts you already have, so you can always pull the next batch later.'
+            : `Each revealed lead costs ~1 Apollo credit from your daily allowance: ${allow.left} of ${allow.per_day} left today. Repeat pulls skip contacts you already have, so you can pull the next batch from the Leads page later.`)}
       </>
     )
     return (

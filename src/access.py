@@ -223,7 +223,9 @@ POLICY: dict[tuple[str, str], object] = {
     ("GET", "/api/leads/all"): SALES,                # filtered to your campaigns
     ("POST", "/api/library/promote"): SALES,
     ("POST", "/api/pull"): SALES,                    # CSV import, no credits
-    ("POST", "/api/pull/apollo"): ADMIN,             # spends shared Apollo credits
+    ("POST", "/api/pull/apollo"): SALES,             # spends Apollo credits: sales within a daily allowance
+    ("GET", "/api/pull/allowance"): SALES,           # what you have left today (admins: the team's usage)
+    ("PUT", "/api/pull/allowance"): ADMIN,           # set the sales allowance
     ("POST", "/api/preview/apollo"): SALES,          # free count
     ("GET", "/api/apollo/schools"): SALES,
     ("POST", "/api/run"): SALES,

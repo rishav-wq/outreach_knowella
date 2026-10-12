@@ -346,6 +346,57 @@ function ReplySync() {
   )
 }
 
+// Admins: how many Apollo credits each sales user may spend on pulls per day, and who
+// has spent what today (src/credits.py).
+function PullAllowance() {
+  const [st, setSt] = useState(null)
+  const [val, setVal] = useState('')
+  const [msg, setMsg] = useState(null)
+  const load = () => api.getPullAllowance().then((d) => { setSt(d); setVal(String(d.per_day)) }).catch(() => setSt({}))
+  useEffect(() => { load() }, [])
+  const save = async () => {
+    setMsg(null)
+    const n = Number(val)
+    if (!Number.isInteger(n) || n < 0) { setMsg({ ok: false, text: 'Enter a whole number, 0 or more.' }); return }
+    try {
+      const r = await api.setPullAllowance(n)
+      setMsg({ ok: true, text: r.per_day ? `Saved: ${r.per_day} credits per sales user per day.` : 'Saved: sales users can’t pull from Apollo.' })
+      load()
+    } catch (e) { setMsg({ ok: false, text: api.errorText(e) }) }
+  }
+  if (!st) return null
+  const today = st.team_today || []
+  return (
+    <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="drawer-label">Apollo pulls by sales</div>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+        Pulling from Apollo reveals each new contact for about one credit, from the team’s shared pool. Admins pull
+        without a limit; each sales user may spend up to this many a day (it resets at midnight UTC). 0 turns sales pulls off.
+      </div>
+      <div className="ready-form" style={{ marginBottom: 8 }}>
+        <input className="field-input" type="number" min={0} aria-label="Credits per sales user per day" value={val}
+          style={{ maxWidth: 120 }} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
+        <span className="muted" style={{ fontSize: 12.5 }}>credits per sales user per day</span>
+        <button className="btn" onClick={save} disabled={String(st.per_day) === val}>Save</button>
+      </div>
+      {msg && <div className={`banner ${msg.ok ? '' : 'error'}`} style={{ marginBottom: 10 }}>{msg.text}</div>}
+      <div className="muted" style={{ fontSize: 12.5, margin: '10px 0 6px' }}>Spent today</div>
+      {today.length === 0
+        ? <div className="muted" style={{ fontSize: 12.5 }}>No pulls yet today.</div>
+        : (
+          <ul className="supp-list">
+            {today.map((u) => (
+              <li key={u.user}>
+                <span>{u.name || u.email || u.user}</span>
+                <span className="muted"> · {u.used} {u.used === 1 ? 'credit' : 'credits'} in {u.pulls} {u.pulls === 1 ? 'pull' : 'pulls'}{u.role === 'admin' ? ' (admin, no limit)' : ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+    </motion.section>
+  )
+}
+
 export default function Settings({ campaign }) {
   const me = useMe()
   // The sending side belongs to a campaign: shown to sales and admins who have one.
@@ -368,6 +419,7 @@ export default function Settings({ campaign }) {
         <LinkedInCapture />
         <Suppression />
         {canSales(me) && <Customers />}
+        {isAdmin(me) && <PullAllowance />}
       </div>
     )
   }
@@ -410,6 +462,7 @@ export default function Settings({ campaign }) {
       <LinkedInCapture />
       <Suppression />
       <Customers />
+      {isAdmin(me) && <PullAllowance />}
       {isAdmin(me) && <ReplySync />}
     </div>
   )

@@ -11,10 +11,15 @@ const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { durat
 
 import { avatarTint, initials } from './avatar'
 
+const PULL_SIZES = [5, 10, 25, 50, 100, 250, 500]
+
 // Where leads come in and live. Apollo is the primary source (pulled directly by
 // the campaign's ICP); CSV import stays for any hand-built or external list.
 export default function Leads({ campaign, onNavigate }) {
-  const admin = isAdmin(useMe())   // Apollo pulls spend the shared credits: admins run them
+  // Apollo pulls spend the team's shared credits: admins without a limit, sales users
+  // within a daily allowance an admin sets (src/credits.py).
+  const admin = isAdmin(useMe())
+  const [allow, setAllow] = useState(null)   // { unlimited, per_day, used, left }
   const [leads, setLeads] = useState(null)
   const [q, setQ] = useState('')
   const [dateFilter, setDateFilter] = useState('all')   // all | today | 7d | 30d — by pull date
@@ -29,7 +34,14 @@ export default function Leads({ campaign, onNavigate }) {
   const load = () => api.getLeads(campaign).then(setLeads).catch(() => setLeads([]))
   useEffect(() => {
     setLeads(null); setMsg(null); setSel(new Set()); setConfirm(null); load()
+    api.getPullAllowance().then(setAllow).catch(() => setAllow(null))
   }, [campaign])
+  const canPull = admin || (allow && allow.per_day > 0)
+  const left = admin || !allow ? null : allow.left
+  // A sales user is offered only sizes they can afford today, plus "all I have left".
+  const sizes = left == null ? PULL_SIZES
+    : [...PULL_SIZES.filter((n) => n < left), ...(left > 0 ? [left] : [])]
+  const pullSize = left == null ? limit : Math.min(limit, left)
 
   // multi-select for bulk actions on a pull
   const toggleSel = (key) => setSel((prev) => {
@@ -63,16 +75,19 @@ export default function Leads({ campaign, onNavigate }) {
   const pullApollo = async () => {
     setBusy('apollo'); setMsg(null)
     try {
-      const r = await api.pullApollo(campaign, limit)
+      const r = await api.pullApollo(campaign, pullSize)
+      if (r.allowance) setAllow(r.allowance)
       const credits = r.credits_used != null ? ` · used ${r.credits_used} Apollo ${r.credits_used === 1 ? 'credit' : 'credits'}` : ''
+      const capped = r.capped ? ' (cut to what was left of your daily allowance)' : ''
       const noEmail = r.no_email ? ` · skipped ${r.no_email} with no email` : ''
       const rules = refusedText(r.refused)
       setMsg(r.pulled
-        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${credits}${noEmail}.${rules} Run the pipeline on the Overview to research and draft them.` }
+        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${capped}${credits}${noEmail}.${rules} Run the pipeline on the Overview to research and draft them.` }
         : { kind: 'ok', text: `Apollo returned no new emailable leads${noEmail}.${rules} Widen the titles, keywords, or geographies in the campaign settings.` })
       await load()
     } catch (e) {
-      setMsg({ kind: 'err', text: `Apollo pull failed: ${e.message || e}` })
+      setMsg({ kind: 'err', text: e.status === 429 ? api.errorText(e) : `Apollo pull failed: ${api.errorText(e)}` })
+      api.getPullAllowance().then(setAllow).catch(() => {})
     }
     setBusy('')
   }
@@ -94,19 +109,22 @@ export default function Leads({ campaign, onNavigate }) {
 
   const sourceActions = (
     <div className="import-controls">
-      {admin && <>
-      <select className="src-select" value={limit} onChange={(e) => setLimit(Number(e.target.value))} title="How many leads to pull from Apollo" disabled={!!busy}>
-        <option value={5}>5 leads</option>
-        <option value={10}>10 leads</option>
-        <option value={25}>25 leads</option>
-        <option value={50}>50 leads</option>
-        <option value={100}>100 leads</option>
-        <option value={250}>250 leads</option>
-        <option value={500}>500 leads</option>
-      </select>
-      <motion.button className="btn primary" {...tap} disabled={!!busy} onClick={pullApollo}>
+      {canPull && <>
+      {left === 0
+        ? <span className="muted pull-left" title="Your daily Apollo allowance resets at midnight UTC. An admin can pull more for you.">
+            No Apollo credits left today
+          </span>
+        : <select className="src-select" value={pullSize} onChange={(e) => setLimit(Number(e.target.value))} title="How many leads to pull from Apollo" disabled={!!busy}>
+            {sizes.map((n) => <option key={n} value={n}>{n} leads{left != null && n === left ? ' (all you have left)' : ''}</option>)}
+          </select>}
+      <motion.button className="btn primary" {...tap} disabled={!!busy || left === 0} onClick={pullApollo}>
         {busy === 'apollo' ? <><span className="spinner" /> Pulling…</> : <><Icon name="download" size={15} /> Pull from Apollo</>}
       </motion.button>
+      {left != null && left > 0 && (
+        <span className="muted pull-left" title="Each revealed lead costs about one Apollo credit. Your allowance resets at midnight UTC.">
+          {left} of {allow.per_day} credits left today
+        </span>
+      )}
       </>}
       <motion.label className={`btn ${busy === 'csv' ? 'is-busy' : ''}`} {...tap}>
         {busy === 'csv' ? <><span className="spinner spinner-dark" /> Importing…</> : <><Icon name="upload" size={15} /> Import CSV</>}
@@ -138,9 +156,9 @@ export default function Leads({ campaign, onNavigate }) {
         <motion.div className="empty" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <div className="empty-icon"><Icon name="download" size={24} /></div>
           <h3>Bring in your first leads</h3>
-          <p className="muted">{admin
-            ? <>Pull directly from Apollo using this campaign&apos;s ICP — titles, industries, size, and geographies from the config. Or import a CSV for any other list. Missing domains and emails are enriched automatically.</>
-            : <>Import a CSV of the people you want to reach. Missing domains and emails are enriched automatically. Pulls from Apollo spend the team&apos;s shared credits, so an admin runs those for you.</>}</p>
+          <p className="muted">{canPull
+            ? <>Pull directly from Apollo using this campaign&apos;s ICP — titles, industries, size, and geographies from the config. Or import a CSV for any other list. Missing domains and emails are enriched automatically.{!admin && allow ? ` Each revealed lead costs about one credit from your daily allowance of ${allow.per_day}.` : ''}</>
+            : <>Import a CSV of the people you want to reach. Missing domains and emails are enriched automatically. Apollo pulls are switched off for sales users, so an admin runs those for you.</>}</p>
           <div className="empty-actions">{sourceActions}</div>
         </motion.div>
       </div>

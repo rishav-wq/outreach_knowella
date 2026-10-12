@@ -209,6 +209,10 @@ export const pull = (campaign, file, source = 'manual') => {
 }
 
 export const pullApollo = (campaign, limit = 25) => apiSend('/api/pull/apollo', 'POST', { campaign, limit })
+// Apollo credits a sales user may still spend on pulls today (admins: unlimited, plus
+// the team's usage today). Admins set the daily allowance; 0 turns sales pulls off.
+export const getPullAllowance = () => apiGet('/api/pull/allowance')
+export const setPullAllowance = (perDay) => apiSend('/api/pull/allowance', 'PUT', { per_day: perDay })
 // Free live match count for a set of audience filters (no campaign needed — the
 // wizard calls this before the campaign exists).
 export const previewApollo = (icp, apollo) => apiSend('/api/preview/apollo', 'POST', { icp, apollo })

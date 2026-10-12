@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, auth, config, crm, enroll, marketing, pipeline, reply_sync, tagging, unsubscribe
+from . import access, auth, config, credits, crm, enroll, marketing, pipeline, reply_sync, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
@@ -3453,11 +3453,22 @@ class ApolloPull(BaseModel):
 
 @app.post("/api/pull/apollo")
 def pull_apollo(r: ApolloPull):
-    """Pull leads straight from Apollo by the campaign's filters (needs a paid Apollo plan)."""
+    """Pull leads straight from Apollo by the campaign's filters (needs a paid Apollo plan).
+    Sales users spend from their daily allowance (src/credits.py); admins have no limit."""
     cfg = _load(r.campaign)
     if not apollo.has_key():
         raise HTTPException(400, "APOLLO_API_KEY is not set. Add it to .env and restart the backend.")
     store = open_store()
+    user = access.current_user()
+    want = min(max(r.limit, 1), credits.MAX_PER_DAY)
+    day = credits.today()
+    grant = credits.reserve(store, user, want, day)
+    if grant <= 0:
+        a = credits.allowance(store, user)
+        raise HTTPException(429, "Apollo pulls are switched off for sales users. An admin can turn them on in Settings."
+                            if a["per_day"] == 0 else
+                            f"You've used today's {a['per_day']} Apollo credits. The allowance resets at midnight UTC; "
+                            "an admin can pull more for you or raise it in Settings.")
     # Apollo ids already pulled into this campaign — skip them so a repeat pull
     # reveals only NEW contacts and never re-charges for ones you already have.
     known_ids = {(lead.raw or {}).get("id") for lead in store.leads(cfg["name"])}
@@ -3467,9 +3478,11 @@ def pull_apollo(r: ApolloPull):
     guard = enroll.Guard(store, cfg["name"])
     known_ids |= guard.blocked_apollo_ids()
     try:
-        leads_in, credits = apollo.fetch_leads(cfg, limit=min(max(r.limit, 1), 2000), known_ids=known_ids)
+        leads_in, spent = apollo.fetch_leads(cfg, limit=grant, known_ids=known_ids)
     except Exception as e:
+        # The reservation stands: Apollo may have charged before failing.
         raise HTTPException(400, str(e))
+    credits.settle(store, user, grant, spent, day)
     topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
     src_id = store.upsert_source("Apollo search", "apollo")   # comparable to every other source
     skipped = 0
@@ -3491,7 +3504,33 @@ def pull_apollo(r: ApolloPull):
         if code:
             refused[code] = refused.get(code, 0) + 1
     return {"pulled": len(leads_in) - skipped - no_email - sum(refused.values()), "suppressed": skipped,
-            "no_email": no_email, "refused": refused, "credits_used": credits, "counts": store.counts(cfg["name"])}
+            "no_email": no_email, "refused": refused, "credits_used": spent, "asked": want,
+            "capped": grant < want, "allowance": credits.allowance(store, user),
+            "counts": store.counts(cfg["name"])}
+
+
+@app.get("/api/pull/allowance")
+def pull_allowance():
+    """How many Apollo credits you may still spend on pulls today. Admins also get the
+    team's usage today."""
+    store = open_store()
+    user = access.current_user()
+    out = credits.allowance(store, user)
+    if user is None or access.is_admin(user):
+        out["team_today"] = credits.team_today(store)
+    return out
+
+
+class PullAllowanceSet(BaseModel):
+    per_day: int
+
+
+@app.put("/api/pull/allowance")
+def set_pull_allowance(r: PullAllowanceSet):
+    """Admins: each sales user's daily Apollo pull allowance (0 = sales can't pull)."""
+    if r.per_day < 0 or r.per_day > credits.MAX_PER_DAY:
+        raise HTTPException(400, f"the allowance must be between 0 and {credits.MAX_PER_DAY}")
+    return {"per_day": credits.set_per_day(open_store(), r.per_day)}
 
 
 class RunReq(BaseModel):
