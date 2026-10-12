@@ -114,6 +114,28 @@ class MongoStore:
     def set_campaign_owner(self, slug: str, uid: str, email: str = "") -> None:
         self.db.campaigns.update_one({"_id": slug}, {"$set": {"owner": uid, "owner_email": email}})
 
+    def adopt_campaign_people(self, campaign: str, owner: str, owner_email: str, by: dict) -> int:
+        """When a campaign is given to someone, its leads and their companies that nobody
+        owns yet become theirs (people owned by someone else stay theirs). Returns how
+        many people changed hands."""
+        if not owner:
+            return 0
+        from . import crm
+        pids = self.db.leads.distinct("person_id", {"campaign": campaign, "person_id": {"$exists": True}})
+        unowned = list(self.db.people.find({"_id": {"$in": pids}, "owner": {"$in": ["", None]}}, {"company_id": 1}))
+        if not unowned:
+            return 0
+        now = crm.now_iso()
+        ids = [p["_id"] for p in unowned]
+        self.db.people.update_many({"_id": {"$in": ids}}, {"$set": {"owner": owner, "owner_email": owner_email, "updated_at": now}})
+        cids = sorted({p.get("company_id") for p in unowned if p.get("company_id")})
+        self.db.companies.update_many({"_id": {"$in": cids}, "owner": {"$in": ["", None]}},
+                                      {"$set": {"owner": owner, "owner_email": owner_email, "updated_at": now}})
+        for p in unowned:
+            self.add_activity(p["_id"], p.get("company_id", ""), "owner_change", by,
+                              f"Owner set with campaign {campaign}", meta={"from": "", "to": owner})
+        return len(ids)
+
     def campaign_owners(self) -> dict:
         """{slug: owner user id ('' when unowned)} for every campaign."""
         return {d["_id"]: d.get("owner") or "" for d in self.db.campaigns.find({}, {"owner": 1})}
@@ -527,32 +549,23 @@ class MongoStore:
         self.db.companies.insert_one(doc)
         return doc["_id"]
 
-    def link_person(self, lead: dict, enrollment_id: str, campaign: str, by: dict | None = None,
-                    enrolled: bool = True, at: str | None = None) -> str:
-        """Find or create the person (and company) behind one lead row, and point the row
-        at them. Idempotent: linking the same row again changes nothing but the
-        refreshed Apollo fields. Returns the person id ('' when the row has nothing to
-        identify a person by).
-
-        A new person is owned by the owner of the campaign they arrived through (the one
-        who works that campaign); an existing person keeps their owner, stage, notes and
-        interests. `at` backdates the timeline entries (the backfill uses the pull date)."""
+    def upsert_person(self, lead: dict, owner: str, owner_email: str, by: dict, when: str,
+                      source_campaign: str = "") -> tuple[str, str, bool]:
+        """Find or create the person (and their company) for a lead-shaped dict.
+        Returns (person id, company id, created). An existing person gets refreshed
+        Apollo fields and any new identity values; their owner, stage, notes and
+        interests are never touched. ('', '', False) when nothing identifies a person."""
         from pymongo import ReturnDocument
         from . import crm
         ids = crm.identity(lead)
         if not (ids["email"] or ids["apollo_id"] or ids["linkedin"] or ids["name_key"]):
-            return ""
+            return "", "", False
         now = crm.now_iso()
-        when = now if at is None else at       # "" = date unknown (rows pulled before dates were kept)
-        by = by or {"id": "", "email": "", "label": "system"}
-        camp = self.db.campaigns.find_one({"_id": campaign}, {"owner": 1, "owner_email": 1}) or {}
-        owner, owner_email = camp.get("owner") or "", camp.get("owner_email") or ""
         company_id = self._link_company(lead, ids, owner, owner_email, now)
         fields = crm.person_fields(lead)
         if company_id:
             fields["company_id"] = company_id
         existing = self.find_person(ids)
-        created = False
         if existing is not None:
             sets, adds = self._keep_keys(existing, fields, self._PERSON_KEYS)
             if ids["email"] and ids["email"] != existing.get("email"):
@@ -564,36 +577,60 @@ class MongoStore:
             if adds:
                 upd["$addToSet"] = adds
             self.db.people.update_one({"_id": existing["_id"]}, upd)
-            pid = existing["_id"]
-        else:
-            doc = {"_id": crm.new_id(), **fields,
-                   "source": {"type": crm.source_type(lead.get("source", "")), "campaign": campaign},
-                   "sourced_by": {**by, "at": when},
-                   "owner": owner, "owner_email": owner_email, "stage": "", "interests": [],
-                   "phones": [], "created_at": when, "updated_at": now}
-            if ids["email"]:
-                doc["email"] = ids["email"]
-                got = self.db.people.find_one_and_update(
-                    {"email": ids["email"]}, {"$setOnInsert": doc}, upsert=True,
-                    return_document=ReturnDocument.AFTER)
-                pid = got["_id"]
-                created = pid == doc["_id"]
-            else:
-                self.db.people.insert_one(doc)
-                pid, created = doc["_id"], True
+            return existing["_id"], company_id, False
+        doc = {"_id": crm.new_id(), **fields,
+               "source": {"type": crm.source_type(lead.get("source", "")), "campaign": source_campaign},
+               "sourced_by": {**by, "at": when},
+               "owner": owner, "owner_email": owner_email, "stage": "", "interests": [],
+               "phones": [], "created_at": when, "updated_at": now}
+        if ids["email"]:
+            doc["email"] = ids["email"]
+            got = self.db.people.find_one_and_update(
+                {"email": ids["email"]}, {"$setOnInsert": doc}, upsert=True,
+                return_document=ReturnDocument.AFTER)
+            return got["_id"], company_id, got["_id"] == doc["_id"]
+        self.db.people.insert_one(doc)
+        return doc["_id"], company_id, True
+
+    def add_activity(self, person_id: str, company_id: str, kind: str, by: dict, body: str = "",
+                     at: str | None = None, **extra) -> dict:
+        """One timeline entry. ObjectId ids are time-ordered, so same-instant events keep
+        their order."""
+        from . import crm
+        doc = {"_id": ObjectId(), "person_id": person_id, "company_id": company_id, "type": kind,
+               "by": by, "at": crm.now_iso() if at is None else at, "body": body, **extra}
+        self.db.activities.insert_one(doc)
+        return doc
+
+    def link_person(self, lead: dict, enrollment_id: str, campaign: str, by: dict | None = None,
+                    enrolled: bool = True, at: str | None = None) -> str:
+        """Find or create the person (and company) behind one lead row, and point the row
+        at them. Idempotent: linking the same row again changes nothing but the
+        refreshed Apollo fields. Returns the person id ('' when the row has nothing to
+        identify a person by).
+
+        A new person is owned by the owner of the campaign they arrived through (the one
+        who works that campaign); an existing person keeps their owner, stage, notes and
+        interests. `at` backdates the timeline entries (the backfill uses the pull date)."""
+        from . import crm
+        when = crm.now_iso() if at is None else at   # "" = date unknown (rows pulled before dates were kept)
+        by = by or {"id": "", "email": "", "label": "system"}
+        camp = self.db.campaigns.find_one({"_id": campaign}, {"owner": 1, "owner_email": 1}) or {}
+        pid, company_id, created = self.upsert_person(lead, camp.get("owner") or "", camp.get("owner_email") or "",
+                                                       by, when, source_campaign=campaign)
+        if not pid:
+            return ""
         prev = self.db.leads.find_one_and_update(
             {"_id": enrollment_id}, {"$set": {"person_id": pid, "company_id": company_id}},
             projection={"person_id": 1})
         newly_linked = bool(prev) and prev.get("person_id") != pid
-        events = []
         if created:
-            events.append({"type": "created", "body": f"Added from {crm.source_type(lead.get('source', '')) or 'an import'}"})
+            self.add_activity(pid, company_id, "created", by,
+                              f"Added from {crm.source_type(lead.get('source', '')) or 'an import'}",
+                              at=when, campaign=campaign, enrollment=enrollment_id)
         if enrolled and newly_linked:
-            events.append({"type": "enrolled", "body": f"Added to campaign {campaign}"})
-        for e in events:   # ObjectId ids: time-ordered, so same-instant events keep their order
-            self.db.activities.insert_one({"_id": ObjectId(), "person_id": pid, "company_id": company_id,
-                                           "campaign": campaign, "enrollment": enrollment_id,
-                                           "by": by, "at": when, **e})
+            self.add_activity(pid, company_id, "enrolled", by, f"Added to campaign {campaign}",
+                              at=when, campaign=campaign, enrollment=enrollment_id)
         return pid
 
     # --- research (cached by input_hash) ------------------------------------
@@ -1440,9 +1477,11 @@ class MongoStore:
 
     # --- A/B outcomes: reply attribution + per-variant stats -----------------
     def mark_replied(self, key: str, label: str = "") -> None:
+        # `at`: when we first saw the reply (Apollo gives no reply time). Older rows have none.
         self.db.replies.update_one(
             {"_id": key},
-            {"$setOnInsert": {"replied": True}, **({"$set": {"label": label}} if label else {})},
+            {"$setOnInsert": {"replied": True, "at": datetime.now(timezone.utc).isoformat()},
+             **({"$set": {"label": label}} if label else {})},
             upsert=True)
 
     # --- outcomes: the metrics that matter (positive replies, meetings) -------

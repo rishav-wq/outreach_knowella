@@ -305,7 +305,10 @@ def assign_campaign_owner(r: OwnerSet):
             raise HTTPException(400, "a campaign's owner must be an active sales person or admin")
         email = u.get("email", "")
     store.set_campaign_owner(r.campaign, r.owner, email)
-    return {"campaign": r.campaign, "owner": r.owner, "owner_email": email}
+    me_ = access.require_user()
+    adopted = store.adopt_campaign_people(r.campaign, r.owner, email, {
+        "id": me_.get("id", ""), "email": me_.get("email", ""), "label": me_.get("name") or me_.get("email", "")})
+    return {"campaign": r.campaign, "owner": r.owner, "owner_email": email, "leads_adopted": adopted}
 
 
 # Knowella pinwheel mark (verbatim from web/src/components/Logo.jsx) for the
@@ -3735,6 +3738,12 @@ def segment_put(sid: str, w: SegmentWrite):
     store.add_segment_event(sid, user.get("id", ""), user.get("email", ""), plan["action"],
                             {k: v for k, v in plan["set"].items() if k in ("status", "mtgs", "note")})
     return {"doc": tr.public_segment(new), "action": plan["action"]}
+
+
+# --- the All leads and Companies pages (src/crm_api.py) ----------------------
+# Registered before the frontend catch-all below, so /api/people etc. route here.
+from . import crm_api  # noqa: E402
+app.include_router(crm_api.router)
 
 
 # --- serve the built frontend (single-container deploy) ----------------------

@@ -6,7 +6,8 @@ import Logo from './components/Logo'
 import Dashboard from './components/Dashboard'
 import Review from './components/Review'
 import Leads from './components/Leads'
-import LeadsLibrary from './components/LeadsLibrary'
+import People from './components/People'
+import Companies from './components/Companies'
 import Marketing from './components/Marketing'
 import Sources from './components/Sources'
 import Signals from './components/Signals'
@@ -38,15 +39,19 @@ const MKT_NAV = [
   { id: 'Publications', slug: 'publications', icon: 'list' },
   { id: 'Audiences', slug: 'audiences', icon: 'users' },
 ]
+// Everyone you sell to, one record per person and per company (sales and admins).
+const CRM_NAV = [
+  { id: 'Library', slug: 'library', icon: 'list', shared: true },
+  { id: 'Companies', slug: 'companies', icon: 'building', shared: true },
+]
 const SHARED_NAV = [
   { id: 'Training', slug: 'training', icon: 'board', shared: true },
   { id: 'Signals', slug: 'signals', icon: 'inbox', shared: true },
-  { id: 'Library', slug: 'library', icon: 'list', shared: true },
   { id: 'Sources', slug: 'sources', icon: 'download', shared: true },
   { id: 'Settings', slug: 'settings', icon: 'gear', shared: true },
   { id: 'Team', slug: 'team', icon: 'users', shared: true },
 ]
-const NAV = [...SALES_NAV, ...MKT_NAV, ...SHARED_NAV]
+const NAV = [...SALES_NAV, ...MKT_NAV, ...CRM_NAV, ...SHARED_NAV]
 const MKT_IDS = new Set(MKT_NAV.map((n) => n.id))
 const SALES_IDS = new Set(SALES_NAV.map((n) => n.id))
 const slugToId = (slug) => {
@@ -54,10 +59,10 @@ const slugToId = (slug) => {
   return (NAV.find((n) => n.slug === slug) || NAV[0]).id
 }
 const idToSlug = (id) => (NAV.find((n) => n.id === id) || NAV[0]).slug
-const tabFromHash = () => slugToId((window.location.hash.split('/')[2] || '').toLowerCase())
+const tabFromHash = () => slugToId((window.location.hash.split('?')[0].split('/')[2] || '').toLowerCase())
 
 const allowedTab = (me, id) => {
-  if (SALES_IDS.has(id) || id === 'Library') return canSales(me)
+  if (SALES_IDS.has(id) || id === 'Library' || id === 'Companies') return canSales(me)
   if (MKT_IDS.has(id)) return canMarketing(me)
   if (id === 'Team') return isAdmin(me)
   return true
@@ -149,7 +154,8 @@ export default function App({ onHome }) {
     // pages that don't belong to a campaign
     if (tab === 'Training') return <Training onNavigate={setTab} />
     if (tab === 'Team') return <Team />
-    if (tab === 'Library') return <LeadsLibrary onPromoted={() => campaign && api.getStatus(campaign).then(setStatus).catch(() => {})} />
+    if (tab === 'Library') return <People onPromoted={() => campaign && api.getStatus(campaign).then(setStatus).catch(() => {})} />
+    if (tab === 'Companies') return <Companies />
     if (tab === 'Blasts') return <Marketing />
     if (tab === 'Publications') return <Publications />
     if (tab === 'Audiences') return <Audiences />
@@ -174,7 +180,7 @@ export default function App({ onHome }) {
   }
 
   const both = isAdmin(me)                         // only admins switch between the two engines
-  const navItems = [...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...SHARED_NAV].filter((n) => allowedTab(me, n.id))
+  const navItems = [...(mode === 'sales' ? SALES_NAV : MKT_NAV), ...CRM_NAV, ...SHARED_NAV].filter((n) => allowedTab(me, n.id))
 
   return (
     <MeContext.Provider value={me}>

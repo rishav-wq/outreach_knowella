@@ -168,6 +168,22 @@ POLICY: dict[tuple[str, str], object] = {
     ("GET", "/api/segments/{sid}"): ANY,
     ("PUT", "/api/segments/{sid}"): SALES,
 
+    # all leads and companies (src/crm_api.py; scoped per person and company inside)
+    ("GET", "/api/crm/meta"): SALES,
+    ("GET", "/api/people"): SALES,
+    ("POST", "/api/people"): SALES,
+    ("GET", "/api/people/{pid}"): SALES,
+    ("PATCH", "/api/people/{pid}"): SALES,
+    ("DELETE", "/api/people/{pid}"): SALES,
+    ("POST", "/api/people/{pid}/notes"): SALES,
+    ("POST", "/api/people/enroll"): SALES,
+    ("PATCH", "/api/notes/{aid}"): SALES,
+    ("DELETE", "/api/notes/{aid}"): SALES,
+    ("GET", "/api/companies"): SALES,
+    ("GET", "/api/companies/{cid}"): SALES,
+    ("PATCH", "/api/companies/{cid}"): SALES,
+    ("POST", "/api/companies/{cid}/notes"): SALES,
+
     # sales: campaigns (ownership is checked per campaign)
     ("POST", "/api/campaigns"): SALES,
     ("GET", "/api/campaign/config"): SALES,

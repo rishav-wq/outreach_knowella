@@ -159,3 +159,57 @@ def company_fields(lead: dict) -> dict:
         "founded_year": org.get("founded_year") or None,
     }
     return {k: v for k, v in out.items() if v not in ("", [], None)}
+
+
+# --- stages, interests (defaults; Sid confirms, decision #7 and #9) -----------------
+# From the earlier plan (docs/bdr-playbook-crm-plan.md §4.2). The last entries of each
+# list are closing stages, kept out of the pipeline strip.
+LEAD_STAGES = ["New", "Contacted", "Replied", "Interested", "Meeting booked",
+               "Not interested", "Wrong person", "Do not contact"]
+LEAD_OPEN = LEAD_STAGES[:5]
+COMPANY_STAGES = ["Target", "Working", "Engaged", "Meeting set", "Opportunity",
+                  "Customer", "Not a fit", "Nurture"]
+COMPANY_OPEN = COMPANY_STAGES[:5]
+# Knowella's own onboarding list (customerweb onboarding), so a product user's answers
+# and a lead's interests are the same vocabulary (audit §3.7).
+INTERESTS = {
+    "Operations": ["Onboarding and training", "Forms and data collection", "Employee check-ins",
+                   "Task execution"],
+    "Supply Chain & Logistics": ["RFP and quotes", "Freight and load workflows", "Supplier onboarding",
+                                 "Dock scheduling", "Fleet operations"],
+    "Workplace Safety": ["EHS programs", "Ergonomic analysis", "Incident and case management",
+                         "Compliance tracking"],
+    "Other": ["Other"],
+}
+ALL_INTERESTS = [i for group in INTERESTS.values() for i in group]
+NOTE_MAX = 5000
+
+
+def derived_lead_stage(facts: dict) -> str:
+    """A lead's stage from what actually happened, for someone nobody has staged by hand.
+    facts: {suppressed, meeting, labels (reply classes), replied, sent}."""
+    labels = set(facts.get("labels") or [])
+    if facts.get("suppressed") or "opt_out" in labels:
+        return "Do not contact"
+    if facts.get("meeting"):
+        return "Meeting booked"
+    if "interested" in labels:
+        return "Interested"
+    if "not_interested" in labels:
+        return "Not interested"
+    if facts.get("replied") or labels:
+        return "Replied"
+    if facts.get("sent"):
+        return "Contacted"
+    return "New"
+
+
+def derived_company_stage(lead_stages: list[str]) -> str:
+    s = set(lead_stages)
+    if "Meeting booked" in s:
+        return "Meeting set"
+    if s & {"Interested", "Replied"}:
+        return "Engaged"
+    if s & {"Contacted", "Not interested", "Wrong person", "Do not contact"}:
+        return "Working"
+    return "Target"
