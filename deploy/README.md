@@ -41,10 +41,13 @@ Clerk dashboard → Domains → add `https://outreach.knowella.com`.
 
 ## 5. Backups (do not skip — the do-not-contact list lives in this DB)
 ```bash
-chmod +x deploy/backup.sh
-crontab -e   # add:
+sudo chmod +x deploy/backup.sh
+sudo bash deploy/backup.sh          # run once now: it must print "backup ok"
+sudo crontab -e   # add (root, because it runs docker):
 # 15 2 * * * /opt/outreach-agent/deploy/backup.sh >> /var/log/outreach-backup.log 2>&1
 ```
+Check it keeps working: `sudo tail -3 /var/log/outreach-backup.log` and
+`sudo ls -la /var/backups/outreach` (the newest 14 are kept).
 Restore: `docker run --rm -i mongo:6 mongorestore --uri "$MONGO_URI" --archive --gzip < backup.archive.gz`
 
 ## Redeploy after changes
