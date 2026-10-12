@@ -5,6 +5,7 @@ import Icon from './Icon'
 import Skeleton from './Skeleton'
 import SourceFlow from './SourceFlow'
 import { useMe, isAdmin, canSales, canMarketing } from '../me'
+import { refusedText } from '../rules'
 
 // The listening post — three registers, in the order they deserve attention.
 //
@@ -465,7 +466,7 @@ function CitationActions({ s, onReload, onNote }) {
     try {
       const r = await api.promoteCitation(s.id, org.id, campaign, chosen(org))
       setDone(r); onReload()
-      onNote(`${r.added} added to ${r.campaign} — ${r.credits} credit${r.credits === 1 ? '' : 's'}`)
+      onNote(`${r.added} added to ${r.campaign} — ${r.credits} credit${r.credits === 1 ? '' : 's'}.${refusedText(r.refused)}`)
     } catch (e) { onNote(String(e.message || e).slice(0, 200)) }
     finally { setBusy('') }
   }

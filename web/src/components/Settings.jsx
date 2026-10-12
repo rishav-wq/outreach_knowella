@@ -242,6 +242,67 @@ function Suppression() {
   )
 }
 
+// Existing Knowella customers. Anyone at one of these domains is never added to a
+// campaign (an import skips them and says so), and their company shows as a Customer.
+// Admins keep the list until it can come straight from Knowella's own data.
+function Customers() {
+  const admin = isAdmin(useMe())
+  const [items, setItems] = useState(null)
+  const [text, setText] = useState('')
+  const [name, setName] = useState('')
+  const [msg, setMsg] = useState(null)
+  const load = () => api.listCustomers().then(setItems).catch(() => setItems([]))
+  useEffect(() => { load() }, [])
+  const add = async () => {
+    setMsg(null)
+    const domains = text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean)
+    if (!domains.length) return
+    try {
+      const r = await api.addCustomers(domains, name.trim())
+      setMsg({ ok: true, text: `Added ${r.added.length}${r.ignored ? ` (${r.ignored} already listed, personal-mail or not a domain)` : ''}.` })
+      setText(''); setName(''); load()
+    } catch (e) { setMsg({ ok: false, text: api.errorText(e) }) }
+  }
+  const remove = async (d) => {
+    if (!window.confirm(`Take ${d} off the customer list? People there can then be added to campaigns.`)) return
+    await api.removeCustomer(d); load()
+  }
+  return (
+    <motion.section className="set-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="drawer-label">Existing customers: never cold-emailed</div>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+        Anyone at these companies is never added to a campaign, whoever imports them, and the company shows as a Customer.
+        {admin ? ' Add each customer’s web domain.' : ' An admin keeps this list.'}
+      </div>
+      {admin && (
+        <>
+          <div className="ready-form" style={{ marginBottom: 8 }}>
+            <input className="field-input" aria-label="Domains" placeholder="acme.com, kehe.com (one or more)" value={text}
+              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+            <input className="field-input" aria-label="Customer name" placeholder="Name (optional)" value={name} style={{ maxWidth: 200 }}
+              onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+            <button className="btn" onClick={add}>Add</button>
+          </div>
+          {msg && <div className={`banner ${msg.ok ? '' : 'error'}`} style={{ marginBottom: 10 }}>{msg.text}</div>}
+        </>
+      )}
+      {items === null ? <Skeleton w="60%" h={12} /> : items.length === 0
+        ? <div className="muted" style={{ fontSize: 12.5 }}>No customers listed yet.</div>
+        : (
+          <ul className="supp-list">
+            {items.map((c) => (
+              <li key={c.domain}>
+                <code>{c.domain}</code>
+                {c.name && <span className="muted"> · {c.name}</span>}
+                {admin && <button className="icon-btn" title="Remove" aria-label={`Remove ${c.domain}`} onClick={() => remove(c.domain)}><Icon name="x" size={13} /></button>}
+              </li>
+            ))}
+          </ul>
+        )}
+    </motion.section>
+  )
+}
+
 export default function Settings({ campaign }) {
   const me = useMe()
   // The sending side belongs to a campaign: shown to sales and admins who have one.
@@ -263,6 +324,7 @@ export default function Settings({ campaign }) {
         {canMarketing(me) && <MarketingSending />}
         <LinkedInCapture />
         <Suppression />
+        {canSales(me) && <Customers />}
       </div>
     )
   }
@@ -304,6 +366,7 @@ export default function Settings({ campaign }) {
       {canMarketing(me) && <MarketingSending />}
       <LinkedInCapture />
       <Suppression />
+      <Customers />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import Icon from './Icon'
 import Skeleton from './Skeleton'
 import { stagger, tap } from './anim'
 import { useMe, isAdmin } from '../me'
+import { refusedText } from '../rules'
 
 const rowVar = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.25 } } }
 
@@ -65,9 +66,10 @@ export default function Leads({ campaign, onNavigate }) {
       const r = await api.pullApollo(campaign, limit)
       const credits = r.credits_used != null ? ` · used ${r.credits_used} Apollo ${r.credits_used === 1 ? 'credit' : 'credits'}` : ''
       const noEmail = r.no_email ? ` · skipped ${r.no_email} with no email` : ''
+      const rules = refusedText(r.refused)
       setMsg(r.pulled
-        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${credits}${noEmail}. Run the pipeline on the Overview to research and draft them.` }
-        : { kind: 'ok', text: `Apollo returned no new emailable leads${noEmail}. Widen the titles, keywords, or geographies in the campaign settings.` })
+        ? { kind: 'ok', text: `Pulled ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from Apollo${credits}${noEmail}.${rules} Run the pipeline on the Overview to research and draft them.` }
+        : { kind: 'ok', text: `Apollo returned no new emailable leads${noEmail}.${rules} Widen the titles, keywords, or geographies in the campaign settings.` })
       await load()
     } catch (e) {
       setMsg({ kind: 'err', text: `Apollo pull failed: ${e.message || e}` })
@@ -81,7 +83,7 @@ export default function Leads({ campaign, onNavigate }) {
     setBusy('csv'); setMsg(null)
     try {
       const r = await api.pull(campaign, f, 'manual')
-      setMsg({ kind: 'ok', text: `Imported ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from ${f.name}. Run the pipeline on the Overview to research and draft them.` })
+      setMsg({ kind: 'ok', text: `Imported ${r.pulled} ${r.pulled === 1 ? 'lead' : 'leads'} from ${f.name}.${refusedText(r.refused)} Run the pipeline on the Overview to research and draft them.` })
       await load()
     } catch {
       setMsg({ kind: 'err', text: 'Import failed — check the file is a CSV with name, company, and (ideally) email or domain columns.' })

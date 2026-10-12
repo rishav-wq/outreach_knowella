@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, auth, config, marketing, pipeline, tagging, unsubscribe
+from . import access, auth, config, crm, enroll, marketing, pipeline, tagging, unsubscribe
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
@@ -1761,6 +1761,8 @@ def promote_leads(r: PromoteReq):
             raise HTTPException(404, "lead not found")
     topics = tagging.topics_of(cfg)
     added = skipped = 0
+    guard = enroll.Guard(store, cfg["name"])
+    refused: dict[str, int] = {}
     for key in r.keys[:500]:
         d = store.db.leads.find_one({"_id": key})
         if not d:
@@ -1770,9 +1772,12 @@ def promote_leads(r: PromoteReq):
             skipped += 1
             continue
         lead.stored_key = ""   # re-key into the target campaign's scope
-        store.upsert_lead(lead, cfg["name"], topics)
+        code, _ = store.upsert_lead(lead, cfg["name"], topics, guard=guard)
+        if code:
+            refused[code] = refused.get(code, 0) + 1
+            continue
         added += 1
-    return {"added": added, "suppressed": skipped, "counts": store.counts(cfg["name"])}
+    return {"added": added, "suppressed": skipped, "refused": refused, "counts": store.counts(cfg["name"])}
 
 
 # --- saved audiences: named filters, resolved live at every use ----------------
@@ -1930,6 +1935,8 @@ def _pull_csv(campaign: str, data: bytes, source: str) -> dict:
     topics = tagging.topics_of(cfg)   # library tags, stamped on each lead at pull
     src_id = store.upsert_source(f"CSV import ({source})", "import")
     skipped = 0
+    guard = enroll.Guard(store, cfg["name"])
+    refused: dict[str, int] = {}
     for lead in leads_in:
         lead.source = source
         if lead.email and store.is_suppressed(lead.email):  # compliance: never re-import
@@ -1939,8 +1946,11 @@ def _pull_csv(campaign: str, data: bytes, source: str) -> dict:
             d = enrich.find_domain(lead.company)
             if d:
                 lead.company_domain = d
-        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
-    return {"pulled": len(leads_in) - skipped, "suppressed": skipped, "counts": store.counts(cfg["name"])}
+        code, _ = store.upsert_lead(lead, cfg["name"], topics, source_id=src_id, guard=guard)
+        if code:
+            refused[code] = refused.get(code, 0) + 1
+    return {"pulled": len(leads_in) - skipped - sum(refused.values()), "suppressed": skipped,
+            "refused": refused, "counts": store.counts(cfg["name"])}
 
 
 class ApolloPreview(BaseModel):
@@ -3180,9 +3190,17 @@ def promote_citation(sid: str, r: PromoteCitation):
     sig = next((s for s in store.list_signals("") if s["_id"] == sid), None)
     if not sig:
         raise HTTPException(404, "signal not found")
+    guard = enroll.Guard(store, cfg["name"])
+    person_ids = r.person_ids
+    if person_ids:   # people the campaign rules refuse are dropped BEFORE any credit is spent
+        blocked = guard.blocked_apollo_ids()
+        person_ids = [x for x in person_ids if x not in blocked]
+        if not person_ids:
+            raise HTTPException(409, "everyone you picked is already in a running campaign, cooling off, "
+                                     "another rep's lead or at an existing customer; nothing was revealed")
     leads, credits = apollo.contacts_at_org(r.org_id, limit=max(1, min(r.limit, 10)),
                                             titles=_icp_titles(r.campaign) or None,
-                                            person_ids=r.person_ids or None)
+                                            person_ids=person_ids or None)
     leads = [ld for ld in leads if ld.email]        # no email, no campaign
     if not leads:
         raise HTTPException(400, "Apollo revealed no reachable contact at that company")
@@ -3198,8 +3216,12 @@ def promote_citation(sid: str, r: PromoteCitation):
                 published=(sig.get("created_at") or "")[:10], confidence=0.95)
     research = Research(facts=[fact], summary=sig.get("text") or "")
     made = []
+    refused: dict[str, int] = {}
     for ld in leads:
-        store.upsert_lead(ld, cfg["name"], [topic], source_id=src_id)
+        code, _ = store.upsert_lead(ld, cfg["name"], [topic], source_id=src_id, guard=guard)
+        if code:
+            refused[code] = refused.get(code, 0) + 1
+            continue
         key = store._scoped(cfg["name"], store._base_key(ld))
         # Store under the hash the pipeline will look for, not a literal tag.
         # save_research replaces on _id alone, so research saved under "osha-citation"
@@ -3210,7 +3232,7 @@ def promote_citation(sid: str, r: PromoteCitation):
         store.save_research(key, pipeline.research_hash(ld_keyed, cfg), research)
         made.append({"key": key, "name": ld.full_name, "title": ld.title, "email": ld.email})
     store.set_signal_status(sid, "engaged")
-    return {"added": len(made), "credits": credits, "leads": made, "campaign": cfg["name"]}
+    return {"added": len(made), "credits": credits, "leads": made, "campaign": cfg["name"], "refused": refused}
 
 
 
@@ -3297,6 +3319,21 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         fresh.append({"name": c.name.strip(), "profile_url": c.profile_url.strip(),
                       "headline": c.headline.strip()})
 
+    # People the campaign rules refuse (running elsewhere, cooling off, another rep's,
+    # at a customer) are dropped before Apollo matching, so they cost no credits.
+    guard = enroll.Guard(store, cfg["name"])
+    refused: dict[str, int] = {}
+    _, blocked_li = guard.blocked_keys()
+    if blocked_li:
+        keep = []
+        for f in fresh:
+            code = blocked_li.get(crm.norm_linkedin(f["profile_url"]))
+            if code:
+                refused[code] = refused.get(code, 0) + 1
+            else:
+                keep.append(f)
+        fresh = keep
+
     # ICP fit, pass 1 — the headline, BEFORE enrichment: a clear miss ("Software
     # Engineer" into a freight campaign) is skipped without spending a credit.
     # Every skip is REPORTED back (name + headline), never silent — a warm lead
@@ -3356,13 +3393,16 @@ def linkedin_capture(r: LinkedInCapture, request: Request):
         lead.source = "linkedin_comment"
         lead.raw = {**(lead.raw or {}),
                     "linkedin_capture": {"post_url": r.post_url, "headline": c["headline"]}}
-        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
+        code, _ = store.upsert_lead(lead, cfg["name"], topics, source_id=src_id, guard=guard)
+        if code:
+            refused[code] = refused.get(code, 0) + 1
+            continue
         added += 1
         if lead.email:
             with_email += 1
     return {"received": len(r.commenters), "added": added, "with_email": with_email,
             "no_email": added - with_email, "duplicates": duplicates,
-            "off_icp": off_icp, "skipped": skipped, "suppressed": suppressed,
+            "off_icp": off_icp, "skipped": skipped, "suppressed": suppressed, "refused": refused,
             "credits_used": credits, "counts": store.counts(cfg["name"])}
 
 
@@ -3417,6 +3457,10 @@ def pull_apollo(r: ApolloPull):
     # reveals only NEW contacts and never re-charges for ones you already have.
     known_ids = {(lead.raw or {}).get("id") for lead in store.leads(cfg["name"])}
     known_ids.discard(None)
+    # ...and people the campaign rules would refuse (running elsewhere, cooling off,
+    # another rep's, at a customer): Apollo skips them, so they cost nothing.
+    guard = enroll.Guard(store, cfg["name"])
+    known_ids |= guard.blocked_apollo_ids()
     try:
         leads_in, credits = apollo.fetch_leads(cfg, limit=min(max(r.limit, 1), 2000), known_ids=known_ids)
     except Exception as e:
@@ -3425,6 +3469,7 @@ def pull_apollo(r: ApolloPull):
     src_id = store.upsert_source("Apollo search", "apollo")   # comparable to every other source
     skipped = 0
     no_email = 0
+    refused: dict[str, int] = {}
     for lead in leads_in:
         lead.source = "apollo"
         if lead.email and store.is_suppressed(lead.email):  # compliance: never re-import
@@ -3437,9 +3482,11 @@ def pull_apollo(r: ApolloPull):
         if not lead.email:  # Apollo couldn't reveal an email — an unemailable lead only clutters, so skip it
             no_email += 1
             continue
-        store.upsert_lead(lead, cfg["name"], topics, source_id=src_id)
-    return {"pulled": len(leads_in) - skipped - no_email, "suppressed": skipped, "no_email": no_email,
-            "credits_used": credits, "counts": store.counts(cfg["name"])}
+        code, _ = store.upsert_lead(lead, cfg["name"], topics, source_id=src_id, guard=guard)
+        if code:
+            refused[code] = refused.get(code, 0) + 1
+    return {"pulled": len(leads_in) - skipped - no_email - sum(refused.values()), "suppressed": skipped,
+            "no_email": no_email, "refused": refused, "credits_used": credits, "counts": store.counts(cfg["name"])}
 
 
 class RunReq(BaseModel):

@@ -1984,3 +1984,8 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .tl-actions { display: flex; gap: 12px; margin-top: 4px; }
 .tl-actions .linklike { display: inline; margin: 0; font-size: 12px; color: var(--signal-deep); }
 .tl-empty { padding: 20px 0; }
+/* refusals by the campaign rules, after "Add to campaign" in the Library */
+.crm-refused { margin-top: 10px; border: 1px solid #ecd9b4; background: var(--caution-tint); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; }
+.crm-refused ul { margin: 6px 0 8px; padding-left: 18px; }
+.crm-refused li { margin: 2px 0; }
+.crm-refused-row { display: flex; gap: 12px; align-items: center; }

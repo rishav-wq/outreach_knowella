@@ -183,6 +183,9 @@ POLICY: dict[tuple[str, str], object] = {
     ("GET", "/api/companies/{cid}"): SALES,
     ("PATCH", "/api/companies/{cid}"): SALES,
     ("POST", "/api/companies/{cid}/notes"): SALES,
+    ("GET", "/api/customers"): SALES,                # existing customers: everyone in sales sees the list
+    ("POST", "/api/customers"): ADMIN,
+    ("DELETE", "/api/customers/{domain}"): ADMIN,
 
     # sales: campaigns (ownership is checked per campaign)
     ("POST", "/api/campaigns"): SALES,

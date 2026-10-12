@@ -114,6 +114,26 @@ class MongoStore:
     def set_campaign_owner(self, slug: str, uid: str, email: str = "") -> None:
         self.db.campaigns.update_one({"_id": slug}, {"$set": {"owner": uid, "owner_email": email}})
 
+    # --- existing Knowella customers: never in a cold campaign (src/enroll.py) ---------
+    def list_customers(self) -> list[dict]:
+        return list(self.db.customers.find({}).sort("_id", 1))
+
+    def add_customers(self, domains: list[str], name: str, by: dict, source: str = "manual") -> list[str]:
+        from . import crm
+        added = []
+        for d in domains:
+            dom = crm.norm_domain(d)
+            if not dom or dom in crm.FREEMAIL:
+                continue
+            r = self.db.customers.update_one(
+                {"_id": dom}, {"$setOnInsert": {"name": name, "source": source, "by": by, "at": crm.now_iso()}}, upsert=True)
+            if r.upserted_id is not None:
+                added.append(dom)
+        return added
+
+    def remove_customer(self, domain: str) -> bool:
+        return self.db.customers.delete_one({"_id": domain}).deleted_count == 1
+
     def adopt_campaign_people(self, campaign: str, owner: str, owner_email: str, by: dict) -> int:
         """When a campaign is given to someone, its leads and their companies that nobody
         owns yet become theirs (people owned by someone else stay theirs). Returns how
@@ -297,7 +317,12 @@ class MongoStore:
         return f"{campaign}::{base}"
 
     def upsert_lead(self, lead: Lead, campaign: str, topics: list | None = None,
-                    source_id: str = "") -> None:
+                    source_id: str = "", guard=None, force: bool = False) -> tuple[str, str]:
+        """Add a lead to a campaign. Returns ('', '') when added (or already there), else
+        (code, why) when the campaign rules refuse them (src/enroll.py): already in a
+        running campaign, cooling off, another rep's lead, the company's cap, or an
+        existing customer. Pass one `guard` (enroll.Guard) for a whole batch; `force`
+        (admins, from the Library) skips the rules."""
         # _id is campaign-scoped so the SAME person can live in multiple campaigns as
         # independent rows (own research/draft/status). Re-importing into the SAME
         # campaign still dedups (same _id, $setOnInsert no-ops).
@@ -306,6 +331,13 @@ class MongoStore:
                "topics": topics or [], "pulled_at": datetime.now(timezone.utc)}
         if source_id:      # which LinkedIn group / publication / community produced them
             doc["source_id"] = source_id
+        if self.db.leads.find_one({"_id": sid}, {"_id": 1}) is None:
+            from . import enroll
+            guard = guard or enroll.Guard(self, campaign)
+            code, why = guard.check(doc["lead"], force=force)
+            if code:
+                return code, why
+            guard.counted(doc["lead"])
         r = self.db.leads.update_one({"_id": sid}, {"$setOnInsert": doc}, upsert=True)
         # Every lead row is also a person (and usually a company). A failure here must not
         # lose the import, so it's logged; `python -m src.backfill_people --apply` links
@@ -316,6 +348,7 @@ class MongoStore:
         except Exception as e:  # noqa: BLE001
             import logging
             logging.getLogger("uvicorn.error").error("[crm] couldn't link %s to a person: %s", sid, e)
+        return "", ""
 
     def migrate_lead_keys(self) -> int:
         """One-time: re-key legacy leads (_id = base email) to campaign-scoped ids
@@ -620,6 +653,12 @@ class MongoStore:
                                                        by, when, source_campaign=campaign)
         if not pid:
             return ""
+        if not created and camp.get("owner"):   # an unowned person joining someone's campaign becomes theirs
+            r = self.db.people.update_one({"_id": pid, "owner": {"$in": ["", None]}},
+                                          {"$set": {"owner": camp["owner"], "owner_email": camp.get("owner_email") or ""}})
+            if r.modified_count:
+                self.add_activity(pid, company_id, "owner_change", by, f"Owner set with campaign {campaign}",
+                                  at=when, meta={"from": "", "to": camp["owner"]})
         prev = self.db.leads.find_one_and_update(
             {"_id": enrollment_id}, {"$set": {"person_id": pid, "company_id": company_id}},
             projection={"person_id": 1})

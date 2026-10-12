@@ -29,6 +29,7 @@ export default function People({ onPromoted }) {
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [refused, setRefused] = useState({ campaign: '', items: [] })   // the last add's refusals
   const [stack, setStack] = useState([])
   const [adding, setAdding] = useState(false)
   const [copied, setCopied] = useState('')
@@ -70,12 +71,14 @@ export default function People({ onPromoted }) {
 
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleAll = () => setSel((s) => (s.size === shown.length ? new Set() : new Set(shown.map((p) => p.id))))
-  const enroll = async () => {
+  const enroll = async (ids = [...sel], force = false, campaign = target) => {
     setBusy(true); setMsg(null)
     try {
-      const r = await api.enrollPeople([...sel], target)
-      const extra = [r.already ? `${r.already} already there` : '', r.suppressed ? `${r.suppressed} on do-not-contact, skipped` : ''].filter(Boolean)
-      setMsg({ ok: true, text: `Added ${r.added} to ${target}${extra.length ? ` (${extra.join('; ')})` : ''}. Run its pipeline to draft them.` })
+      const r = await api.enrollPeople(ids, campaign, force)
+      const extra = [r.already ? `${r.already} already there` : '', r.suppressed ? `${r.suppressed} on do-not-contact, skipped` : '',
+        r.refused.length ? `${r.refused.length} refused by the campaign rules` : ''].filter(Boolean)
+      setMsg({ ok: true, text: `Added ${r.added} to ${campaign}${extra.length ? ` (${extra.join('; ')})` : ''}.${r.added ? ' Run its pipeline to draft them.' : ''}` })
+      setRefused({ campaign, items: r.refused })
       setSel(new Set())
       load()
       onPromoted?.()
@@ -156,7 +159,7 @@ export default function People({ onPromoted }) {
             <select className="src-select" aria-label="Campaign to add them to" value={target} onChange={(e) => setTarget(e.target.value)}>
               {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button className="btn primary" disabled={busy || !target} onClick={enroll}
+            <button className="btn primary" disabled={busy || !target} onClick={() => enroll()}
               title="Add them to the campaign as fresh leads: its pipeline drafts them and you review as usual">
               {busy ? <><span className="spinner" /> Adding…</> : 'Add to campaign'}
             </button>
@@ -164,6 +167,28 @@ export default function People({ onPromoted }) {
         )}
       </div>
       {msg && <div className={`banner ${msg.ok ? '' : 'error'}`} style={{ marginTop: 10 }}>{msg.text}</div>}
+      {refused.items.length > 0 && (
+        <div className="crm-refused" role="status">
+          <b>Not added to {refused.campaign}, by the campaign rules:</b>
+          <ul>
+            {refused.items.map((x) => (
+              <li key={x.id}>
+                <button className="linklike inline" onClick={() => setStack([{ type: 'person', id: x.id }])}>{x.name}</button>
+                <span className="muted"> · {x.why}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="crm-refused-row">
+            {isAdmin(me) && (
+              <button className="btn" disabled={busy} onClick={() => enroll(refused.items.map((x) => x.id), true, refused.campaign)}
+                title="You're an admin: add them even though the rules say no. The do-not-contact list still applies.">
+                Add these anyway
+              </button>
+            )}
+            <button className="linklike inline" onClick={() => setRefused({ campaign: '', items: [] })}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <div className="empty" style={{ marginTop: 20 }}>

@@ -15,7 +15,7 @@ import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import access, crm, tagging
+from . import access, crm, enroll, tagging
 from .models import Lead
 from .store import open_store
 
@@ -477,12 +477,15 @@ def note_delete(aid: str):
 class EnrollIn(BaseModel):
     people: list[str]
     campaign: str
+    force: bool = False      # admins: add even where the campaign rules say no
 
 
 @router.post("/api/people/enroll")
 def people_enroll(r: EnrollIn):
-    """Add leads to a campaign (as fresh lead rows its pipeline drafts). Leads on the
-    do-not-contact list are skipped; someone already in that campaign isn't added twice."""
+    """Add leads to a campaign (as fresh lead rows its pipeline drafts). The campaign
+    rules apply (src/enroll.py) and every refusal comes back with the person's name and
+    why; an admin can add anyway (`force`). The do-not-contact list always wins, and
+    someone already in that campaign isn't added twice."""
     store = open_store()
     u = _me()
     if not _campaign_visible(store, u, r.campaign):
@@ -492,12 +495,16 @@ def people_enroll(r: EnrollIn):
     people = list(store.db.people.find({"_id": {"$in": list(dict.fromkeys(r.people))}, **_people_filter(u)}))
     if len(people) != len(set(r.people)):
         raise HTTPException(404, "lead not found")
+    if r.force and not access.is_admin(u):
+        raise HTTPException(403, "only an admin can add someone the campaign rules refuse")
     facts = _Facts(store, [])
+    guard = enroll.Guard(store, r.campaign)
     try:
         topics = tagging.topics_of(store.get_campaign(r.campaign) or {})
     except Exception:  # noqa: BLE001  topics are a nicety; never block the add
         topics = []
     added = already = suppressed = 0
+    refused: list[dict] = []
     for p in people:
         if facts.suppressed(p.get("email", "")):
             suppressed += 1
@@ -512,12 +519,19 @@ def people_enroll(r: EnrollIn):
                     email=p.get("email", ""), linkedin_url=base.get("linkedin_url") or p.get("linkedin_url", ""),
                     source=base.get("source") or (p.get("source") or {}).get("type") or "manual",
                     raw=base.get("raw") or {})
-        store.upsert_lead(lead, r.campaign, topics)
+        code, why = store.upsert_lead(lead, r.campaign, topics, guard=guard, force=r.force)
+        if code:
+            refused.append({"id": p["_id"], "name": _name(p) or p.get("email", ""), "code": code, "why": why})
+            continue
         added += 1
-    return {"added": added, "already": already, "suppressed": suppressed}
+    return {"added": added, "already": already, "suppressed": suppressed, "refused": refused}
 
 
 # --- companies --------------------------------------------------------------------
+def _is_customer(c: dict, customers: set) -> bool:
+    return any(d in customers for d in [c.get("domain") or ""] + list(c.get("domains") or []) if d)
+
+
 def _company_rows(store, u: dict) -> list[dict]:
     if access.is_admin(u):
         return list(store.db.companies.find({}))
@@ -541,10 +555,11 @@ def companies_list():
         st = p.get("stage") or facts.lead_stage(p, enr.get(p["_id"], []))
         by_company.setdefault(p["company_id"], []).append(st)
     names = _names(store)
+    customers = {d["_id"] for d in store.db.customers.find({}, {"_id": 1})}
     out = []
     for c in comps:
         stages = by_company.get(c["_id"], [])
-        auto = crm.derived_company_stage(stages)
+        auto = "Customer" if _is_customer(c, customers) else crm.derived_company_stage(stages)
         loc = ", ".join(x for x in (c.get("city"), c.get("state"), c.get("country")) if x)
         out.append({"id": c["_id"], "name": c.get("name", ""), "domain": c.get("domain", ""),
                     "industry": c.get("industry", ""), "employees": c.get("employees"), "location": loc,
@@ -583,7 +598,8 @@ def company_detail(cid: str):
     for p in hidden:
         n = names.get(p.get("owner", ""), "") or "an admin"
         others[n] = others.get(n, 0) + 1
-    auto = crm.derived_company_stage([x["stage"] for x in contacts])
+    customers = {d["_id"] for d in store.db.customers.find({}, {"_id": 1})}
+    auto = "Customer" if _is_customer(c, customers) else crm.derived_company_stage([x["stage"] for x in contacts])
     who = {p["_id"]: _name(p) for p in visible}
     return {
         "id": c["_id"], "name": c.get("name", ""), "domain": c.get("domain", ""), "domains": c.get("domains") or [],
@@ -666,3 +682,35 @@ def company_note(cid: str, r: NoteIn):
     _company_or_404(store, cid, u)
     a = store.add_activity("", cid, "note", _actor(u), _note_body(r.body))
     return {"id": str(a["_id"]), "at": a["at"]}
+
+
+# --- existing Knowella customers (the customer guard, 35a) ---------------------------
+# Until Knowella's own data can be read (decision #22), admins keep this list by hand.
+# Anyone at a listed domain is never added to a campaign, and the company shows as a
+# Customer.
+@router.get("/api/customers")
+def customers_list():
+    store = open_store()
+    return [{"domain": d["_id"], "name": d.get("name", ""), "source": d.get("source", ""),
+             "by": (d.get("by") or {}).get("label", ""), "at": d.get("at", "")} for d in store.list_customers()]
+
+
+class CustomersIn(BaseModel):
+    domains: list[str]
+    name: str = ""
+
+
+@router.post("/api/customers")
+def customers_add(r: CustomersIn):
+    if not r.domains or len(r.domains) > 500:
+        raise HTTPException(400, "give 1 to 500 domains")
+    store = open_store()
+    added = store.add_customers(r.domains, _clip(r.name, 120), _actor(_me()))
+    return {"added": added, "ignored": len(r.domains) - len(added)}
+
+
+@router.delete("/api/customers/{domain}")
+def customers_remove(domain: str):
+    if not open_store().remove_customer(crm.norm_domain(domain) or domain):
+        raise HTTPException(404, "not on the list")
+    return {"ok": True}
