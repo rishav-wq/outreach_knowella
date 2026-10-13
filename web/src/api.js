@@ -88,6 +88,12 @@ export const localDay = (d = new Date()) => {
   const z = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`
 }
+// The campaign pages (src/campaigns_api.py): the list with each campaign's figures, a
+// campaign's sequence with what each step produced, and every email it sent.
+export const getCampaignsSummary = () => apiGet('/api/campaigns/summary')
+export const getCampaignSequence = (campaign) => apiGet(`/api/campaign/sequence?campaign=${encodeURIComponent(campaign)}`)
+export const getCampaignActivity = (campaign, params = {}) =>
+  apiGet(`/api/campaign/activity?${new URLSearchParams({ campaign, ...params })}`)
 export const getToday = (user = '') => apiGet(`/api/today?${new URLSearchParams({
   date: localDay(), tz: String(new Date().getTimezoneOffset()), ...(user ? { user } : {}) })}`)
 export const enrollPeople = (people, campaign, force = false) => apiSend('/api/people/enroll', 'POST', { people, campaign, force })

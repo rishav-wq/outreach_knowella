@@ -2048,3 +2048,46 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
   .task-acts { width: 100%; justify-content: flex-end; }
   .log-fu.fu-follow, .log-fu.fu-task { grid-template-columns: 1fr; }
 }
+
+/* --- campaigns as pages: the list, a campaign's header and tabs, Sequence, Activity (components/Campaigns.jsx) --- */
+.camp-list, .camp-page { display: grid; gap: 14px; }
+.camp-list-head, .camp-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.camp-list-head h2, .camp-head h2 { margin: 2px 0 4px; font-size: 22px; overflow-wrap: anywhere; }
+.camp-list-head .muted { font-size: 13px; max-width: 640px; }
+.camp-back { font-size: 12.5px; color: var(--muted); padding: 0; }
+.camp-table td { vertical-align: top; }
+.camp-name { font-weight: 600; color: var(--ink); }
+.camp-sub { font-size: 12px; }
+.camp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.camp-tabs button { font: inherit; font-size: 13.5px; background: none; border: 0; border-bottom: 2px solid transparent; padding: 9px 14px; color: var(--muted); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; margin-bottom: -1px; }
+.camp-tabs button:hover { color: var(--text); }
+.camp-tabs button.on { color: var(--signal-deep); border-bottom-color: var(--signal); font-weight: 600; }
+.camp-tab-n { font-size: 11px; font-weight: 600; background: #eef1f5; color: var(--text-2); border-radius: 99px; padding: 1px 7px; }
+.camp-tab-n.hot { background: var(--caution-tint); color: #a34a05; }
+.camp-body { min-width: 0; }
+.cs-seq { display: grid; gap: 14px; }
+.cs-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.cs-note { font-size: 12.5px; max-width: 720px; }
+.cs-steps { list-style: none; margin: 0; padding: 0; }
+.cs-step { display: flex; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.cs-step:first-child { border-top: 0; }
+.cs-day { flex: none; width: 110px; display: grid; gap: 2px; font-size: 13px; align-content: start; }
+.cs-day .muted { font-size: 11.5px; }
+.cs-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.cs-title { font-size: 14px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.cs-title .muted { font-weight: 400; }
+.cs-tpl { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow: auto; background: var(--bg); border-radius: var(--radius-sm); padding: 8px 10px; }
+.cs-tpl.muted { background: none; padding: 0; }
+.cs-stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--text-2); align-items: center; }
+.cs-stats .late { color: var(--alert); }
+.camp-activity { display: grid; gap: 12px; }
+.act-filters { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.act-step { width: 170px; }
+.act-count { font-size: 12.5px; }
+.act-email { font-size: 11.5px; }
+.act-more { display: flex; justify-content: center; }
+@media (max-width: 640px) {
+  .camp-list-head, .camp-head, .cs-head { flex-direction: column; align-items: stretch; }
+  .cs-step { flex-direction: column; gap: 6px; }
+  .cs-day { width: auto; grid-auto-flow: column; justify-content: start; gap: 8px; }
+}

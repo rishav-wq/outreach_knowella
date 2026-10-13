@@ -186,6 +186,10 @@ POLICY: dict[tuple[str, str], object] = {
     ("PATCH", "/api/tasks/{tid}"): SALES,
     ("DELETE", "/api/tasks/{tid}"): SALES,
     ("GET", "/api/today"): SALES,
+    # the campaign pages (src/campaigns_api.py): campaigns you can see, 404 otherwise
+    ("GET", "/api/campaigns/summary"): SALES,
+    ("GET", "/api/campaign/sequence"): SALES,
+    ("GET", "/api/campaign/activity"): SALES,
     ("GET", "/api/companies"): SALES,
     ("GET", "/api/companies/{cid}"): SALES,
     ("PATCH", "/api/companies/{cid}"): SALES,

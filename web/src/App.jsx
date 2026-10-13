@@ -19,22 +19,33 @@ import NewCampaign from './components/NewCampaign'
 import Training from './components/Training'
 import Team from './components/Team'
 import Today from './components/Today'
+import { Activity, CampaignFrame, CampaignList, Sequence } from './components/Campaigns'
 import { UserMenu } from './auth'
 import { MeContext, isAdmin, canSales, canMarketing } from './me'
 import { pageTransition } from './components/anim'
 
-// TWO MODES, one shell — like the product's workspace switcher. Sales is
-// campaign-scoped (picker + the numbered lifecycle); Marketing is Library-scoped
-// (blasts + audiences). Library & Settings are shared: the Library is the bridge
-// between the engines (sales exhaust → marketing fuel → warm clicks → sales).
+// TWO MODES, one shell — like the product's workspace switcher. Sales works in
+// campaigns (a list, and each campaign a page with its own tabs); Marketing is
+// Library-scoped (blasts + audiences). Library & Settings are shared: the Library is
+// the bridge between the engines (sales exhaust → marketing fuel → warm clicks → sales).
 // What each role sees follows src/access.py: admins get both modes and the Team
 // page, sales only the sales mode, marketing only the marketing mode.
 const SALES_NAV = [
-  { id: 'Overview', slug: 'overview', icon: 'dashboard', step: '01' },
-  { id: 'Leads', slug: 'leads', icon: 'users', step: '02' },
-  { id: 'Review', slug: 'review', icon: 'check', step: '03' },
-  { id: 'Inbox', slug: 'inbox', icon: 'inbox', step: '04' },
+  { id: 'Campaigns', slug: 'campaigns', icon: 'board' },
 ]
+// A campaign's own tabs, at #/app/campaigns/<name>/<slug> (docs/knowcrm-requirements-audit.md
+// §5.1). The ids are the pages' old names, so links between them keep working.
+const CAMPAIGN_TABS = [
+  { id: 'Overview', slug: 'overview', label: 'Overview' },
+  { id: 'Sequence', slug: 'sequence', label: 'Sequence' },
+  { id: 'Leads', slug: 'leads', label: 'Leads' },
+  { id: 'Review', slug: 'review', label: 'Review' },
+  { id: 'Activity', slug: 'activity', label: 'Activity' },
+  { id: 'Inbox', slug: 'replies', label: 'Replies' },
+]
+const CAMPAIGN_IDS = new Set(CAMPAIGN_TABS.map((t) => t.id))
+// Links from before campaigns had pages (#/app/leads …) open the current campaign.
+const LEGACY_CAMPAIGN_SLUGS = { overview: 'Overview', leads: 'Leads', review: 'Review', inbox: 'Inbox' }
 const MKT_NAV = [
   { id: 'Blasts', slug: 'blasts', icon: 'upload' },
   { id: 'Publications', slug: 'publications', icon: 'list' },
@@ -56,13 +67,29 @@ const SHARED_NAV = [
 ]
 const NAV = [...SALES_NAV, ...MKT_NAV, ...CRM_NAV, ...SHARED_NAV]
 const MKT_IDS = new Set(MKT_NAV.map((n) => n.id))
-const SALES_IDS = new Set(SALES_NAV.map((n) => n.id))
+const SALES_IDS = new Set([...SALES_NAV.map((n) => n.id), ...CAMPAIGN_IDS])
 const slugToId = (slug) => {
   if (slug === 'marketing') return 'Blasts'   // legacy URL from phase 1
   return (NAV.find((n) => n.slug === slug) || NAV[0]).id
 }
 const idToSlug = (id) => (NAV.find((n) => n.id === id) || NAV[0]).slug
-const tabFromHash = () => slugToId((window.location.hash.split('?')[0].split('/')[2] || '').toLowerCase())
+// The page (and, for a campaign's tabs, which campaign) a URL names. campaign is null
+// when the URL doesn't say (a legacy link): the current campaign is meant.
+const routeFromHash = () => {
+  const parts = window.location.hash.split('?')[0].split('/')
+  const slug = (parts[2] || '').toLowerCase()
+  if (slug === 'campaigns' && parts[3]) {
+    let name = ''
+    try { name = decodeURIComponent(parts[3]) } catch { name = '' }
+    const sub = CAMPAIGN_TABS.find((t) => t.slug === (parts[4] || '').toLowerCase())
+    return { tab: sub ? sub.id : 'Overview', campaign: name }
+  }
+  if (LEGACY_CAMPAIGN_SLUGS[slug]) return { tab: LEGACY_CAMPAIGN_SLUGS[slug], campaign: null }
+  return { tab: slugToId(slug), campaign: null }
+}
+const tabFromHash = () => routeFromHash().tab
+const campaignHash = (name, id = 'Overview') =>
+  `#/app/campaigns/${encodeURIComponent(name)}/${(CAMPAIGN_TABS.find((t) => t.id === id) || CAMPAIGN_TABS[0]).slug}`
 
 const allowedTab = (me, id) => {
   if (SALES_IDS.has(id) || id === 'Today' || id === 'Library' || id === 'Companies') return canSales(me)
@@ -73,13 +100,13 @@ const allowedTab = (me, id) => {
 const homeTab = (me, campaigns) => {
   if (me.role === 'marketing') return 'Blasts'
   if (me.role === 'sales') return (campaigns || []).length ? 'Today' : 'Training'   // a new BDR starts on Training
-  return 'Overview'
+  return 'Campaigns'
 }
 
 export default function App({ onHome }) {
   const [me, setMe] = useState(null)               // the signed-in person, from /api/me
   const [campaigns, setCampaigns] = useState(null) // null = still loading
-  const [campaign, setCampaign] = useState('')
+  const [campaign, setCampaign] = useState(() => routeFromHash().campaign || '')
   const [tab, setTabState] = useState(tabFromHash)
   const [mode, setMode] = useState(() => (MKT_IDS.has(tabFromHash()) ? 'marketing' : 'sales'))
   const [status, setStatus] = useState({})         // counts + guardrails: feeds nav counts + register
@@ -92,10 +119,29 @@ export default function App({ onHome }) {
   const counts = status.counts || {}
   const queued = counts.queued || 0
 
-  // Tab lives in the URL (#/app/<slug>) so refresh and back/forward keep your place.
-  const setTab = (id) => { window.location.hash = `#/app/${idToSlug(id)}`; setTabState(id) }
+  // The page lives in the URL (#/app/<slug>, or #/app/campaigns/<name>/<tab> inside a
+  // campaign) so refresh and back/forward keep your place. A campaign tab without a
+  // campaign to show falls back to the campaign list.
+  const setTab = (id) => {
+    if (CAMPAIGN_IDS.has(id)) {
+      if (!campaign) { window.location.hash = '#/app/campaigns'; setTabState('Campaigns'); return }
+      window.location.hash = campaignHash(campaign, id)
+    } else {
+      window.location.hash = `#/app/${idToSlug(id)}`
+    }
+    setTabState(id)
+  }
+  const openCampaign = (name, id = 'Overview') => {
+    setCampaign(name)
+    window.location.hash = campaignHash(name, id)
+    setTabState(id)
+  }
   useEffect(() => {
-    const onHash = () => setTabState(tabFromHash())
+    const onHash = () => {
+      const r = routeFromHash()
+      if (r.campaign) setCampaign(r.campaign)
+      setTabState(r.tab)
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -104,7 +150,7 @@ export default function App({ onHome }) {
     if (MKT_IDS.has(tab)) setMode('marketing')
     else if (SALES_IDS.has(tab)) setMode('sales')
   }, [tab])
-  const switchMode = (m) => { setMode(m); setTab(m === 'marketing' ? 'Blasts' : 'Overview') }
+  const switchMode = (m) => { setMode(m); setTab(m === 'marketing' ? 'Blasts' : 'Campaigns') }
 
   useEffect(() => {
     api.getMe()
@@ -116,7 +162,8 @@ export default function App({ onHome }) {
       })
       .then((cs) => {
         setCampaigns(cs)
-        setCampaign(cs.includes('mycampaign') ? 'mycampaign' : cs[0] || '')
+        // the URL's campaign if it names one (one you can't see shows "not found"), else the first
+        setCampaign((cur) => cur || (cs.includes('mycampaign') ? 'mycampaign' : cs[0] || ''))
       })
       .catch((e) => setError(e.status
         ? api.errorText(e)
@@ -129,12 +176,16 @@ export default function App({ onHome }) {
     if (!me || campaigns === null) return
     if (!routed.current) {
       routed.current = true
-      const fresh = tab === 'Overview' && !(campaigns || []).length
+      const fresh = CAMPAIGN_IDS.has(tab) && !(campaigns || []).length
       const noPage = !(window.location.hash.split('?')[0].split('/')[2] || '')   // opened the app itself, no page named
       if (!allowedTab(me, tab) || fresh || noPage) { setTab(homeTab(me, campaigns)); return }
     }
-    if (!allowedTab(me, tab)) setTab(homeTab(me, campaigns))
-  }, [me, campaigns, tab])
+    if (!allowedTab(me, tab)) { setTab(homeTab(me, campaigns)); return }
+    // an old-style link (#/app/leads): show the campaign's own address instead
+    if (CAMPAIGN_IDS.has(tab) && campaign && routeFromHash().campaign === null) {
+      window.history.replaceState(null, '', campaignHash(campaign, tab))
+    }
+  }, [me, campaigns, tab, campaign])
 
   useEffect(() => {
     if (!campaign) return
@@ -178,22 +229,32 @@ export default function App({ onHome }) {
     if (tab === 'Audiences') return <Audiences />
     if (tab === 'Sources') return <Sources />
     if (tab === 'Signals') return <Signals />
-    if (tab === 'Settings') return <Settings campaign={campaign} />
+    if (tab === 'Settings') return <Settings />
+    if (tab === 'Campaigns') return <CampaignList onOpen={openCampaign} onNew={() => setWizard('new')} />
     // a campaign's own pages
-    if (!campaign) {
+    if (!campaign || !campaigns.includes(campaign)) {
       return (
         <div className="empty">
-          <h3>No campaigns yet</h3>
-          <p className="muted">Click <b>New campaign</b> to create your first one.
-            {me.role === 'sales' && ' Or ask an admin to give you an existing one.'}</p>
+          <h3>{campaign ? 'Campaign not found' : 'No campaigns yet'}</h3>
+          <p className="muted">{campaign
+            ? 'It may have been renamed or deleted, or it belongs to someone else.'
+            : <>Create your first one on the Campaigns page.{me.role === 'sales' && ' Or ask an admin to give you an existing one.'}</>}</p>
+          <div className="empty-actions"><button className="btn primary" onClick={() => setTab('Campaigns')}>All campaigns</button></div>
         </div>
       )
     }
-    if (tab === 'Overview') return <Dashboard campaign={campaign} onNavigate={setTab} />
-    if (tab === 'Leads') return <Leads campaign={campaign} onNavigate={setTab} />
-    if (tab === 'Review') return <Review campaign={campaign} />
-    if (tab === 'Inbox') return <Inbox campaign={campaign} />
-    return null
+    const page = tab === 'Overview' ? <Dashboard campaign={campaign} onNavigate={setTab} />
+      : tab === 'Sequence' ? <Sequence campaign={campaign} onEdit={() => setWizard('edit')} />
+      : tab === 'Leads' ? <Leads campaign={campaign} onNavigate={setTab} />
+      : tab === 'Review' ? <Review campaign={campaign} />
+      : tab === 'Activity' ? <Activity campaign={campaign} />
+      : tab === 'Inbox' ? <Inbox campaign={campaign} /> : null
+    return (
+      <CampaignFrame campaign={campaign} tabs={CAMPAIGN_TABS} tab={tab} counts={counts}
+        onTab={(id) => openCampaign(campaign, id)} onAll={() => setTab('Campaigns')} onEdit={() => setWizard('edit')}>
+        {page}
+      </CampaignFrame>
+    )
   }
 
   const both = isAdmin(me)                         // only admins switch between the two engines
@@ -211,9 +272,9 @@ export default function App({ onHome }) {
           <span className="brand-name">Knowella</span>
           <span className="brand-sub">Outreach</span>
         </button>
-        <div className="page-title">{tab}</div>
-        {/* the instrument register: live send state, always in view */}
-        {campaign && mode === 'sales' && (
+        <div className="page-title">{CAMPAIGN_IDS.has(tab) && campaign ? campaign : tab}</div>
+        {/* the instrument register: a campaign's live send state, in view on its pages */}
+        {campaign && CAMPAIGN_IDS.has(tab) && (campaigns || []).includes(campaign) && (
           <div className="register">
             {sendFrom && <span className="reg-item" title="This campaign sends from">{sendFrom}</span>}
             {status.guardrails && (
@@ -251,43 +312,21 @@ export default function App({ onHome }) {
           </div>
         )}
 
-        {mode === 'sales' && canSales(me) && (
-        <div className="side-campaign">
-          <label htmlFor="campaign-select">Campaign</label>
-          {campaigns?.length > 0 && (
-            <div className="side-campaign-row">
-              <select id="campaign-select" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
-                {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button className="icon-btn side-edit" title="Edit this campaign — same form as creation"
-                onClick={() => setWizard('edit')}>
-                <Icon name="dots" size={16} />
-              </button>
-            </div>
-          )}
-          <button className="side-new" onClick={() => setWizard('new')}>
-            <Icon name="plus" size={14} /> New campaign
-          </button>
-        </div>
-        )}
-
         {me && (
         <nav className="nav">
           {navItems.map((n) => {
-            // live register per lifecycle stage: what's waiting at each step
-            const total = Object.values(counts).reduce((a, b) => a + b, 0)
-            const navCount = n.id === 'Review' ? queued
-              : n.id === 'Leads' ? total
-              : n.id === 'Signals' ? (status.signals_open || 0)
+            const navCount = n.id === 'Signals' ? (status.signals_open || 0)
               : n.id === 'Today' ? dueCount : 0
+            // a campaign's tabs live under Campaigns
+            const active = n.id === tab || (n.id === 'Campaigns' && CAMPAIGN_IDS.has(tab))
             return (
-              <button key={n.id} className={`nav-item ${n.id === tab ? 'active' : ''} ${n.shared ? 'nav-op' : ''}`} onClick={() => setTab(n.id)}>
-                {n.id === tab && (
+              <button key={n.id} className={`nav-item ${active ? 'active' : ''} ${n.shared ? 'nav-op' : ''}`} onClick={() => setTab(n.id)}>
+                {active && (
                   <motion.span layoutId="navpill" className="nav-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />
                 )}
                 {n.step ? <span className="nav-step">{n.step}</span> : <Icon name={n.icon} size={15} />}
                 <span>{n.id}</span>
-                {navCount > 0 && <span className={`nav-count ${n.id === 'Review' || n.id === 'Today' ? 'hot' : ''}`}>{navCount}</span>}
+                {navCount > 0 && <span className={`nav-count ${n.id === 'Today' ? 'hot' : ''}`}>{navCount}</span>}
               </button>
             )
           })}
@@ -297,7 +336,7 @@ export default function App({ onHome }) {
         <div className="sidebar-foot">
           <div className="foot-status">
             <span className={`dot ${error ? 'd-error' : 'd-ok'}`} />
-            {error ? 'backend offline' : mode === 'sales' ? (campaign || 'no campaign') : (me?.email || '')}
+            {error ? 'backend offline' : (me?.email || '')}
           </div>
         </div>
       </aside>
@@ -307,7 +346,7 @@ export default function App({ onHome }) {
           <AnimatePresence mode="wait">
             {/* campaign pages remount on a campaign switch; the rest (Training's frame
                 above all) don't reload when the picker changes */}
-            <motion.div key={SALES_IDS.has(tab) ? tab + campaign : tab} className="page-body" {...(reduce ? {} : pageTransition)}>
+            <motion.div key={CAMPAIGN_IDS.has(tab) ? `campaign:${campaign}` : tab} className="page-body" {...(reduce ? {} : pageTransition)}>
               {me && !me.admins_configured && (
                 <div className="banner error">
                   No admins are set up on the server, so nobody can reach the existing campaigns or set roles.
@@ -335,7 +374,7 @@ export default function App({ onHome }) {
                 return rest
               })
               api.getCampaigns().then(setCampaigns).catch(() => {})
-              setTab('Overview')
+              setTab('Campaigns')
             }}
             onCreated={(slug) => {
               const wasEdit = wizard === 'edit'
@@ -343,8 +382,9 @@ export default function App({ onHome }) {
               // refetch (a rename removes the old slug); optimistic add meanwhile
               setCampaigns((cs) => [...new Set([...(cs || []), slug])].sort())
               api.getCampaigns().then(setCampaigns).catch(() => {})
-              setCampaign(slug)
-              if (!wasEdit) setTab('Leads')   // edits keep you where you are
+              // a new campaign opens on its Leads; an edit stays on the tab it came from
+              // (a rename moves the address to the new name)
+              openCampaign(slug, wasEdit && CAMPAIGN_IDS.has(tab) ? tab : 'Leads')
             }}
           />
         )}

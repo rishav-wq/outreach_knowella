@@ -3860,9 +3860,10 @@ def reply_sync_now():
 
 # --- the All leads and Companies pages (src/crm_api.py) ----------------------
 # Registered before the frontend catch-all below, so /api/people etc. route here.
-from . import crm_api, work_api  # noqa: E402
+from . import campaigns_api, crm_api, work_api  # noqa: E402
 app.include_router(crm_api.router)
 app.include_router(work_api.router)
+app.include_router(campaigns_api.router)
 
 
 # --- serve the built frontend (single-container deploy) ----------------------

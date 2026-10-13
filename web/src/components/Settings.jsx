@@ -6,9 +6,10 @@ import Skeleton from './Skeleton'
 import { useMe, isAdmin, canSales, canMarketing } from '../me'
 
 // Operational settings only. Campaign choices (offer, audience filters, voice,
-// sending) are edited in the same dialog as creation — the ⋮ button next to the
-// campaign selector — so this page keeps what ISN'T a creation choice:
-// connection status, sending health, and the global do-not-contact list.
+// sending) are edited in the same dialog as creation (Edit campaign, on the campaign's
+// page), and a campaign's sending state shows on its Sequence tab. This page keeps what
+// belongs to no one campaign: capture tokens, the do-not-contact and customer lists,
+// the pull allowance and the reply sync.
 
 // Sending health: Apollo's own mailbox scorecards + SPF/DKIM/DMARC checks per
 // sending domain + the sequence's bounce rate. Surfaces the problems that
@@ -397,71 +398,50 @@ function PullAllowance() {
   )
 }
 
-export default function Settings({ campaign }) {
+// A campaign's sending: whether it can send, and from which mailbox. Shown on the
+// campaign's Sequence tab (the campaign pages own everything about one campaign).
+export function SendingConnection({ campaign }) {
   const me = useMe()
-  // The sending side belongs to a campaign: shown to sales and admins who have one.
-  const salesSide = canSales(me) && !!campaign
   const [status, setStatus] = useState(null)
   const [boxes, setBoxes] = useState([])
-  const [mailboxId, setMailboxId] = useState('')
-
   useEffect(() => {
-    if (!salesSide) return
     setStatus(null)
-    api.getStatus(campaign).then((s) => { setStatus(s); setMailboxId(s.mailbox_id || '') }).catch(() => setStatus({}))
+    api.getStatus(campaign).then(setStatus).catch(() => setStatus({}))
     api.getMailboxes().then((d) => setBoxes(d.mailboxes || [])).catch(() => {})
-  }, [campaign, salesSide])
-
-  if (!salesSide) {
-    return (
-      <div className="settings">
-        {canMarketing(me) && <MarketingSending />}
-        <LinkedInCapture />
-        <Suppression />
-        {canSales(me) && <Customers />}
-        {isAdmin(me) && <PullAllowance />}
-      </div>
-    )
-  }
-
-  if (!status) {
-    return (
-      <div className="settings">
-        <Skeleton w="40%" h={18} /><Skeleton w="100%" h={120} r={10} style={{ marginTop: 16 }} />
-        <Skeleton w="100%" h={120} r={10} style={{ marginTop: 16 }} />
-      </div>
-    )
-  }
-
+  }, [campaign])
+  if (!status) return <Skeleton w="100%" h={70} r={10} />
   const connected = !!status.sendable
+  const mailboxId = status.mailbox_id || ''
   const curBox = boxes.find((b) => b.id === mailboxId)
+  return (
+    <motion.section className={`set-card set-conn ${connected ? 'ok' : 'warn'}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="set-conn-icon"><Icon name={connected ? 'check' : 'shield'} size={20} /></div>
+      <div className="set-conn-main">
+        <div className="set-conn-title">{connected ? 'Apollo connected: sending is on' : 'Not connected: sending is off'}</div>
+        <div className="set-conn-sub">
+          {connected
+            ? <>Approved leads send through the Apollo sequence from <code>{curBox ? curBox.email : (mailboxId ? `${mailboxId.slice(0, 8)}…` : '—')}</code></>
+            : isAdmin(me)
+              ? <>Set a sequence and a mailbox with <b>Edit campaign</b> (the Send step). Reviewing and approving work without it.</>
+              : <>An admin connects this campaign’s mailbox and Apollo sequence. Reviewing and approving work without it.</>}
+        </div>
+      </div>
+    </motion.section>
+  )
+}
 
+export { SendingHealth }
+
+// Settings that aren't about one campaign: each campaign's own settings are on its pages
+// (Edit campaign, and the Sequence tab for sending).
+export default function Settings() {
+  const me = useMe()
   return (
     <div className="settings">
-      {/* connection — the only thing that gates a real send */}
-      <motion.section className={`set-card set-conn ${connected ? 'ok' : 'warn'}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="set-conn-icon"><Icon name={connected ? 'check' : 'shield'} size={20} /></div>
-        <div className="set-conn-main">
-          <div className="set-conn-title">{connected ? 'Apollo connected — sending is enabled' : 'Apollo not connected — sending is disabled'}</div>
-          <div className="set-conn-sub">
-            {connected
-              ? <>Approved leads send through your Apollo sequence from <code>{curBox ? curBox.email : (mailboxId ? `${mailboxId.slice(0, 8)}…` : '—')}</code></>
-              : isAdmin(me)
-                ? <>Set <code>APOLLO_API_KEY</code> plus a sequence and mailbox (⋮ next to the campaign → Send). Reviewing and approving work without it.</>
-                : <>An admin connects this campaign’s mailbox and Apollo sequence. Reviewing and approving work without it.</>}
-          </div>
-        </div>
-      </motion.section>
-
-      <div className="set-note">
-        Campaign choices — offer, audience filters, voice, sending — are edited with the <b>⋮ button</b> next to the campaign selector: the same form as campaign creation, pre-filled.
-      </div>
-
-      <SendingHealth campaign={campaign} />
       {canMarketing(me) && <MarketingSending />}
       <LinkedInCapture />
       <Suppression />
-      <Customers />
+      {canSales(me) && <Customers />}
       {isAdmin(me) && <PullAllowance />}
       {isAdmin(me) && <ReplySync />}
     </div>

@@ -97,6 +97,7 @@ class MongoStore:
         self.db.tasks.create_index([("person_id", 1), ("status", 1)])
         self.db.activities.create_index([("by.id", 1), ("at", -1)])
         self.db.activities.create_index([("type", 1), ("person_id", 1)])
+        self.db.messages.create_index([("campaign", 1), ("delivered_at", -1)])   # a campaign's activity
 
     # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
     # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.
