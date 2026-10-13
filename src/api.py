@@ -28,7 +28,8 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, auth, config, credits, crm, enroll, marketing, pipeline, reply_sync, tagging, unsubscribe
+from . import (access, auth, config, credits, crm, enroll, marketing, pipeline, reply_sync, tagging,
+               unsubscribe, work)
 from .engine import classify, personalize
 from . import routing, signals
 from .engine import newsletter
@@ -231,7 +232,8 @@ def _user_out(d: dict, admins: set) -> dict:
     return {"id": d["_id"], "email": d.get("email", ""), "name": d.get("name", ""),
             "role": d.get("role", "sales"), "active": d.get("active", True),
             "pinned_admin": (d.get("email") or "").lower() in admins,
-            "created_at": d.get("created_at", ""), "last_seen": d.get("last_seen", "")}
+            "created_at": d.get("created_at", ""), "last_seen": d.get("last_seen", ""),
+            "start_date": d.get("start_date", "")}
 
 
 @app.get("/api/users")
@@ -243,6 +245,7 @@ def list_users():
 class UserPatch(BaseModel):
     role: str | None = None
     active: bool | None = None
+    start_date: str | None = None     # YYYY-MM-DD: their first day, for the Today ramp ('' clears it)
 
 
 @app.patch("/api/users/{uid}")
@@ -269,6 +272,13 @@ def update_user(uid: str, p: UserPatch):
         if not p.active and uid == me_.get("id"):
             raise HTTPException(400, "you can't switch off your own account")
         patch["active"] = p.active
+    if p.start_date is not None:
+        if p.start_date:
+            try:
+                work.parse_day(p.start_date)
+            except ValueError:
+                raise HTTPException(400, "the start date must be YYYY-MM-DD")
+        patch["start_date"] = p.start_date
     if not patch:
         raise HTTPException(400, "nothing to change")
     return _user_out(store.update_user(uid, patch), access.admin_emails())
@@ -3850,8 +3860,9 @@ def reply_sync_now():
 
 # --- the All leads and Companies pages (src/crm_api.py) ----------------------
 # Registered before the frontend catch-all below, so /api/people etc. route here.
-from . import crm_api  # noqa: E402
+from . import crm_api, work_api  # noqa: E402
 app.include_router(crm_api.router)
+app.include_router(work_api.router)
 
 
 # --- serve the built frontend (single-container deploy) ----------------------

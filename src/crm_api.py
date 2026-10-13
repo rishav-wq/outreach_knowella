@@ -15,7 +15,7 @@ import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import access, crm, enroll, tagging
+from . import access, crm, enroll, tagging, work
 from .models import Lead
 from .store import open_store
 
@@ -69,9 +69,10 @@ def _names(store) -> dict:
 
 # --- facts: what happened to each enrollment ----------------------------------------
 class _Facts:
-    """Sends, replies, meetings and suppression, read once per request."""
+    """Sends, replies, meetings and suppression, read once per request; and the calls,
+    LinkedIn touches and emails logged on `person_ids` (None: everyone's, (): nobody's)."""
 
-    def __init__(self, store, enrollment_keys: list[str] | None):
+    def __init__(self, store, enrollment_keys: list[str] | None, person_ids: list[str] | None | tuple = ()):
         q = {"_id": {"$in": enrollment_keys}} if enrollment_keys is not None else {}
         self.sent = {d["_id"]: d.get("created_at") for d in store.db.sends.find(q, {"created_at": 1})}
         self.replies = {d["_id"]: d for d in store.db.replies.find(q)}
@@ -79,6 +80,16 @@ class _Facts:
         vals = [str(d.get("value") or d.get("_id") or "").lower() for d in store.db.suppression.find({}, {"value": 1})]
         self.dnc_emails = {v for v in vals if "@" in v}
         self.dnc_domains = {v.lstrip("@") for v in vals if "@" not in v}
+        self.touched: set = set()        # someone logged a call, LinkedIn touch or email
+        self.call_meeting: set = set()   # a call that booked a meeting
+        if person_ids != ():
+            tq: dict = {"type": {"$in": list(work.TOUCH_TYPES.values())}}
+            if person_ids is not None:
+                tq["person_id"] = {"$in": list(person_ids)}
+            for a in store.db.activities.find(tq, {"person_id": 1, "meta.outcome": 1}):
+                self.touched.add(a.get("person_id"))
+                if (a.get("meta") or {}).get("outcome") == "meeting":
+                    self.call_meeting.add(a.get("person_id"))
 
     def suppressed(self, email: str) -> bool:
         e = (email or "").lower()
@@ -88,10 +99,10 @@ class _Facts:
         keys = [e["_id"] for e in enrollments]
         return crm.derived_lead_stage({
             "suppressed": self.suppressed(person.get("email", "")) or any(e.get("status") == "suppressed" for e in enrollments),
-            "meeting": any(k in self.meetings for k in keys),
+            "meeting": any(k in self.meetings for k in keys) or person.get("_id") in self.call_meeting,
             "labels": [self.replies[k].get("label") for k in keys if k in self.replies and self.replies[k].get("label")],
             "replied": any(k in self.replies for k in keys),
-            "sent": any(k in self.sent for k in keys),
+            "sent": any(k in self.sent for k in keys) or person.get("_id") in self.touched,
         })
 
 
@@ -130,7 +141,8 @@ def people_list():
         "owner": 1, "stage": 1, "source": 1, "created_at": 1, "interests": 1}))
     ids = [p["_id"] for p in people]
     enr = _enrollments(store, None if access.is_admin(u) else ids)
-    facts = _Facts(store, None if access.is_admin(u) else [e["_id"] for es in enr.values() for e in es])
+    facts = _Facts(store, None if access.is_admin(u) else [e["_id"] for es in enr.values() for e in es],
+                   None if access.is_admin(u) else ids)
     engaged = store.engagement_by_email()
     names = _names(store)
     camp_topics: dict[str, list] = {}
@@ -235,7 +247,7 @@ def person_detail(pid: str):
     u = _me()
     p = _person_or_404(store, pid, u)
     es = _enrollments(store, [pid]).get(pid, [])
-    facts = _Facts(store, [e["_id"] for e in es])
+    facts = _Facts(store, [e["_id"] for e in es], [pid])
     auto = facts.lead_stage(p, es)
     names = _names(store)
     company = None
@@ -266,7 +278,19 @@ def person_detail(pid: str):
         "created_at": p.get("created_at", ""), "suppressed": facts.suppressed(p.get("email", "")),
         "function": tagging.function_of(p.get("title", "")),
         "apollo": _apollo_details(store, es), "enrollments": enrollments,
+        "tasks": _open_tasks(store, u, pid, names),
         "timeline": _timeline(store, [pid], "", es, facts)}
+
+
+def _open_tasks(store, u: dict, pid: str, names: dict) -> list[dict]:
+    """The lead's open tasks: yours, or everyone's for an admin."""
+    q: dict = {"person_id": pid, "status": "open"}
+    if not access.is_admin(u):
+        q["owner"] = u.get("id") or "\0"
+    return [{"id": str(t["_id"]), "kind": t.get("kind", "todo"), "title": t.get("title", ""), "due": t.get("due", ""),
+             "status": t.get("status", "open"), "person_id": pid,
+             "owner": t.get("owner", ""), "owner_name": names.get(t.get("owner", ""), "")}
+            for t in store.db.tasks.find(q).sort([("due", 1), ("_id", 1)]).limit(50)]
 
 
 class PersonCreate(BaseModel):
@@ -416,6 +440,7 @@ def person_delete(pid: str):
     if keys:
         store.delete_leads(keys)
     store.db.activities.delete_many({"person_id": pid})
+    store.db.tasks.delete_many({"person_id": pid})
     store.db.people.delete_one({"_id": pid})
     if p.get("company_id"):
         store.add_activity("", p["company_id"], "person_deleted", _actor(u), f"Deleted lead {_name(p) or p.get('email', '')}")
@@ -561,7 +586,8 @@ def companies_list():
     pf = {"company_id": {"$in": cids}, **_people_filter(u)}
     people = list(store.db.people.find(pf, {"company_id": 1, "email": 1, "stage": 1}))
     enr = _enrollments(store, [p["_id"] for p in people] if not access.is_admin(u) else None)
-    facts = _Facts(store, None if access.is_admin(u) else [e["_id"] for es in enr.values() for e in es])
+    facts = _Facts(store, None if access.is_admin(u) else [e["_id"] for es in enr.values() for e in es],
+                   [p["_id"] for p in people])
     by_company: dict[str, list[str]] = {}
     for p in people:
         st = p.get("stage") or facts.lead_stage(p, enr.get(p["_id"], []))
@@ -594,7 +620,7 @@ def company_detail(cid: str):
     pids = [p["_id"] for p in visible]
     enr = _enrollments(store, pids)
     es_all = [e for es in enr.values() for e in es]
-    facts = _Facts(store, [e["_id"] for e in es_all])
+    facts = _Facts(store, [e["_id"] for e in es_all], pids)
     names = _names(store)
     contacts = []
     for p in visible:

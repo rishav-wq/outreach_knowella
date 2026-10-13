@@ -91,6 +91,12 @@ class MongoStore:
         self.db.activities.create_index([("person_id", 1), ("at", -1)])
         self.db.activities.create_index([("company_id", 1), ("at", -1)])
         self.db.credit_usage.create_index([("day", 1)])     # Apollo pull allowance (src/credits.py)
+        # a BDR's daily work (src/work.py): tasks by owner and due date, a lead's tasks,
+        # the day's touches by who logged them, and touches by type for lead stages
+        self.db.tasks.create_index([("owner", 1), ("status", 1), ("due", 1)])
+        self.db.tasks.create_index([("person_id", 1), ("status", 1)])
+        self.db.activities.create_index([("by.id", 1), ("at", -1)])
+        self.db.activities.create_index([("type", 1), ("person_id", 1)])
 
     # --- campaigns (config stored in Mongo so a redeploy can never wipe it) ---
     # A campaign's whole config dict lives in one doc: {_id: slug, cfg: {...}}.
@@ -284,7 +290,7 @@ class MongoStore:
         return list(self.db.users.find({}).sort("created_at", 1))
 
     def update_user(self, uid: str, fields: dict) -> dict | None:
-        clean = {k: v for k, v in fields.items() if k in ("role", "active")}
+        clean = {k: v for k, v in fields.items() if k in ("role", "active", "start_date")}
         if clean:
             clean["updated_at"] = datetime.now(timezone.utc).isoformat()
             self.db.users.update_one({"_id": uid}, {"$set": clean})

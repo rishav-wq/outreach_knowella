@@ -1990,3 +1990,61 @@ a.sig-topic-t:hover { color: var(--signal); text-decoration: underline; }
 .crm-refused ul { margin: 6px 0 8px; padding-left: 18px; }
 .crm-refused li { margin: 2px 0; }
 .crm-refused-row { display: flex; gap: 12px; align-items: center; }
+
+/* --- a BDR's daily work: logging, tasks, the Today page (components/Work.jsx, Today.jsx) --- */
+.btn.small { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+.work-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.work-bar .btn.on { background: var(--signal-tint); border-color: var(--signal); color: var(--signal-deep); }
+.log-form { border: 1px solid var(--signal-line); background: var(--signal-tint); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px; display: grid; gap: 10px; }
+.log-form textarea { resize: vertical; }
+.log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.log-hint { font-size: 12.5px; }
+.log-follow { margin: 0; font-size: 13px; }
+.log-fu { display: grid; gap: 8px; }
+.log-fu.fu-follow { grid-template-columns: 130px 160px 1fr; }
+.log-fu.fu-task { grid-template-columns: 1fr 140px 160px; }
+.log-actions { display: flex; align-items: center; gap: 8px; }
+.task-row { padding: 9px 0; border-top: 1px solid var(--line); }
+.task-row:first-of-type { border-top: 0; }
+.task-line { display: flex; align-items: center; gap: 10px; }
+.task-kind { flex: none; width: 66px; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-radius: 6px; padding: 3px 0; background: #eef1f5; color: var(--text-2); }
+.task-kind.tk-call { background: #e3f7de; color: #2f6b22; }
+.task-kind.tk-email { background: #e2e8ff; color: #2346c9; }
+.task-kind.tk-linkedin { background: #e2e0ff; color: #4b42c7; }
+.task-main { flex: 1; min-width: 0; }
+.task-title { font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+.task-sub { font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.task-sub .linklike { font-size: 12px; }
+.due-chip { flex: none; font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 2px 9px; background: #eef1f5; color: var(--text-2); white-space: nowrap; }
+.due-chip.now { background: var(--signal-pill); color: var(--signal-deep); }
+.due-chip.late { background: var(--alert-tint); color: var(--alert); }
+.task-acts { flex: none; display: flex; gap: 6px; }
+.task-row .log-form { margin: 10px 0 0; }
+.rec-sec .task-line { flex-wrap: wrap; }
+.rec-sec .task-acts { width: 100%; justify-content: flex-end; }
+.today { display: grid; gap: 14px; max-width: 1100px; }
+.today-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.today-head h2 { margin: 0 0 4px; font-size: 20px; }
+.today-head .muted { font-size: 13px; }
+.today-head-acts { display: flex; gap: 8px; }
+.act-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.act-tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.act-label { font-size: 12px; color: var(--muted); }
+.act-num { font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; margin: 2px 0 8px; }
+.act-of { font-size: 13px; font-weight: 500; color: var(--faint); }
+.act-bar { height: 5px; border-radius: 99px; background: #eef1f5; overflow: hidden; }
+.act-bar span { display: block; height: 100%; background: var(--signal); border-radius: 99px; }
+.act-bar.off { background: transparent; }
+.act-tile.met .act-bar span { background: var(--verify); }
+.today-group.late .drawer-label { color: var(--alert); }
+.today-empty { font-size: 13px; }
+.today-team td.met { color: var(--verify-hover); font-weight: 600; }
+.today-team td.late { color: var(--alert); font-weight: 600; }
+.team-date { width: 150px; padding: 5px 8px; }
+@media (max-width: 1000px) { .act-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .act-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-line { flex-wrap: wrap; }
+  .task-acts { width: 100%; justify-content: flex-end; }
+  .log-fu.fu-follow, .log-fu.fu-task { grid-template-columns: 1fr; }
+}

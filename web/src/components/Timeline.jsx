@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as api from '../api'
+import { LI_LABEL, OUTCOME_LABEL } from './Work'
 
 // One timeline for a lead or a company: notes, what happened in each campaign (sent,
 // replied, meeting), stage and owner changes. Newest first, grouped by day; entries
@@ -8,12 +9,15 @@ import * as api from '../api'
 const KIND = {
   note: 'Note', email_sent: 'Email', reply: 'Reply', meeting: 'Meeting', stage_change: 'Stage',
   owner_change: 'Owner', created: 'Added', enrolled: 'Campaign', edited: 'Edit', person_deleted: 'Deleted',
+  call: 'Call', linkedin: 'LinkedIn', email_logged: 'Email',
 }
 const FILTERS = [
-  ['all', 'All'], ['note', 'Notes'], ['email', 'Emails'], ['reply', 'Replies'], ['meeting', 'Meetings'], ['change', 'Changes'],
+  ['all', 'All'], ['note', 'Notes'], ['call', 'Calls'], ['email', 'Emails'], ['linkedin', 'LinkedIn'],
+  ['reply', 'Replies'], ['meeting', 'Meetings'], ['change', 'Changes'],
 ]
 const IN = {
-  note: (t) => t === 'note', email: (t) => t === 'email_sent', reply: (t) => t === 'reply', meeting: (t) => t === 'meeting',
+  note: (t) => t === 'note', call: (t) => t === 'call', linkedin: (t) => t === 'linkedin',
+  email: (t) => t === 'email_sent' || t === 'email_logged', reply: (t) => t === 'reply', meeting: (t) => t === 'meeting',
   change: (t) => ['stage_change', 'owner_change', 'edited', 'created', 'enrolled', 'person_deleted'].includes(t),
 }
 export const REPLY_LABEL = {
@@ -57,6 +61,11 @@ export function NoteComposer({ onSave, placeholder = 'Write a note…' }) {
   )
 }
 
+// A logged call, LinkedIn touch or email: what happened, by whom; the note shows below.
+const TOUCH = new Set(['call', 'linkedin', 'email_logged'])
+const touchTitle = (x) => (x.type === 'call' ? `Call · ${OUTCOME_LABEL[x.meta?.outcome] || 'logged'}`
+  : x.type === 'linkedin' ? `LinkedIn · ${LI_LABEL[x.meta?.action] || 'touch'}` : 'Email sent (logged)')
+
 export default function Timeline({ items, me, onChanged, showWho = false }) {
   const [filter, setFilter] = useState('all')
   const [err, setErr] = useState('')
@@ -95,12 +104,14 @@ export default function Timeline({ items, me, onChanged, showWho = false }) {
               <span className={`tl-kind k-${x.type}`}>{KIND[x.type] || x.type}</span>
               <div className="tl-main">
                 <div className="tl-title">
-                  {x.type === 'note' ? <span>Note{x.by ? ` by ${x.by}` : ''}</span> : <span>{x.body}</span>}
+                  {x.type === 'note' ? <span>Note{x.by ? ` by ${x.by}` : ''}</span>
+                    : TOUCH.has(x.type) ? <span>{touchTitle(x)}</span> : <span>{x.body}</span>}
                   {x.type === 'reply' && x.meta?.label && <span className="tl-chip">{REPLY_LABEL[x.meta.label] || x.meta.label}</span>}
                   {showWho && x.who && <span className="muted">· {x.who}</span>}
                   <span className="tl-meta">{[timeOf(x.at), x.type !== 'note' && x.by ? x.by : ''].filter(Boolean).join(' · ')}</span>
                 </div>
-                {x.type === 'note' && <div className="tl-body">{x.body}</div>}
+                {(x.type === 'note' || (TOUCH.has(x.type) && x.body)) && <div className="tl-body">{x.body}</div>}
+                {x.type === 'call' && x.meta?.not_fit_reason && <div className="tl-body muted">Not a fit: {x.meta.not_fit_reason}</div>}
                 {x.type === 'note' && (
                   <div className="tl-actions">
                     <button className="linklike" onClick={() => act(() => api.pinNote(x.id, !x.pinned))}>{x.pinned ? 'Unpin' : 'Pin'}</button>

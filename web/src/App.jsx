@@ -18,6 +18,7 @@ import Settings from './components/Settings'
 import NewCampaign from './components/NewCampaign'
 import Training from './components/Training'
 import Team from './components/Team'
+import Today from './components/Today'
 import { UserMenu } from './auth'
 import { MeContext, isAdmin, canSales, canMarketing } from './me'
 import { pageTransition } from './components/anim'
@@ -39,8 +40,10 @@ const MKT_NAV = [
   { id: 'Publications', slug: 'publications', icon: 'list' },
   { id: 'Audiences', slug: 'audiences', icon: 'users' },
 ]
-// Everyone you sell to, one record per person and per company (sales and admins).
+// A rep's day (tasks and targets), and everyone you sell to: one record per person and
+// per company (sales and admins).
 const CRM_NAV = [
+  { id: 'Today', slug: 'today', icon: 'check', shared: true },
   { id: 'Library', slug: 'library', icon: 'list', shared: true },
   { id: 'Companies', slug: 'companies', icon: 'building', shared: true },
 ]
@@ -62,14 +65,14 @@ const idToSlug = (id) => (NAV.find((n) => n.id === id) || NAV[0]).slug
 const tabFromHash = () => slugToId((window.location.hash.split('?')[0].split('/')[2] || '').toLowerCase())
 
 const allowedTab = (me, id) => {
-  if (SALES_IDS.has(id) || id === 'Library' || id === 'Companies') return canSales(me)
+  if (SALES_IDS.has(id) || id === 'Today' || id === 'Library' || id === 'Companies') return canSales(me)
   if (MKT_IDS.has(id)) return canMarketing(me)
   if (id === 'Team') return isAdmin(me)
   return true
 }
 const homeTab = (me, campaigns) => {
   if (me.role === 'marketing') return 'Blasts'
-  if (me.role === 'sales' && !(campaigns || []).length) return 'Training'   // a new BDR starts here
+  if (me.role === 'sales') return (campaigns || []).length ? 'Today' : 'Training'   // a new BDR starts on Training
   return 'Overview'
 }
 
@@ -82,6 +85,7 @@ export default function App({ onHome }) {
   const [status, setStatus] = useState({})         // counts + guardrails: feeds nav counts + register
   const [sendFrom, setSendFrom] = useState('')     // which mailbox this campaign sends from
   const [error, setError] = useState('')
+  const [dueCount, setDueCount] = useState(0)     // tasks overdue or due today, on the Today nav item
   const [wizard, setWizard] = useState(false)
   const routed = useRef(false)
   const reduce = useReducedMotion()
@@ -126,7 +130,8 @@ export default function App({ onHome }) {
     if (!routed.current) {
       routed.current = true
       const fresh = tab === 'Overview' && !(campaigns || []).length
-      if (!allowedTab(me, tab) || fresh) { setTab(homeTab(me, campaigns)); return }
+      const noPage = !(window.location.hash.split('?')[0].split('/')[2] || '')   // opened the app itself, no page named
+      if (!allowedTab(me, tab) || fresh || noPage) { setTab(homeTab(me, campaigns)); return }
     }
     if (!allowedTab(me, tab)) setTab(homeTab(me, campaigns))
   }, [me, campaigns, tab])
@@ -148,12 +153,24 @@ export default function App({ onHome }) {
     }).catch(() => {})
   }, [campaign])
 
+  useEffect(() => {
+    if (!me || !canSales(me)) return
+    const count = () => {
+      const day = api.localDay()
+      api.listTasks({ status: 'open' }).then((d) => setDueCount((d.tasks || []).filter((t) => t.due <= day).length)).catch(() => {})
+    }
+    count()
+    window.addEventListener(api.TASKS_CHANGED, count)
+    return () => window.removeEventListener(api.TASKS_CHANGED, count)
+  }, [me, tab])
+
   const body = () => {
     if (error) return <div className="banner error">{error}</div>
     if (!me || campaigns === null || !allowedTab(me, tab)) return null
     // pages that don't belong to a campaign
     if (tab === 'Training') return <Training onNavigate={setTab} />
     if (tab === 'Team') return <Team />
+    if (tab === 'Today') return <Today />
     if (tab === 'Library') return <People onPromoted={() => campaign && api.getStatus(campaign).then(setStatus).catch(() => {})} />
     if (tab === 'Companies') return <Companies />
     if (tab === 'Blasts') return <Marketing />
@@ -261,7 +278,8 @@ export default function App({ onHome }) {
             const total = Object.values(counts).reduce((a, b) => a + b, 0)
             const navCount = n.id === 'Review' ? queued
               : n.id === 'Leads' ? total
-              : n.id === 'Signals' ? (status.signals_open || 0) : 0
+              : n.id === 'Signals' ? (status.signals_open || 0)
+              : n.id === 'Today' ? dueCount : 0
             return (
               <button key={n.id} className={`nav-item ${n.id === tab ? 'active' : ''} ${n.shared ? 'nav-op' : ''}`} onClick={() => setTab(n.id)}>
                 {n.id === tab && (
@@ -269,7 +287,7 @@ export default function App({ onHome }) {
                 )}
                 {n.step ? <span className="nav-step">{n.step}</span> : <Icon name={n.icon} size={15} />}
                 <span>{n.id}</span>
-                {navCount > 0 && <span className={`nav-count ${n.id === 'Review' ? 'hot' : ''}`}>{navCount}</span>}
+                {navCount > 0 && <span className={`nav-count ${n.id === 'Review' || n.id === 'Today' ? 'hot' : ''}`}>{navCount}</span>}
               </button>
             )
           })}

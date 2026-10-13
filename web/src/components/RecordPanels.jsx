@@ -3,6 +3,7 @@ import * as api from '../api'
 import SlideOut from './SlideOut'
 import Skeleton from './Skeleton'
 import Timeline, { NoteComposer, REPLY_LABEL } from './Timeline'
+import { LogTouch, TaskForm, TaskRow } from './Work'
 import { avatarTint, initials } from './avatar'
 import { isAdmin } from '../me'
 
@@ -68,6 +69,7 @@ function PersonPanel({ id, me, meta, users, onOpenCompany, onChanged, onDeleted 
   const [err, setErr] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
+  const [work, setWork] = useState(null)   // null | {kind: 'call'|'linkedin'|'email'|'task', task?}
   const load = () => api.getPerson(id).then((d) => { setP(d); setErr('') }).catch((e) => setErr(api.errorText(e)))
   useEffect(() => { load() }, [id])  // eslint-disable-line react-hooks/exhaustive-deps
   const patch = async (body) => {
@@ -158,6 +160,14 @@ function PersonPanel({ id, me, meta, users, onOpenCompany, onChanged, onDeleted 
               </div>
             ))}
           </Section>
+          <Section title={`Tasks · ${p.tasks.length}`}
+            action={<button className="linklike" onClick={() => setWork({ kind: 'task' })}>Add</button>}>
+            {p.tasks.length === 0 ? <div className="muted">No open tasks.</div> : p.tasks.map((t) => (
+              <TaskRow key={t.id} t={t} showPerson={false} showOwner={isAdmin(me)}
+                onLog={(task) => setWork({ kind: task.kind, task })}
+                onChanged={() => { load(); onChanged() }} />
+            ))}
+          </Section>
           <Section title={`Campaigns · ${p.enrollments.length}`}>
             {p.enrollments.length === 0 ? <div className="muted">Not in any campaign.</div> : (
               <ul className="rec-list">
@@ -204,6 +214,19 @@ function PersonPanel({ id, me, meta, users, onOpenCompany, onChanged, onDeleted 
           </div>
         </aside>
         <section className="rec-main" aria-label="Activity">
+          <div className="work-bar" role="group" aria-label="Log activity">
+            {[['call', 'Log call'], ['linkedin', 'Log LinkedIn'], ['email', 'Log email'], ['task', 'Add task']].map(([k, l]) => (
+              <button key={k} className={`btn ${work?.kind === k && !work?.task ? 'on' : ''}`} onClick={() => setWork({ kind: k })}>{l}</button>
+            ))}
+          </div>
+          {work && work.kind !== 'task' && (
+            <LogTouch key={`${work.kind}:${work.task?.id || ''}`} personId={id} personName={p.name} initialKind={work.kind}
+              task={work.task || null} onCancel={() => setWork(null)}
+              onSaved={async () => { setWork(null); await load(); onChanged() }} />
+          )}
+          {work?.kind === 'task' && (
+            <TaskForm personId={id} onCancel={() => setWork(null)} onSaved={async () => { setWork(null); await load(); onChanged() }} />
+          )}
           <NoteComposer onSave={async (b) => { await api.addPersonNote(id, b); await load(); onChanged() }} />
           <Timeline items={p.timeline} me={me} onChanged={() => { load(); onChanged() }} />
         </section>

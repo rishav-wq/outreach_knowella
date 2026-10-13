@@ -74,6 +74,22 @@ export const createPerson = (p) => apiSend('/api/people', 'POST', p)
 export const updatePerson = (id, patch) => apiSend(`/api/people/${encodeURIComponent(id)}`, 'PATCH', patch)
 export const deletePerson = (id) => apiSend(`/api/people/${encodeURIComponent(id)}`, 'DELETE', {})
 export const addPersonNote = (id, body) => apiSend(`/api/people/${encodeURIComponent(id)}/notes`, 'POST', { body })
+// A BDR's daily work (src/work_api.py): log a call / LinkedIn touch / email on a lead,
+// tasks, and the Today page. Days are the browser's own: its date and time-zone offset.
+// Anything that changes tasks says so, so the Today count in the nav stays right.
+export const TASKS_CHANGED = 'kn-tasks-changed'
+const tasksChanged = (r) => { window.dispatchEvent(new Event(TASKS_CHANGED)); return r }
+export const logTouch = (id, body) => apiSend(`/api/people/${encodeURIComponent(id)}/log`, 'POST', body).then(tasksChanged)
+export const listTasks = (params = {}) => apiGet(`/api/tasks?${new URLSearchParams(params)}`)
+export const createTask = (body) => apiSend('/api/tasks', 'POST', body).then(tasksChanged)
+export const updateTask = (id, patch) => apiSend(`/api/tasks/${encodeURIComponent(id)}`, 'PATCH', patch).then(tasksChanged)
+export const deleteTask = (id) => apiSend(`/api/tasks/${encodeURIComponent(id)}`, 'DELETE').then(tasksChanged)
+export const localDay = (d = new Date()) => {
+  const z = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`
+}
+export const getToday = (user = '') => apiGet(`/api/today?${new URLSearchParams({
+  date: localDay(), tz: String(new Date().getTimezoneOffset()), ...(user ? { user } : {}) })}`)
 export const enrollPeople = (people, campaign, force = false) => apiSend('/api/people/enroll', 'POST', { people, campaign, force })
 export const pinNote = (id, pinned) => apiSend(`/api/notes/${encodeURIComponent(id)}`, 'PATCH', { pinned })
 export const deleteNote = (id) => apiSend(`/api/notes/${encodeURIComponent(id)}`, 'DELETE', {})

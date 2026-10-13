@@ -22,6 +22,8 @@ import json
 import re
 from datetime import datetime, timezone
 
+from . import work as _work
+
 MAX_HTML_BYTES = 5 * 1024 * 1024
 MAX_VALUE_BYTES = 256 * 1024
 MAX_EVENTS_PER_SAVE = 100                 # a real save changes a handful of things
@@ -106,7 +108,9 @@ def inspect_html(html: str) -> dict:
             "module_titles": {m: _html.unescape(t) for m, t in _MODULE_TITLE_RE.findall(html)},
             "signoff_labels": {k: _html.unescape(t) for k, t in _SIGNOFF_LABEL_RE.findall(html)},
             "tracks": [{"id": k, "name": _html.unescape(n)} for k, n in _TRACK_RE.findall(html)],
-            "cert_labels": _cert_labels(html)}
+            "cert_labels": _cert_labels(html),
+            # The Today page's targets and ramp (src/work.py), likewise from the file.
+            "activity_targets": _work.targets_of(html)}
 
 
 def _cert_labels(html: str) -> dict:

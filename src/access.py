@@ -179,6 +179,13 @@ POLICY: dict[tuple[str, str], object] = {
     ("POST", "/api/people/enroll"): SALES,
     ("PATCH", "/api/notes/{aid}"): SALES,
     ("DELETE", "/api/notes/{aid}"): SALES,
+    # a BDR's daily work (src/work_api.py): your own tasks and touches; admins everyone's
+    ("POST", "/api/people/{pid}/log"): SALES,         # log a call, LinkedIn touch or email
+    ("GET", "/api/tasks"): SALES,
+    ("POST", "/api/tasks"): SALES,
+    ("PATCH", "/api/tasks/{tid}"): SALES,
+    ("DELETE", "/api/tasks/{tid}"): SALES,
+    ("GET", "/api/today"): SALES,
     ("GET", "/api/companies"): SALES,
     ("GET", "/api/companies/{cid}"): SALES,
     ("PATCH", "/api/companies/{cid}"): SALES,

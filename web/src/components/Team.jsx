@@ -180,7 +180,9 @@ function People({ users, onUpdate }) {
       {err && <div className="banner error">{err}</div>}
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Person</th><th>Role</th><th>Access</th><th>Last seen</th></tr></thead>
+          <thead><tr><th>Person</th><th>Role</th><th>Access</th>
+            <th title="Their first day: the Today page's targets ramp from it. Empty means their first sign-in.">Started</th>
+            <th>Last seen</th></tr></thead>
           <tbody>
             {users.map((u) => {
               const self = u.id === me.id
@@ -206,6 +208,11 @@ function People({ users, onUpdate }) {
                           {u.active ? 'Switch off' : 'Switch on'}
                         </button>
                       )}
+                  </td>
+                  <td>
+                    <input type="date" className="field-input team-date" aria-label={`${u.name || u.email} started on`}
+                      value={u.start_date || (u.created_at || '').slice(0, 10)} disabled={busy === u.id}
+                      onChange={(e) => change(u, { start_date: e.target.value })} />
                   </td>
                   <td className="muted">{ago(u.last_seen)}</td>
                 </tr>
